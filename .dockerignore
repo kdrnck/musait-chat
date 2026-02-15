@@ -1,3 +1,5 @@
+# ── Always include (negations must come after excludes) ──
+
 # Dependencies (will be installed in container)
 node_modules
 **/node_modules
@@ -11,6 +13,8 @@ node_modules
 .git
 .gitignore
 .vscode
+
+# Env files
 .env
 .env.*
 **/.env
@@ -18,7 +22,7 @@ node_modules
 
 # Docs & memory
 memory/
-*.md
+README.md
 LICENSE
 
 # Frontend app (not needed for worker)
@@ -29,3 +33,8 @@ convex/
 **/__tests__
 **/*.test.*
 **/*.spec.*
+
+# ── Ensure critical files are NOT excluded ──
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
