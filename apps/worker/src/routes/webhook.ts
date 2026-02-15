@@ -3,7 +3,7 @@ import type { ConvexHttpClient } from "convex/browser";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentQueue, WhatsAppWebhookPayload } from "@musait/shared";
 import { WHATSAPP_CONFIG } from "../config.js";
-import { api } from "../../../../convex/_generated/api.js";
+import { api } from "../lib/convex-api.js";
 import {
   verifyMetaSignature,
   getMetaAppSecret,

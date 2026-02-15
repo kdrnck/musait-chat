@@ -1,6 +1,6 @@
 import type { ConvexHttpClient } from "convex/browser";
 import type { AgentJob, LLMMessage } from "@musait/shared";
-import { api } from "../../../../convex/_generated/api.js";
+import { api } from "../lib/convex-api.js";
 import { LLM_CONFIG } from "../config.js";
 import { buildSystemPrompt } from "./prompts.js";
 import { executeToolCall, getToolDefinitions } from "./tools/index.js";

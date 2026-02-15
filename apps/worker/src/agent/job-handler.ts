@@ -1,6 +1,6 @@
 import type { ConvexHttpClient } from "convex/browser";
 import type { AgentJob } from "@musait/shared";
-import { api } from "../../../../convex/_generated/api.js";
+import { api } from "../lib/convex-api.js";
 import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";

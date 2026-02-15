@@ -1,6 +1,6 @@
 import type { ConvexHttpClient } from "convex/browser";
 import type { AgentQueue } from "@musait/shared";
-import { api } from "../../../../convex/_generated/api.js";
+import { api } from "../lib/convex-api.js";
 
 /**
  * Recovery: On worker startup, re-enqueue any messages that were
