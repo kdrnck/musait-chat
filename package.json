@@ -1,0 +1,24 @@
+{
+  "name": "musait-chat",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:chat": "pnpm --filter chat dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "build:chat": "pnpm --filter chat build",
+    "build:worker": "pnpm --filter worker build",
+    "dev:convex": "npx convex dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "dependencies": {
+    "convex": "^1.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
