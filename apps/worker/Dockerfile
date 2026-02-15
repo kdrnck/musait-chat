@@ -7,7 +7,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # 1) Copy only workspace config first (better layer caching)
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 
 # 2) Copy shared package manifest
 COPY packages/shared/package.json ./packages/shared/
@@ -35,7 +35,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy workspace config
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 
 # Copy built shared package
 COPY --from=builder /app/packages/shared/ ./packages/shared/
