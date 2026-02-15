@@ -5,23 +5,14 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy root workspace files
-COPY package.json pnpm-workspace.yaml .npmrc ./
-
-# Copy packages
-COPY packages/ ./packages/
-
-# Copy convex generated files (needed for API references)
-COPY convex/ ./convex/
-
-# Copy worker app
-COPY apps/worker/ ./apps/worker/
+# Railway service root is apps/worker, so copy local files only.
+COPY . .
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --no-frozen-lockfile
 
 # Use tsx for runtime TypeScript execution (avoids build step issues)
 # This is fine for Railway — tsx adds ~50ms startup overhead, negligible for a long-running server
-EXPOSE 3002
+EXPOSE 3000
 
-CMD ["npx", "tsx", "apps/worker/src/index.ts"]
+CMD ["npx", "tsx", "src/index.ts"]

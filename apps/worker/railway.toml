@@ -1,5 +1,5 @@
 [build]
-dockerfilePath = "apps/worker/Dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
