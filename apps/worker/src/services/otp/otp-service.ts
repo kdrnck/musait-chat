@@ -387,9 +387,10 @@ async function generateMagicLink(
   // Determine redirect path
   const nextPath = context === "signup" ? "/profil/duzenle" : "/app";
   // Main App expects 'token' query param (which it treats as token_hash)
-  const callbackUrl = `${baseUrl}/auth/callback?token=${tokenHash}&type=magiclink&next=${encodeURIComponent(
-    nextPath
-  )}`;
+  // Ensure token is URL encoded just in case
+  const callbackUrl = `${baseUrl}/auth/callback?token=${encodeURIComponent(
+    tokenHash
+  )}&type=magiclink&next=${encodeURIComponent(nextPath)}`;
 
   console.log(`🔗 Magic link generated for ${phoneE164} (next: ${nextPath})`);
   return { url: callbackUrl, tokenHash };
