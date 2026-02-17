@@ -57,10 +57,10 @@ export interface EndSessionParams {
 
 // --- LLM types ---
 
-export type MessageRole = "system" | "user" | "assistant" | "tool";
+export type LLMMessageRole = "system" | "user" | "assistant" | "tool";
 
 export interface LLMMessage {
-  role: MessageRole;
+  role: LLMMessageRole;
   content: string | null;
   tool_calls?: ToolCallRequest[];
   tool_call_id?: string;

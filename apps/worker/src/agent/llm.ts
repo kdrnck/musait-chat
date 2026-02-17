@@ -1,5 +1,5 @@
 import type { ConvexHttpClient } from "convex/browser";
-import type { AgentJob, LLMMessage } from "@musait/shared";
+import type { AgentJob, LLMMessage, AgentToolName } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
 import { LLM_CONFIG } from "../config.js";
 import { buildSystemPrompt } from "./prompts.js";
@@ -139,7 +139,7 @@ interface OpenRouterResponse {
   content: string | null;
   tool_calls?: Array<{
     id: string;
-    name: string;
+    name: AgentToolName;
     arguments: Record<string, unknown>;
   }>;
 }
@@ -189,7 +189,7 @@ async function callOpenRouter(
     content: choice.message?.content || null,
     tool_calls: choice.message?.tool_calls?.map((tc: any) => ({
       id: tc.id,
-      name: tc.function?.name,
+      name: tc.function?.name as AgentToolName,
       arguments:
         typeof tc.function?.arguments === "string"
           ? JSON.parse(tc.function.arguments)
