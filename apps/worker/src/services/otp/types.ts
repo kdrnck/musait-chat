@@ -1,15 +1,9 @@
 // OTP Module — Type Definitions
-// This module is INDEPENDENT from the agent module.
-// No imports from agent/, queue/, or routing/.
 
 export interface OtpRequestParams {
-  /** Phone number in E.164 format */
   phoneE164: string;
-  /** Client IP address for rate limiting */
   ipAddress: string;
-  /** Context: signup or login */
   context: "signup" | "login";
-  /** User agent string */
   userAgent?: string;
 }
 
@@ -17,28 +11,21 @@ export interface OtpRequestResult {
   success: true;
   requestId: string;
   phoneE164: string;
-  /** The raw OTP code — client displays this for user to send via WhatsApp */
   otpCode: string;
-  /** Channel used */
   channel: "whatsapp";
-  /** Cooldown in seconds before next request allowed */
   cooldownSeconds: number;
 }
 
 export interface OtpVerifyParams {
-  /** Phone number in E.164 format */
   phoneE164: string;
-  /** Raw OTP code from WhatsApp message */
   code: string;
 }
 
 export interface OtpVerifyResult {
   success: boolean;
-  /** If success, the magic link URL to send via WhatsApp */
+  /** Short magic link URL to send via WhatsApp */
   magicLinkUrl?: string;
-  /** If success, the token_hash for polling-based login */
-  tokenHash?: string;
-  /** If failed, the reason */
+  /** Failure reason */
   error?: OtpVerifyError;
 }
 
