@@ -42,7 +42,16 @@ async function main() {
 
   // --- Express Server ---
   const app = express();
-  app.use(express.json());
+
+  // Capture raw body for webhook signature verification
+  // Meta signs the original bytes — we must verify against those, not re-serialized JSON
+  app.use(
+    express.json({
+      verify: (req, _res, buf) => {
+        (req as any).rawBody = buf;
+      },
+    })
+  );
 
   // Routes
   app.use("/webhook", createWebhookRouter(convex, queue, supabase));

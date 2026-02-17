@@ -56,7 +56,8 @@ export function createWebhookRouter(
     // 1. Verify Meta signature (REQUIRED in production)
     const signature = req.headers["x-hub-signature-256"] as string | undefined;
     const appSecret = getMetaAppSecret();
-    const rawBody = JSON.stringify(req.body);
+    // Use raw body captured by express.json({ verify }) — NOT re-serialized JSON
+    const rawBody = (req as any).rawBody as Buffer;
 
     if (isSignatureVerificationRequired()) {
       if (!verifyMetaSignature(rawBody, signature, appSecret)) {
