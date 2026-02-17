@@ -23,5 +23,28 @@ export function createHealthRouter(
     });
   });
 
+  // TEMPORARY: Debug endpoint to diagnose env var issues
+  // TODO: REMOVE after webhook verification is fixed
+  router.get("/debug-env", (_req: Request, res: Response) => {
+    const token = process.env.WHATSAPP_VERIFY_TOKEN || "";
+    const hasSecret = !!process.env.META_APP_SECRET;
+    const hasApiKey = !!process.env.INTERNAL_API_KEY;
+    const hasSupabase = !!process.env.SUPABASE_URL;
+    const nodeEnv = process.env.NODE_ENV || "not set";
+
+    res.json({
+      whatsapp_verify_token: {
+        length: token.length,
+        preview: token.length > 0 ? token.substring(0, 4) + "..." : "(empty)",
+      },
+      env_vars_present: {
+        META_APP_SECRET: hasSecret,
+        INTERNAL_API_KEY: hasApiKey,
+        SUPABASE_URL: hasSupabase,
+      },
+      NODE_ENV: nodeEnv,
+    });
+  });
+
   return router;
 }
