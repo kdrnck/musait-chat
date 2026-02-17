@@ -31,27 +31,29 @@ export async function routeIncomingMessage(
   customerPhone: string,
   messageContent: string
 ): Promise<RouteDecision> {
-  // 1. Check for active OTP state in database
-  const hasActiveOtp = await checkActiveOtpState(supabase, customerPhone);
-
-  if (!hasActiveOtp) {
-    return { route: "agent" };
-  }
-
-  // 2. Phone has active OTP — try to extract code from message
+  // 1. Try to extract 6-digit code from message
   const otpCode = extractOtpCode(messageContent);
 
   if (otpCode) {
+    // If message contains a code, ALWAYS route to OTP handler
+    // Even if no active OTP exists, OTP handler will respond with "expired/invalid"
     console.log(`🔀 Routing ${customerPhone} → OTP handler (code detected)`);
     return { route: "otp", otpCode };
   }
 
-  // 3. Active OTP exists but message is not a code
-  // Still route to OTP handler — it will send a helpful message
-  console.log(
-    `🔀 Routing ${customerPhone} → OTP handler (active OTP, no code in message)`
-  );
-  return { route: "otp" };
+  // 2. No code in message — check for active OTP state
+  // Only route non-code messages (like "help") to OTP handler if an OTP session is active
+  const hasActiveOtp = await checkActiveOtpState(supabase, customerPhone);
+
+  if (hasActiveOtp) {
+    console.log(
+      `🔀 Routing ${customerPhone} → OTP handler (active OTP, non-code message)`
+    );
+    return { route: "otp" };
+  }
+
+  // 3. No code and no active OTP → route to Agent
+  return { route: "agent" };
 }
 
 /**

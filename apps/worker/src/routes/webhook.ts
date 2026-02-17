@@ -184,8 +184,15 @@ async function handleOtpMessage(params: {
       `${result.magicLinkUrl}\n\n` +
       `Bu bağlantı tek kullanımlıktır.`;
 
-    await sendWhatsAppMessage(customerPhone, successMessage);
-    console.log(`🔗 Magic link sent to ${customerPhone}`);
+    try {
+      await sendWhatsAppMessage(customerPhone, successMessage);
+      console.log(`🔗 Magic link sent to ${customerPhone}`);
+    } catch (err) {
+      console.error(
+        `❌ Failed to send WhatsApp success message to ${customerPhone}:`,
+        err
+      );
+    }
   } else {
     // Send error message based on failure reason
     const errorMessages: Record<string, string> = {
@@ -193,21 +200,24 @@ async function handleOtpMessage(params: {
         "❌ Aktif bir doğrulama kodunuz bulunmuyor. Lütfen yeni kod talep edin.",
       expired:
         "⏰ Doğrulama kodunuzun süresi dolmuş. Lütfen yeni kod talep edin.",
-      max_attempts:
-        "🚫 Çok fazla deneme yapıldı. Lütfen yeni kod talep edin.",
-      invalid_code:
-        "❌ Geçersiz kod. Lütfen doğru kodu girin.",
-      already_used:
-        "❌ Bu kod zaten kullanılmış. Lütfen yeni kod talep edin.",
-      internal_error:
-        "⚠️ Bir hata oluştu. Lütfen tekrar deneyin.",
+      max_attempts: "🚫 Çok fazla deneme yapıldı. Lütfen yeni kod talep edin.",
+      invalid_code: "❌ Geçersiz kod. Lütfen doğru kodu girin.",
+      already_used: "❌ Bu kod zaten kullanılmış. Lütfen tekrar giriş yapın.",
+      internal_error: "⚠️ Bir hata oluştu. Lütfen tekrar deneyin.",
     };
 
     const errorMsg =
       errorMessages[result.error || "internal_error"] ||
       errorMessages.internal_error;
 
-    await sendWhatsAppMessage(customerPhone, errorMsg);
+    try {
+      await sendWhatsAppMessage(customerPhone, errorMsg);
+    } catch (err) {
+      console.error(
+        `❌ Failed to send WhatsApp error message to ${customerPhone}:`,
+        err
+      );
+    }
     console.warn(
       `❌ OTP verification failed for ${customerPhone}: ${result.error}`
     );

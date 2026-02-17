@@ -346,7 +346,8 @@ async function generateMagicLink(
     });
 
   if (linkError || !linkData?.properties?.action_link) {
-    console.error("❌ Failed to generate magic link:", linkError);
+    console.error("❌ Failed to generate magic link:", linkError || "No action_link in response");
+    if (linkData) console.error("Link Data response:", JSON.stringify(linkData));
     return null;
   }
 
