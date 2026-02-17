@@ -4,6 +4,7 @@ export interface OtpRequestParams {
   phoneE164: string;
   ipAddress: string;
   context: "signup" | "login";
+  redirectTo?: string;
   userAgent?: string;
 }
 

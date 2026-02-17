@@ -31,14 +31,14 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
   /**
    * POST /otp/request
    *
-   * Body: { phone: string, context: "signup" | "login" }
+   * Body: { phone: string, context: "signup" | "login", redirectTo?: string }
    *
    * Success: { success: true, requestId, phoneE164, otpCode, channel, cooldownSeconds }
    * Rate limited: { success: false, error, retryAfterSeconds }
    */
   router.post("/request", async (req: Request, res: Response) => {
     try {
-      const { phone, context } = req.body;
+      const { phone, context, redirectTo } = req.body;
 
       if (!phone || typeof phone !== "string") {
         res.status(400).json({ error: "phone is required" });
@@ -47,6 +47,11 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
 
       if (!context || !["signup", "login"].includes(context)) {
         res.status(400).json({ error: "context must be 'signup' or 'login'" });
+        return;
+      }
+
+      if (redirectTo !== undefined && typeof redirectTo !== "string") {
+        res.status(400).json({ error: "redirectTo must be a string" });
         return;
       }
 
@@ -65,6 +70,7 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
         phoneE164,
         ipAddress,
         context: context as "signup" | "login",
+        redirectTo,
         userAgent: req.headers["user-agent"],
       });
 

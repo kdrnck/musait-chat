@@ -30,7 +30,7 @@ export async function requestOtp(
   supabase: SupabaseClient,
   params: OtpRequestParams
 ): Promise<OtpRequestResult | { success: false; error: string; retryAfterSeconds?: number }> {
-  const { phoneE164, ipAddress, context, userAgent } = params;
+  const { phoneE164, ipAddress, context, redirectTo, userAgent } = params;
 
   // Rate limit check
   const rateCheck = await checkOtpRateLimit(supabase, phoneE164, ipAddress);
@@ -47,6 +47,7 @@ export async function requestOtp(
   const code = generateOtpCode();
   const codeHash = hashOtpCode(code);
   const expiresAt = calculateExpiration();
+  const safeRedirectTo = normalizeRedirectPath(redirectTo);
 
   const { data: otpRecord, error: insertError } = await supabase
     .from("phone_login_codes")
@@ -60,7 +61,7 @@ export async function requestOtp(
       max_attempts: OTP_CONFIG.MAX_ATTEMPTS,
       ip_address: ipAddress,
       user_agent: userAgent || null,
-      metadata: {},
+      metadata: safeRedirectTo ? { redirect_to: safeRedirectTo } : {},
     })
     .select("id")
     .single();
@@ -110,7 +111,7 @@ export async function verifyOtp(
     .is("used_at", null)
     .gt("expires_at", new Date().toISOString())
     .lt("attempt_count", OTP_CONFIG.MAX_ATTEMPTS)
-    .select("id, context")
+    .select("id, context, metadata")
     .single();
 
   if (verifyError || !verified) {
@@ -138,7 +139,8 @@ export async function verifyOtp(
   const magicLink = await generateMagicLink(
     supabase,
     user.email,
-    verified.context as "signup" | "login"
+    verified.context as "signup" | "login",
+    readRedirectPathFromMetadata(verified.metadata)
   );
 
   if (!magicLink) {
@@ -150,6 +152,7 @@ export async function verifyOtp(
     .from("phone_login_codes")
     .update({
       metadata: {
+        ...toMetadataRecord(verified.metadata),
         short_code: magicLink.shortCode,
         supabase_verify_url: magicLink.supabaseVerifyUrl,
         verified_at: new Date().toISOString(),
@@ -185,10 +188,12 @@ export async function verifyOtp(
 async function generateMagicLink(
   supabase: SupabaseClient,
   email: string,
-  context: "signup" | "login"
+  context: "signup" | "login",
+  redirectPath?: string | null
 ): Promise<{ shortCode: string; shortUrl: string; supabaseVerifyUrl: string } | null> {
   const baseUrl = getAppBaseUrl();
-  const nextPath = context === "signup" ? "/profil/duzenle" : "/app";
+  const defaultNextPath = context === "signup" ? "/profil/duzenle" : "/profil";
+  const nextPath = normalizeRedirectPath(redirectPath) || defaultNextPath;
   const redirectTo = `${baseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
 
   const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -214,6 +219,30 @@ async function generateMagicLink(
   const shortUrl = `${baseUrl}/auth/magic/${shortCode}`;
 
   return { shortCode, shortUrl, supabaseVerifyUrl };
+}
+
+function normalizeRedirectPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith("/")) return null;
+  if (trimmed.startsWith("//")) return null;
+  if (/[\r\n]/.test(trimmed)) return null;
+
+  return trimmed;
+}
+
+function toMetadataRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function readRedirectPathFromMetadata(value: unknown): string | null {
+  const metadata = toMetadataRecord(value);
+  return normalizeRedirectPath(metadata.redirect_to);
 }
 
 /**
