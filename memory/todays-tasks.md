@@ -1,27 +1,27 @@
 # Today's Tasks - 2026-02-17
 
-## 1. Worker Environment Setup & Verification
+## 1. 🚨 Worker Verification (Production)
+- [ ] **Get Public URL**: Obtain the deployed worker URL from Railway.
+- [ ] **Health Check**: `curl <URL>/health` to verify service is up.
+- [ ] **OTP Test**: `curl -X POST <URL>/otp/request` to verify database connection and logic in prod.
+- [ ] **Webhook Test**: Simulate webhook to prod (requires valid signature or bypassed).
+
+## 2. Worker Environment Setup & Verification
 - [x] **Local Verification**: Ensure `apps/worker` runs correctly locally (`pnpm dev:worker`).
-- [x] **Dependency Check**: Verify `@musait/shared` and other dependencies are correctly linked.
-- [x] **Env Var Check**: valid `.env` file in `apps/worker`.
+- [x] **Dependency Check**: Verified `@musait/shared` created.
+- [x] **Env Var Check**: `.env` validated.
 
-## 2. Railway Deployment (First Run)
-- [ ] **Deploy**: Push changes to trigger Railway deployment.
-- [ ] **Verify**: Ensure the build succeeds (fixing the previous "Resources" error).
-- [ ] **Health Check**: Verify the deployed service is healthy.
+## 3. Railway Deployment
+- [x] **Deploy**: Push changes to trigger Railway deployment.
+- [x] **Verify Build**: Build succeeded.
+- [ ] **Verify Service**: Pending public URL check.
 
-## 3. OTP Implementation (Worker-Side)
-*Reference: `memory/otp-migration.md`*
-- [ ] **Router Logic**: Implement `message-router.ts` to distinguish between OTP codes and Agent messages.
-- [ ] **OTP Endpoints**: Implement `POST /otp/request` in the Worker (secured by `INTERNAL_API_KEY`).
-- [ ] **OTP Verification**: Handle OTP verification logic within the webhook handler (intercept 6-digit codes).
-- [ ] **Magic Link**: Generate and send Magic Links for authentication.
-- [ ] **Cleanup**: Implement daily cleanup job for expired OTPs.
-
-## 4. Chat App (Frontend) & Integration
-- [ ] **Run Dev Server**: Start `apps/chat` (`pnpm dev:chat`) alongside the worker.
-- [ ] **UI Check**: Verify the Chat App UI loads and displays conversations (mock or real).
-- [ ] **Authentication**: Ensure login works using the main app's credentials (Supabase Auth).
+## 4. OTP Implementation (Worker-Side)
+- [x] **Router Logic**: `message-router.ts` implemented.
+- [x] **OTP Endpoints**: `POST /otp/request` implemented.
+- [x] **OTP Verification**: Webhook handles verification.
+- [x] **Magic Link**: Integrated with Supabase.
+- [x] **Cleanup**: Cleanup job configured.
 
 ## 5. Agent Workflow: WhatsApp -> LLM -> Appointment
 - [ ] **Flow**: Test the end-to-end flow:
@@ -32,7 +32,7 @@
     5.  Agent calls `create_appointment` tool.
     6.  Appointment is saved to Supabase.
     7.  Confirmation sent back to WhatsApp.
-- [ ] **Tooling**: Verify `create_appointment` and `cancel_appointment` tools work as expected.
 
-## 6. Main App Integration (Context)
-- [ ] **Login System**: Verify the Chat App (`chat.musait.app`) shares authentication state/cookies with the main app (`musait.app`) logic where applicable, or handles independent login correctly if separated.
+## 6. Chat App (Delayed)
+- [ ] **Initialize**: Create `apps/chat` project (when requested).
+- [ ] **UI Integration**: Connect to Convex and Auth.

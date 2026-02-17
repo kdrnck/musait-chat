@@ -6,12 +6,23 @@
                           ┌─────────────────────────┐
                           │     chat.musait.app      │
                           │   (Next.js on Vercel)    │
+                          │   *Located in apps/chat* │
                           │                          │
                           │  - Convex real-time UI   │
                           │  - Read-only by default  │
                           │  - Human input on handoff│
                           │  - Auth via .musait.app  │
                           │    HTTPOnly JWT cookies  │
+                          └────────────┬────────────┘
+                                       │ Convex subscription
+                                       ▼
+                          ┌─────────────────────────┐
+                          │   Main App (musait.app)  │
+                          │  *Separate Repository*   │
+                          │                          │
+                          │  - Proxies OTP requests  │
+                          │    to Worker             │
+                          │  - Shared Auth Cookie    │
                           └────────────┬────────────┘
                                        │ Convex subscription
                                        ▼

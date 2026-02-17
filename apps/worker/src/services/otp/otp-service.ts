@@ -26,7 +26,6 @@ import type {
  */
 export async function requestOtp(
   supabase: SupabaseClient,
-  sendWhatsApp: (to: string, message: string) => Promise<void>,
   params: OtpRequestParams
 ): Promise<OtpRequestResult | { success: false; error: string; retryAfterSeconds?: number }> {
   const { phoneE164, ipAddress, context, userAgent } = params;
@@ -70,26 +69,17 @@ export async function requestOtp(
     return { success: false, error: "internal_error" };
   }
 
-  // 4. Send OTP via WhatsApp
-  const message =
-    `🔐 Musait doğrulama kodunuz: *${code}*\n\n` +
-    `Bu kodu bu sohbete yanıt olarak gönderin.\n` +
-    `Kod ${OTP_CONFIG.EXPIRATION_MINUTES} dakika geçerlidir.\n\n` +
-    `Bu kodu siz talep etmediyseniz lütfen dikkate almayın.`;
-
-  try {
-    await sendWhatsApp(phoneE164, message);
-    console.log(`📤 OTP sent via WhatsApp to ${phoneE164}`);
-  } catch (err) {
-    console.error(`❌ Failed to send OTP via WhatsApp to ${phoneE164}:`, err);
-    // Don't fail the request — user can request again
-    // The code is stored; if user somehow receives it, it will work
-  }
+  // 4. Return OTP code to the client
+  // Client will display the code and generate wa.me link
+  // User sends the code to our WhatsApp number themselves
+  console.log(`📤 OTP generated for ${phoneE164} (requestId: ${otpRecord.id})`);
 
   return {
     success: true,
     requestId: otpRecord.id,
     phoneE164,
+    otpCode: code,
+    channel: "whatsapp",
     cooldownSeconds: OTP_CONFIG.COOLDOWN_SECONDS,
   };
 }
@@ -151,12 +141,28 @@ export async function verifyOtp(
   }
 
   // Generate magic link
-  const magicLinkUrl = await generateMagicLink(supabase, userId, phoneE164);
-  if (!magicLinkUrl) {
+  const magicLinkResult = await generateMagicLink(supabase, userId, phoneE164);
+  if (!magicLinkResult) {
     return { success: false, error: "internal_error" };
   }
 
-  return { success: true, magicLinkUrl };
+  // Store the token_hash in metadata so poll endpoint can find it
+  await supabase
+    .from("phone_login_codes")
+    .update({
+      metadata: {
+        token_hash: magicLinkResult.tokenHash,
+        magic_link_url: magicLinkResult.url,
+        verified_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", verified.id);
+
+  return {
+    success: true,
+    magicLinkUrl: magicLinkResult.url,
+    tokenHash: magicLinkResult.tokenHash,
+  };
 }
 
 /**
@@ -329,7 +335,7 @@ async function generateMagicLink(
   supabase: SupabaseClient,
   _userId: string,
   phoneE164: string
-): Promise<string | null> {
+): Promise<{ url: string; tokenHash: string } | null> {
   const digits = phoneE164.replace(/\D/g, "");
   const placeholderEmail = `${digits}@phone.musait.app`;
 
@@ -345,7 +351,7 @@ async function generateMagicLink(
   }
 
   // Extract token from action_link
-  // action_link format: https://xxx.supabase.co/auth/v1/verify?token=...&type=magiclink&redirect_to=...
+  // action_link format: https://xxx.supabase.co/auth/v1/verify?token=...
   const actionUrl = new URL(linkData.properties.action_link);
   const token = actionUrl.searchParams.get("token");
 
@@ -354,10 +360,13 @@ async function generateMagicLink(
     return null;
   }
 
+  // Get token_hash from linkData (Supabase returns it in properties)
+  const tokenHash = linkData.properties.hashed_token || token;
+
   // Construct the callback URL pointing to musait.app
   const baseUrl = getAppBaseUrl();
-  const callbackUrl = `${baseUrl}/auth/callback?token=${token}&type=magiclink`;
+  const callbackUrl = `${baseUrl}/auth/callback?token_hash=${tokenHash}&type=magiclink`;
 
   console.log(`🔗 Magic link generated for ${phoneE164}`);
-  return callbackUrl;
+  return { url: callbackUrl, tokenHash };
 }

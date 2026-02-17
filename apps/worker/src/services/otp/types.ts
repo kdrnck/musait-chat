@@ -17,6 +17,10 @@ export interface OtpRequestResult {
   success: true;
   requestId: string;
   phoneE164: string;
+  /** The raw OTP code — client displays this for user to send via WhatsApp */
+  otpCode: string;
+  /** Channel used */
+  channel: "whatsapp";
   /** Cooldown in seconds before next request allowed */
   cooldownSeconds: number;
 }
@@ -32,6 +36,8 @@ export interface OtpVerifyResult {
   success: boolean;
   /** If success, the magic link URL to send via WhatsApp */
   magicLinkUrl?: string;
+  /** If success, the token_hash for polling-based login */
+  tokenHash?: string;
   /** If failed, the reason */
   error?: OtpVerifyError;
 }
