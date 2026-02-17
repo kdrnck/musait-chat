@@ -16,7 +16,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY apps/worker/package.json ./apps/worker/
 
 # 4) Install dependencies (cached unless manifests change)
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # 5) Copy shared package source & build
 COPY packages/shared/ ./packages/shared/
