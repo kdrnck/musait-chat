@@ -129,19 +129,25 @@ export async function verifyOtp(
   console.log(`✅ OTP verified for ${phoneE164} (record: ${verified.id})`);
 
   // Resolve or create user
-  const userId = await resolveOrCreateUser(
+  const user = await resolveOrCreateUser(
     supabase,
     phoneE164,
     verified.context as "signup" | "login"
   );
 
-  if (!userId) {
+  if (!user) {
     console.error(`❌ Failed to resolve user for ${phoneE164}`);
     return { success: false, error: "internal_error" };
   }
 
   // Generate magic link
-  const magicLinkResult = await generateMagicLink(supabase, userId, phoneE164);
+  const magicLinkResult = await generateMagicLink(
+    supabase,
+    user.id,
+    user.email,
+    verified.context as "signup" | "login",
+    phoneE164
+  );
   if (!magicLinkResult) {
     return { success: false, error: "internal_error" };
   }
@@ -244,17 +250,27 @@ async function resolveOrCreateUser(
   supabase: SupabaseClient,
   phoneE164: string,
   context: "signup" | "login"
-): Promise<string | null> {
-  // 1. Check if user exists by phone
+): Promise<{ id: string; email: string } | null> {
+  // 1. Check if user exists by phone in profiles
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, email")
     .eq("phone_e164", phoneE164)
     .limit(1)
     .single();
 
   if (profile) {
-    return profile.id;
+    // If email is missing in profile, fetch from auth.users (fallback)
+    // But profiles usually has email. If not, construct placeholder?
+    // Let's trust profile email first.
+    let email = profile.email;
+    if (!email) {
+      const { data: authUser } = await supabase.auth.admin.getUserById(
+        profile.id
+      );
+      email = authUser?.user?.email || "";
+    }
+    return { id: profile.id, email };
   }
 
   // 2. No existing user — create one (signup flow)
@@ -318,7 +334,7 @@ async function resolveOrCreateUser(
   }
 
   console.log(`👤 New user created: ${newUser.user.id} for ${phoneE164}`);
-  return newUser.user.id;
+  return { id: newUser.user.id, email: placeholderEmail };
 }
 
 /**
@@ -334,15 +350,16 @@ async function resolveOrCreateUser(
 async function generateMagicLink(
   supabase: SupabaseClient,
   _userId: string,
+  email: string,
+  context: "signup" | "login",
   phoneE164: string
 ): Promise<{ url: string; tokenHash: string } | null> {
-  const digits = phoneE164.replace(/\D/g, "");
-  const placeholderEmail = `${digits}@phone.musait.app`;
+  // Don't reconstruct placeholder email — use the actual user email passed in
 
   const { data: linkData, error: linkError } =
     await supabase.auth.admin.generateLink({
       type: "magiclink",
-      email: placeholderEmail,
+      email: email,
     });
 
   if (linkError || !linkData?.properties?.action_link) {
@@ -366,8 +383,12 @@ async function generateMagicLink(
 
   // Construct the callback URL pointing to musait.app
   const baseUrl = getAppBaseUrl();
-  const callbackUrl = `${baseUrl}/auth/callback?token_hash=${tokenHash}&type=magiclink`;
+  // Determine redirect path
+  const nextPath = context === "signup" ? "/profil/duzenle" : "/app";
+  const callbackUrl = `${baseUrl}/auth/callback?token_hash=${tokenHash}&type=magiclink&next=${encodeURIComponent(
+    nextPath
+  )}`;
 
-  console.log(`🔗 Magic link generated for ${phoneE164}`);
+  console.log(`🔗 Magic link generated for ${phoneE164} (next: ${nextPath})`);
   return { url: callbackUrl, tokenHash };
 }
