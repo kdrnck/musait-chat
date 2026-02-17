@@ -95,7 +95,8 @@ export function createWebhookRouter(
             if (message.type !== "text" || !message.text?.body) continue;
 
             const phoneNumberId = metadata.phone_number_id;
-            const customerPhone = message.from;
+            // Normalize to E.164 (add + prefix if missing)
+            const customerPhone = normalizePhoneToE164(message.from);
             const messageContent = message.text.body;
             const contactName =
               contacts?.[0]?.profile?.name || "Bilinmeyen";
