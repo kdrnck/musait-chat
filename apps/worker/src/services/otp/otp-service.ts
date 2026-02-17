@@ -140,16 +140,8 @@ export async function verifyOtp(
     return { success: false, error: "internal_error" };
   }
 
-  // === DUAL LOGIN MECHANISM ===
-  // Problem: Supabase magic link tokens are single-use. Desktop (polling) and
-  // Mobile (WhatsApp link) can't share the same token.
-  // Solution:
-  //   1. Generate Link #1 → consume it server-side → get session for polling
-  //   2. Generate Link #2 → send via WhatsApp for mobile login
-  // Since Link #1 is already consumed, Link #2 won't invalidate it.
-
-  // Step 1: Generate first magic link
-  const sessionLink = await generateMagicLink(
+  // Generate magic link for WhatsApp delivery
+  const magicLinkResult = await generateMagicLink(
     supabase,
     user.id,
     user.email,
@@ -157,49 +149,17 @@ export async function verifyOtp(
     phoneE164
   );
 
-  if (!sessionLink) {
+  if (!magicLinkResult) {
     return { success: false, error: "internal_error" };
   }
 
-  // Step 2: Consume first token server-side to get a session for desktop polling
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.verifyOtp({
-      token_hash: sessionLink.tokenHash,
-      type: "magiclink",
-    });
-
-  if (sessionError || !sessionData?.session) {
-    console.error("❌ Failed to create session for polling:", sessionError);
-    return { success: false, error: "internal_error" };
-  }
-
-  console.log(`🔑 Session created server-side for ${phoneE164} (polling)`);
-
-  // Step 3: Generate second magic link for WhatsApp (mobile)
-  // Since Link #1 is consumed, this new link won't conflict
-  const whatsappLink = await generateMagicLink(
-    supabase,
-    user.id,
-    user.email,
-    verified.context as "signup" | "login",
-    phoneE164
-  );
-
-  if (!whatsappLink) {
-    // WhatsApp link failed but session is ready — polling still works
-    console.warn("⚠️ WhatsApp magic link generation failed, polling will still work");
-  }
-
-  // Step 4: Store session + WhatsApp link in metadata
+  // Update verified_at but NO session tokens stored in metadata
+  // Polling is deprecated/removed in favor of alternative desktop login methods
   await supabase
     .from("phone_login_codes")
     .update({
       metadata: {
-        // Session for desktop polling (setSession, NOT verifyOtp)
-        access_token: sessionData.session.access_token,
-        refresh_token: sessionData.session.refresh_token,
-        // WhatsApp link for mobile
-        magic_link_url: whatsappLink?.url || null,
+        magic_link_url: magicLinkResult.url,
         verified_at: new Date().toISOString(),
       },
     })
@@ -207,8 +167,8 @@ export async function verifyOtp(
 
   return {
     success: true,
-    magicLinkUrl: whatsappLink?.url || undefined,
-    tokenHash: sessionLink.tokenHash, // Not used for polling anymore, kept for compatibility
+    magicLinkUrl: magicLinkResult.url,
+    tokenHash: undefined, // Polling disabled
   };
 }
 

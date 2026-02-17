@@ -23,16 +23,27 @@
 - [x] **Magic Link**: Integrated with Supabase.
 - [x] **Cleanup**: Cleanup job configured.
 
-## 5. Agent Workflow: WhatsApp -> LLM -> Appointment
-- [ ] **Flow**: Test the end-to-end flow:
-    1.  User sends WhatsApp message.
-    2.  Worker receives webhook.
-    3.  Router sends to Agent.
-    4.  Agent (LLM) processes message.
-    5.  Agent calls `create_appointment` tool.
-    6.  Appointment is saved to Supabase.
-    7.  Confirmation sent back to WhatsApp.
+## 5. Chat UI (MVP) - **PRIORITY**
+- [ ] **Initialize**: `apps/chat` (Next.js + Tailwind + Convex).
+- [ ] **Convex Setup**: Define schema for `conversations`, `messages`.
+- [ ] **UI - Conversation List**: Real-time list of active chats.
+- [ ] **UI - Chat Window**: 
+    - [ ] Message history (User vs Agent).
+    - [ ] Input area for human reply.
+    - [ ] Visual distinction for Agent thoughts/Tool outputs (for debugging).
+- [ ] **Integration**: 
+    - [ ] Connect to Convex backend.
+    - [ ] Ensure sending a message triggers Worker to send WhatsApp.
 
-## 6. Chat App (Delayed)
-- [ ] **Initialize**: Create `apps/chat` project (when requested).
-- [ ] **UI Integration**: Connect to Convex and Auth.
+## 6. Agent Workflow: WhatsApp -> LLM -> Appointment
+- [ ] **Flow**: Test the end-to-end flow using Chat UI for visibility:
+    1.  User sends WhatsApp message.
+    2.  Worker receives webhook -> Pushes to Convex.
+    3.  **Chat UI sees new message.**
+    4.  Router sends to Agent.
+    5.  Agent (LLM) processes message.
+    6.  **Chat UI sees Agent thoughts/Tool calls.**
+    7.  Agent calls `create_appointment` tool.
+    8.  Appointment is saved to Supabase.
+    9.  Confirmation sent back to WhatsApp.
+    10. **Chat UI shows final response.**

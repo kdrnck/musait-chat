@@ -118,87 +118,8 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
     }
   });
 
-  /**
-   * GET /otp/poll-session
-   *
-   * Query params:
-   *   phone: string       // E.164 format
-   *   requestId: string   // UUID from /otp/request response
-   *
-   * Response (pending — not yet verified):
-   * { success: false, error: "pending" }
-   *
-   * Response (verified — session ready):
-   * { success: true, access_token: "...", refresh_token: "..." }
-   *
-   * Response (expired/used):
-   * { success: false, error: "expired" | "not_found" }
-   */
-  router.get("/poll-session", async (req: Request, res: Response) => {
-    try {
-      const phone = req.query.phone as string;
-      const requestId = req.query.requestId as string;
-
-      if (!phone || !requestId) {
-        res.status(400).json({ error: "phone and requestId are required" });
-        return;
-      }
-
-      const phoneE164 = normalizePhoneToE164(phone);
-
-      // Look up the OTP record
-      const { data: record, error } = await supabase
-        .from("phone_login_codes")
-        .select("id, used_at, expires_at, metadata")
-        .eq("id", requestId)
-        .eq("phone_e164", phoneE164)
-        .single();
-
-      if (error || !record) {
-        res.status(404).json({ success: false, error: "not_found" });
-        return;
-      }
-
-      // Check if OTP expired (10 min)
-      if (new Date(record.expires_at) <= new Date()) {
-        res.status(200).json({ success: false, error: "expired" });
-        return;
-      }
-
-      // Check if verified and session tokens exist
-      if (record.used_at && record.metadata?.access_token) {
-        // Security: check 1-hour TTL on session tokens in metadata
-        const verifiedAt = record.metadata.verified_at
-          ? new Date(record.metadata.verified_at)
-          : null;
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-
-        if (verifiedAt && verifiedAt < oneHourAgo) {
-          // Token expired — wipe metadata for security
-          await supabase
-            .from("phone_login_codes")
-            .update({ metadata: { expired: true } })
-            .eq("id", record.id);
-
-          res.status(200).json({ success: false, error: "expired" });
-          return;
-        }
-
-        res.status(200).json({
-          success: true,
-          access_token: record.metadata.access_token,
-          refresh_token: record.metadata.refresh_token,
-        });
-        return;
-      }
-
-      // Not yet verified — still pending
-      res.status(200).json({ success: false, error: "pending" });
-    } catch (err) {
-      console.error("❌ OTP poll error:", err);
-      res.status(500).json({ error: "internal_error" });
-    }
-  });
+  // GET /otp/poll-session REMOVED
+  // Polling is no longer supported. Use Magic Link for login.
 
   return router;
 }
