@@ -385,7 +385,8 @@ async function generateMagicLink(
   const baseUrl = getAppBaseUrl();
   // Determine redirect path
   const nextPath = context === "signup" ? "/profil/duzenle" : "/app";
-  const callbackUrl = `${baseUrl}/auth/callback?token_hash=${tokenHash}&type=magiclink&next=${encodeURIComponent(
+  // Add BOTH token and token_hash to be safe
+  const callbackUrl = `${baseUrl}/auth/callback?token=${token}&token_hash=${tokenHash}&type=magiclink&next=${encodeURIComponent(
     nextPath
   )}`;
 
