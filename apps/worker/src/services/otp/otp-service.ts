@@ -90,7 +90,7 @@ export async function requestOtp(
  * 2. Resolve or create user
  * 3. Generate Supabase magic link (action_link)
  * 4. Generate short code, store mapping in DB
- * 5. Return short magic link URL for WhatsApp delivery
+ * 5. Return magic link URL for WhatsApp delivery
  *
  * The short URL (musait.app/auth/magic/CODE) redirects to Supabase's
  * own verify endpoint. Supabase handles token verification internally.
@@ -164,7 +164,8 @@ export async function verifyOtp(
 
   return {
     success: true,
-    magicLinkUrl: magicLink.shortUrl,
+    // Use direct Supabase verify URL to avoid dependency on short-code lookup in main app.
+    magicLinkUrl: magicLink.supabaseVerifyUrl,
   };
 }
 
