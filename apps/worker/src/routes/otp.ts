@@ -128,8 +128,8 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
    * Response (pending — not yet verified):
    * { success: false, error: "pending" }
    *
-   * Response (verified — token ready):
-   * { success: true, token: "..." }
+   * Response (verified — session ready):
+   * { success: true, access_token: "...", refresh_token: "..." }
    *
    * Response (expired/used):
    * { success: false, error: "expired" | "not_found" }
@@ -159,17 +159,35 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
         return;
       }
 
-      // Check if expired
+      // Check if OTP expired (10 min)
       if (new Date(record.expires_at) <= new Date()) {
         res.status(200).json({ success: false, error: "expired" });
         return;
       }
 
-      // Check if verified (used_at is set, and metadata has token_hash)
-      if (record.used_at && record.metadata?.token_hash) {
+      // Check if verified and session tokens exist
+      if (record.used_at && record.metadata?.access_token) {
+        // Security: check 1-hour TTL on session tokens in metadata
+        const verifiedAt = record.metadata.verified_at
+          ? new Date(record.metadata.verified_at)
+          : null;
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+        if (verifiedAt && verifiedAt < oneHourAgo) {
+          // Token expired — wipe metadata for security
+          await supabase
+            .from("phone_login_codes")
+            .update({ metadata: { expired: true } })
+            .eq("id", record.id);
+
+          res.status(200).json({ success: false, error: "expired" });
+          return;
+        }
+
         res.status(200).json({
           success: true,
-          token: record.metadata.token_hash,
+          access_token: record.metadata.access_token,
+          refresh_token: record.metadata.refresh_token,
         });
         return;
       }
