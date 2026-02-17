@@ -140,25 +140,38 @@ export async function verifyOtp(
     return { success: false, error: "internal_error" };
   }
 
-  // Generate magic link
-  const magicLinkResult = await generateMagicLink(
+  // Generate TWO magic links:
+  // 1. One for the polling mechanism (Desktop login)
+  // 2. One for the WhatsApp message (Mobile login)
+  // This prevents the desktop login from consuming the token meant for mobile (and vice-versa).
+
+  const pollingLinkResult = await generateMagicLink(
     supabase,
     user.id,
     user.email,
     verified.context as "signup" | "login",
     phoneE164
   );
-  if (!magicLinkResult) {
+
+  const whatsappLinkResult = await generateMagicLink(
+    supabase,
+    user.id,
+    user.email,
+    verified.context as "signup" | "login",
+    phoneE164
+  );
+
+  if (!pollingLinkResult || !whatsappLinkResult) {
     return { success: false, error: "internal_error" };
   }
 
-  // Store the token_hash in metadata so poll endpoint can find it
+  // Store the polling token_hash in metadata so poll endpoint can find it
   await supabase
     .from("phone_login_codes")
     .update({
       metadata: {
-        token_hash: magicLinkResult.tokenHash,
-        magic_link_url: magicLinkResult.url,
+        token_hash: pollingLinkResult.tokenHash,
+        magic_link_url: whatsappLinkResult.url, // Store the WA link for reference
         verified_at: new Date().toISOString(),
       },
     })
@@ -166,8 +179,8 @@ export async function verifyOtp(
 
   return {
     success: true,
-    magicLinkUrl: magicLinkResult.url,
-    tokenHash: magicLinkResult.tokenHash,
+    magicLinkUrl: whatsappLinkResult.url, // Return the WA link to be sent via WhatsApp
+    tokenHash: pollingLinkResult.tokenHash, // Return the polling hash (though verifyOtp doesn't use it directly here)
   };
 }
 
