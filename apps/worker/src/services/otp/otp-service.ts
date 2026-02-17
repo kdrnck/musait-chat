@@ -148,7 +148,7 @@ export async function verifyOtp(
   }
 
   // Store short code mapping in OTP record metadata
-  await supabase
+  const { error: metadataError } = await supabase
     .from("phone_login_codes")
     .update({
       metadata: {
@@ -160,12 +160,16 @@ export async function verifyOtp(
     })
     .eq("id", verified.id);
 
+  if (metadataError) {
+    console.error("❌ Failed to persist short magic link metadata:", metadataError);
+    return { success: false, error: "internal_error" };
+  }
+
   console.log(`🔗 Short magic link: ${magicLink.shortUrl}`);
 
   return {
     success: true,
-    // Use direct Supabase verify URL to avoid dependency on short-code lookup in main app.
-    magicLinkUrl: magicLink.supabaseVerifyUrl,
+    magicLinkUrl: magicLink.shortUrl,
   };
 }
 
