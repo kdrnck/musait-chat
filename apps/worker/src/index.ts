@@ -28,8 +28,7 @@ async function main() {
   const supabase = getSupabaseAdmin();
 
   // --- Validate OTP magic-link base URL early ---
-  const appBaseUrl = getAppBaseUrl();
-  console.log(`🔗 OTP APP_BASE_URL: ${appBaseUrl}`);
+  getAppBaseUrl();
 
   // --- Initialize Queue ---
   const queue = new InMemoryQueue(DEFAULT_QUEUE_CONFIG);

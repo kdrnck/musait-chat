@@ -262,14 +262,6 @@ async function createShortMagicLink(
   callbackUrl.searchParams.set("next", nextPath);
   const supabaseVerifyUrl = callbackUrl.toString();
 
-  console.log("[otp] generated callback magic link", {
-    phoneE164: params.phoneE164,
-    baseUrl,
-    nextPath,
-    actionLinkHost: new URL(linkData.properties.action_link).hostname,
-    callbackHost: callbackUrl.hostname,
-  });
-
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + MAGIC_LINK_TTL_MINUTES);
   const expiresAtIso = expiresAt.toISOString();
