@@ -46,10 +46,10 @@ export function getOtpHashSecret(): string {
  * Canonical app base URL used in branded magic links.
  */
 export function getAppBaseUrl(): string {
-  const fallback = process.env.NODE_ENV === "production"
-    ? "https://musait.app"
-    : "http://localhost:3000";
-  const raw = process.env.APP_BASE_URL || fallback;
+  const raw = process.env.APP_BASE_URL;
+  if (!raw) {
+    throw new Error("APP_BASE_URL environment variable is required");
+  }
 
   let url: URL;
   try {
@@ -76,7 +76,20 @@ export function getAppBaseUrl(): string {
     }
   }
 
+  const isLocalDevHost = isLocalHost(url.hostname);
+  const allowLocal = process.env.ALLOW_LOCAL_APP_BASE_URL === "true";
+  if (isLocalDevHost && !allowLocal && process.env.NODE_ENV !== "test") {
+    throw new Error(
+      `APP_BASE_URL cannot be localhost unless ALLOW_LOCAL_APP_BASE_URL=true (got: ${url.origin})`
+    );
+  }
+
   return url.origin;
+}
+
+function isLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
 }
 
 /**

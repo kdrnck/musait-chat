@@ -124,6 +124,22 @@ Amaç: short-link mapping’i OTP metadata’dan çıkarıp tek sorumluluğu ola
   - `musait-chat`: `pnpm --filter worker build` OK
   - `musait-dev`: `npm run build` OK
 
+### [DONE] 2026-02-18 05:xx (localhost bug hardening)
+- Worker magic link uretimi degistirildi:
+  - Supabase `action_link` redirect zinciri yerine,
+  - `hashed_token` ile dogrudan kendi callback URL'i uretilecek:
+    - `/auth/callback?token_hash=...&type=magiclink&next=...`
+- `APP_BASE_URL` artik worker'da **zorunlu**:
+  - eksikse hata verir (silent localhost fallback yok)
+  - localhost sadece `ALLOW_LOCAL_APP_BASE_URL=true` ile izinli
+- App `/auth/magic/[code]` debug loglari eklendi:
+  - incoming host/origin bilgisi
+  - DB lookup sonucu
+  - redirect hedef host
+- App `/auth/magic/[code]` host normalizasyonu sertlestirildi:
+  - direct localhost linkler public origin'e rewrite
+  - supabase/musait disi hostlar reject (invalid_link)
+
 ### [NEXT - DEPLOY CHECKLIST]
 1) Worker env'de `APP_BASE_URL` kesinlikle hedef domain olsun (`https://musait.app` veya `https://dev.musait.app`).
 2) Worker ve app ayni Supabase projesine baksin.

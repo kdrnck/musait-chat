@@ -241,9 +241,34 @@ async function createShortMagicLink(
     return null;
   }
 
-  const actionUrl = new URL(linkData.properties.action_link);
-  actionUrl.searchParams.set("redirect_to", redirectTo);
-  const supabaseVerifyUrl = actionUrl.toString();
+  let tokenHash = linkData.properties.hashed_token || "";
+  if (!tokenHash) {
+    try {
+      const actionUrl = new URL(linkData.properties.action_link);
+      tokenHash = actionUrl.searchParams.get("token") || "";
+    } catch {
+      tokenHash = "";
+    }
+  }
+
+  if (!tokenHash) {
+    console.error("Failed to derive token hash from generated magic link");
+    return null;
+  }
+
+  const callbackUrl = new URL("/auth/callback", baseUrl);
+  callbackUrl.searchParams.set("token_hash", tokenHash);
+  callbackUrl.searchParams.set("type", "magiclink");
+  callbackUrl.searchParams.set("next", nextPath);
+  const supabaseVerifyUrl = callbackUrl.toString();
+
+  console.log("[otp] generated callback magic link", {
+    phoneE164: params.phoneE164,
+    baseUrl,
+    nextPath,
+    actionLinkHost: new URL(linkData.properties.action_link).hostname,
+    callbackHost: callbackUrl.hostname,
+  });
 
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + MAGIC_LINK_TTL_MINUTES);
