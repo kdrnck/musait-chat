@@ -13,6 +13,7 @@ import {
   startOtpCleanupJob,
   stopOtpCleanupJob,
 } from "./services/otp/index.js";
+import { getAppBaseUrl } from "./services/otp/config.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -25,6 +26,10 @@ async function main() {
 
   // --- Initialize Supabase admin client ---
   const supabase = getSupabaseAdmin();
+
+  // --- Validate OTP magic-link base URL early ---
+  const appBaseUrl = getAppBaseUrl();
+  console.log(`🔗 OTP APP_BASE_URL: ${appBaseUrl}`);
 
   // --- Initialize Queue ---
   const queue = new InMemoryQueue(DEFAULT_QUEUE_CONFIG);
