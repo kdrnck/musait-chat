@@ -38,7 +38,7 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
    */
   router.post("/request", async (req: Request, res: Response) => {
     try {
-      const { phone, context, redirectTo } = req.body;
+      const { phone, context, redirectTo, firstName, lastName } = req.body;
 
       if (!phone || typeof phone !== "string") {
         res.status(400).json({ error: "phone is required" });
@@ -52,6 +52,16 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
 
       if (redirectTo !== undefined && typeof redirectTo !== "string") {
         res.status(400).json({ error: "redirectTo must be a string" });
+        return;
+      }
+
+      if (firstName !== undefined && typeof firstName !== "string") {
+        res.status(400).json({ error: "firstName must be a string" });
+        return;
+      }
+
+      if (lastName !== undefined && typeof lastName !== "string") {
+        res.status(400).json({ error: "lastName must be a string" });
         return;
       }
 
@@ -71,14 +81,22 @@ export function createOtpRouter(supabase: SupabaseClient): Router {
         ipAddress,
         context: context as "signup" | "login",
         redirectTo,
+        firstName,
+        lastName,
         userAgent: req.headers["user-agent"],
       });
 
       if (result.success) {
         res.status(200).json(result);
       } else {
-        const statusCode =
-          "retryAfterSeconds" in result && result.retryAfterSeconds ? 429 : 500;
+        let statusCode = 500;
+        if ("retryAfterSeconds" in result && result.retryAfterSeconds) {
+          statusCode = 429;
+        } else if (result.error === "phone_not_found") {
+          statusCode = 400;
+        } else if (result.error === "rate_limited") {
+          statusCode = 429;
+        }
         res.status(statusCode).json(result);
       }
     } catch (err) {

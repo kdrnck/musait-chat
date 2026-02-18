@@ -5,6 +5,8 @@ export interface OtpRequestParams {
   ipAddress: string;
   context: "signup" | "login";
   redirectTo?: string;
+  firstName?: string;
+  lastName?: string;
   userAgent?: string;
 }
 

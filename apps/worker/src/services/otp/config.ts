@@ -43,10 +43,40 @@ export function getOtpHashSecret(): string {
 }
 
 /**
- * The base URL of musait.app for constructing magic link callback URLs.
+ * Canonical app base URL used in branded magic links.
  */
 export function getAppBaseUrl(): string {
-  return process.env.APP_BASE_URL || "https://musait.app";
+  const fallback = process.env.NODE_ENV === "production"
+    ? "https://musait.app"
+    : "http://localhost:3000";
+  const raw = process.env.APP_BASE_URL || fallback;
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`APP_BASE_URL is invalid: ${raw}`);
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    const hostname = url.hostname.toLowerCase();
+    const isMusaitHost =
+      hostname === "musait.app" || hostname.endsWith(".musait.app");
+
+    if (!isMusaitHost) {
+      throw new Error(
+        `APP_BASE_URL must use musait.app domain in production, got: ${url.origin}`
+      );
+    }
+
+    if (url.protocol !== "https:") {
+      throw new Error(
+        `APP_BASE_URL must use https in production, got: ${url.origin}`
+      );
+    }
+  }
+
+  return url.origin;
 }
 
 /**
