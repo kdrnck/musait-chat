@@ -5,6 +5,7 @@ import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { handleStructuredBookingFlow } from "./booking-flow.js";
+import { SESSION_PROMPTS } from "./master-prompts.js";
 
 /**
  * Creates the job handler function.
@@ -31,6 +32,31 @@ export function createJobHandler(convex: ConvexHttpClient) {
 
       if (!conversation) {
         throw new Error(`Conversation ${job.conversationId} not found`);
+      }
+
+      const normalizedMessage = job.messageContent.trim().toLocaleLowerCase("tr-TR");
+      if (normalizedMessage === "/bitir") {
+        await convex.mutation(api.conversations.archiveAndReset, {
+          id: conversation._id,
+        });
+
+        await convex.mutation(api.messages.create, {
+          conversationId: job.conversationId as any,
+          role: "agent",
+          content: SESSION_PROMPTS.ended,
+          status: "done",
+        });
+
+        await sendWhatsAppMessage(job.customerPhone, SESSION_PROMPTS.ended, {
+          phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+          accessToken: job.outboundAccessToken,
+        });
+
+        await convex.mutation(api.messages.updateStatus, {
+          id: job.id as any,
+          status: "done",
+        });
+        return;
       }
 
       // 3. Check if agent is disabled (handoff mode)

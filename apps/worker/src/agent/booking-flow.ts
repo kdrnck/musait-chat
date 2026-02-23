@@ -404,6 +404,9 @@ function resolveService(
   input: string,
   services: BookingServiceOption[]
 ): BookingServiceOption | null {
+  const byIndex = resolveByIndex(input, services);
+  if (byIndex) return byIndex;
+
   const best = resolveBestMatch(
     input,
     services.map((s) => ({ id: s.id, name: s.name }))
@@ -416,6 +419,9 @@ function resolveStaff(
   input: string,
   staff: Array<{ id: string; name: string }>
 ): { id: string; name: string } | null {
+  const byIndex = resolveByIndex(input, staff);
+  if (byIndex) return byIndex;
+
   return resolveBestMatch(input, staff);
 }
 
@@ -469,22 +475,30 @@ function scoreMatch(input: string, candidate: string): number {
 }
 
 function normalizeText(input: string): string {
-  const map: Record<string, string> = {
-    ç: "c",
-    ğ: "g",
-    ı: "i",
-    i: "i",
-    ö: "o",
-    ş: "s",
-    ü: "u",
-  };
-
   return input
     .toLocaleLowerCase("tr-TR")
-    .replace(/[çğıiöşü]/g, (m) => map[m] || m)
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/ç/g, "c")
+    .replace(/ğ/g, "g")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ş/g, "s")
+    .replace(/ü/g, "u")
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function resolveByIndex<T extends { id: string }>(
+  input: string,
+  options: T[]
+): T | null {
+  const cleaned = input.trim().replace(/[\[\]().]/g, "");
+  if (!/^\d+$/.test(cleaned)) return null;
+  const idx = Number(cleaned) - 1;
+  if (idx < 0 || idx >= options.length) return null;
+  return options[idx];
 }
 
 function parseFutureDate(input: string): string | null {

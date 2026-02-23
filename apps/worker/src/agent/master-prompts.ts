@@ -41,6 +41,11 @@ export const BOOKING_FLOW_PROMPTS = {
     `Randevunuz oluşturuldu.\nHizmet: ${serviceName}\nÇalışan: ${staffName}\nTarih: ${dateLabel}\nSaat: ${time}`,
 } as const;
 
+export const SESSION_PROMPTS = {
+  ended:
+    "Oturum sonlandırıldı. Yeni bir mesaj gönderdiğinizde süreç baştan başlayacaktır.",
+} as const;
+
 export const OTP_PROMPTS = {
   codeReminder:
     "📝 Doğrulama kodunuzu bekliyoruz. Lütfen size gönderilen 6 haneli kodu bu sohbete yazın.",
