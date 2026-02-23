@@ -13,10 +13,14 @@ export default async function Home() {
     redirect("/login");
   }
 
-  // Get tenant_id from user metadata (set by musait.app on business login)
-  const tenantId = (user.user_metadata?.tenant_id as string) || null;
+  // tenant_id is stored in app_metadata (set by Supabase admin on business account creation)
+  // NOT in user_metadata — app_metadata is server-controlled and more reliable
+  const tenantId =
+    (user.app_metadata?.tenant_id as string) ||
+    (user.user_metadata?.tenant_id as string) ||
+    null;
 
-  // Fetch tenant name from Supabase if we have a tenant_id
+  // Fetch tenant name and logo from Supabase
   let tenantName: string | null = null;
   let tenantLogo: string | null = null;
   if (tenantId) {
@@ -25,7 +29,7 @@ export default async function Home() {
       .select("name, logo_url")
       .eq("id", tenantId)
       .single();
-    tenantName = tenant?.name ?? null;
+    tenantName = tenant?.name?.trim() ?? null;
     tenantLogo = tenant?.logo_url ?? null;
   }
 
