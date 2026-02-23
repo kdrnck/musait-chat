@@ -261,10 +261,11 @@ async function handleAgentMessage(params: {
   }
 
   // 2. Find or create conversation
-  let conversation = await convex.query(api.conversations.getActiveByPhone, {
+  let conversation = await getActiveConversationWithBackwardCompatibility(
+    convex,
     customerPhone,
-    inboundPhoneNumberId: phoneNumberId,
-  });
+    phoneNumberId
+  );
 
   if (!conversation) {
     // Determine initial tenant_id based on routing
@@ -272,11 +273,12 @@ async function handleAgentMessage(params: {
       ? null // Unbound — master number flow
       : numberMapping.tenantId;
 
-    const conversationId = await convex.mutation(api.conversations.create, {
+    const conversationId = await createConversationWithBackwardCompatibility(
+      convex,
       tenantId,
       customerPhone,
-      inboundPhoneNumberId: phoneNumberId,
-    });
+      phoneNumberId
+    );
 
     conversation = await convex.query(api.conversations.getById, {
       id: conversationId,
@@ -330,5 +332,58 @@ async function handleAgentMessage(params: {
 
   console.log(
     `✅ Message ${messageId} queued for conversation ${conversation._id}`
+  );
+}
+
+async function getActiveConversationWithBackwardCompatibility(
+  convex: ConvexHttpClient,
+  customerPhone: string,
+  phoneNumberId: string
+) {
+  try {
+    return await convex.query(api.conversations.getActiveByPhone, {
+      customerPhone,
+      inboundPhoneNumberId: phoneNumberId,
+    } as any);
+  } catch (error) {
+    // Backward compatibility: older Convex function expects only customerPhone.
+    if (isArgumentValidationError(error)) {
+      return await convex.query(api.conversations.getActiveByPhone, {
+        customerPhone,
+      } as any);
+    }
+    throw error;
+  }
+}
+
+async function createConversationWithBackwardCompatibility(
+  convex: ConvexHttpClient,
+  tenantId: string | null,
+  customerPhone: string,
+  phoneNumberId: string
+) {
+  try {
+    return await convex.mutation(api.conversations.create, {
+      tenantId,
+      customerPhone,
+      inboundPhoneNumberId: phoneNumberId,
+    } as any);
+  } catch (error) {
+    // Backward compatibility: older Convex mutation does not accept inboundPhoneNumberId.
+    if (isArgumentValidationError(error)) {
+      return await convex.mutation(api.conversations.create, {
+        tenantId,
+        customerPhone,
+      } as any);
+    }
+    throw error;
+  }
+}
+
+function isArgumentValidationError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes("ArgumentValidationError") ||
+    error.message.includes("extra field")
   );
 }
