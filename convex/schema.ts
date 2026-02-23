@@ -8,6 +8,7 @@ export default defineSchema({
   conversations: defineTable({
     tenantId: v.union(v.string(), v.null()),
     customerPhone: v.string(),
+    inboundPhoneNumberId: v.string(),
     status: v.union(
       v.literal("active"),
       v.literal("archived"),
@@ -25,6 +26,11 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_customer_phone", ["customerPhone", "status"])
+    .index("by_customer_phone_inbound", [
+      "customerPhone",
+      "inboundPhoneNumberId",
+      "status",
+    ])
     .index("by_tenant", ["tenantId", "status"])
     .index("by_status", ["status"]),
 

@@ -12,6 +12,7 @@ import {
 import { routeIncomingMessage } from "../services/router/message-router.js";
 import { verifyOtp, normalizePhoneToE164 } from "../services/otp/index.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
+import { OTP_PROMPTS } from "../agent/master-prompts.js";
 
 /**
  * WhatsApp Webhook Router
@@ -117,6 +118,7 @@ export function createWebhookRouter(
               // --- OTP PATH: Synchronous, no queue ---
               await handleOtpMessage({
                 supabase,
+                phoneNumberId,
                 customerPhone,
                 messageContent,
                 otpCode: routeDecision.otpCode,
@@ -126,6 +128,7 @@ export function createWebhookRouter(
               await handleAgentMessage({
                 convex,
                 queue,
+                supabase,
                 phoneNumberId,
                 customerPhone,
                 messageContent,
@@ -154,18 +157,20 @@ export function createWebhookRouter(
  */
 async function handleOtpMessage(params: {
   supabase: SupabaseClient;
+  phoneNumberId: string;
   customerPhone: string;
   messageContent: string;
   otpCode?: string;
 }): Promise<void> {
-  const { supabase, customerPhone, otpCode } = params;
+  const { supabase, phoneNumberId, customerPhone, otpCode } = params;
 
   if (!otpCode) {
     // User has active OTP but sent a non-code message
     // Send a helpful reminder
     await sendWhatsAppMessage(
       customerPhone,
-      "📝 Doğrulama kodunuzu bekliyoruz. Lütfen size gönderilen 6 haneli kodu bu sohbete yazın."
+      OTP_PROMPTS.codeReminder,
+      { phoneNumberId }
     );
     return;
   }
@@ -185,7 +190,7 @@ async function handleOtpMessage(params: {
       `Bu bağlantı tek kullanımlıktır.`;
 
     try {
-      await sendWhatsAppMessage(customerPhone, successMessage);
+      await sendWhatsAppMessage(customerPhone, successMessage, { phoneNumberId });
       console.log(`🔗 Magic link sent to ${customerPhone}`);
     } catch (err) {
       console.error(
@@ -211,7 +216,7 @@ async function handleOtpMessage(params: {
       errorMessages.internal_error;
 
     try {
-      await sendWhatsAppMessage(customerPhone, errorMsg);
+      await sendWhatsAppMessage(customerPhone, errorMsg, { phoneNumberId });
     } catch (err) {
       console.error(
         `❌ Failed to send WhatsApp error message to ${customerPhone}:`,
@@ -235,12 +240,13 @@ async function handleOtpMessage(params: {
 async function handleAgentMessage(params: {
   convex: ConvexHttpClient;
   queue: AgentQueue;
+  supabase: SupabaseClient;
   phoneNumberId: string;
   customerPhone: string;
   messageContent: string;
   contactName: string;
 }): Promise<void> {
-  const { convex, queue, phoneNumberId, customerPhone, messageContent } =
+  const { convex, queue, supabase, phoneNumberId, customerPhone, messageContent } =
     params;
 
   // 1. Look up phone_number_id → tenant mapping
@@ -257,6 +263,7 @@ async function handleAgentMessage(params: {
   // 2. Find or create conversation
   let conversation = await convex.query(api.conversations.getActiveByPhone, {
     customerPhone,
+    inboundPhoneNumberId: phoneNumberId,
   });
 
   if (!conversation) {
@@ -268,6 +275,7 @@ async function handleAgentMessage(params: {
     const conversationId = await convex.mutation(api.conversations.create, {
       tenantId,
       customerPhone,
+      inboundPhoneNumberId: phoneNumberId,
     });
 
     conversation = await convex.query(api.conversations.getById, {
@@ -288,12 +296,32 @@ async function handleAgentMessage(params: {
     status: "pending",
   });
 
+  let outboundPhoneNumberId = phoneNumberId;
+  let outboundAccessToken = process.env.WHATSAPP_ACCESS_TOKEN || "";
+
+  if (!numberMapping.isMasterNumber && numberMapping.tenantId) {
+    // For direct tenant numbers, prefer tenant-specific WhatsApp credentials from Supabase.
+    const { data: tenantCfg, error } = await supabase
+      .from("tenants")
+      .select("waba_phone_number_id, waba_access_token")
+      .eq("id", numberMapping.tenantId)
+      .single();
+
+    if (!error && tenantCfg) {
+      outboundPhoneNumberId =
+        tenantCfg.waba_phone_number_id || outboundPhoneNumberId;
+      outboundAccessToken = tenantCfg.waba_access_token || outboundAccessToken;
+    }
+  }
+
   // 4. Enqueue job — NEVER call LLM here
   await queue.enqueue({
     id: messageId,
     conversationId: conversation._id,
     customerPhone,
     phoneNumberId,
+    outboundPhoneNumberId,
+    outboundAccessToken,
     messageContent,
     tenantId: conversation.tenantId,
     createdAt: Date.now(),

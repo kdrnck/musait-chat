@@ -4,6 +4,7 @@ import { api } from "../lib/convex-api.js";
 import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
+import { handleStructuredBookingFlow } from "./booking-flow.js";
 
 /**
  * Creates the job handler function.
@@ -60,10 +61,37 @@ export function createJobHandler(convex: ConvexHttpClient) {
         return;
       }
 
-      // 5. Run agent loop (LLM + tool calls)
+      // 5. Structured booking flow (service -> staff -> date -> time)
+      const structuredResult = await handleStructuredBookingFlow(
+        convex,
+        job,
+        conversation as any
+      );
+
+      if (structuredResult.handled && structuredResult.reply) {
+        await convex.mutation(api.messages.create, {
+          conversationId: job.conversationId as any,
+          role: "agent",
+          content: structuredResult.reply,
+          status: "done",
+        });
+
+        await sendWhatsAppMessage(job.customerPhone, structuredResult.reply, {
+          phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+          accessToken: job.outboundAccessToken,
+        });
+
+        await convex.mutation(api.messages.updateStatus, {
+          id: job.id as any,
+          status: "done",
+        });
+        return;
+      }
+
+      // 6. Run agent loop (LLM + tool calls)
       const agentResponse = await runAgentLoop(convex, job, conversation);
 
-      // 6. Save agent response as message
+      // 7. Save agent response as message
       await convex.mutation(api.messages.create, {
         conversationId: job.conversationId as any,
         role: "agent",
@@ -71,10 +99,13 @@ export function createJobHandler(convex: ConvexHttpClient) {
         status: "done",
       });
 
-      // 7. Send WhatsApp reply
-      await sendWhatsAppMessage(job.customerPhone, agentResponse);
+      // 8. Send WhatsApp reply
+      await sendWhatsAppMessage(job.customerPhone, agentResponse, {
+        phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+        accessToken: job.outboundAccessToken,
+      });
 
-      // 8. Mark original message as done
+      // 9. Mark original message as done
       await convex.mutation(api.messages.updateStatus, {
         id: job.id as any,
         status: "done",

@@ -43,7 +43,14 @@ export async function recoverPendingJobs(
         id: msg._id,
         conversationId: msg.conversationId,
         customerPhone: conversation.customerPhone,
-        phoneNumberId: "", // Not available from stored data; worker will handle
+        phoneNumberId:
+          conversation.inboundPhoneNumberId ||
+          process.env.WHATSAPP_PHONE_NUMBER_ID ||
+          "",
+        outboundPhoneNumberId:
+          conversation.inboundPhoneNumberId ||
+          process.env.WHATSAPP_PHONE_NUMBER_ID ||
+          "",
         messageContent: msg.content,
         tenantId: conversation.tenantId,
         createdAt: msg.createdAt,

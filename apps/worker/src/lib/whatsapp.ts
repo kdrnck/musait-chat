@@ -8,9 +8,11 @@ import { WHATSAPP_CONFIG } from "../config.js";
  */
 export async function sendWhatsAppMessage(
   to: string,
-  message: string
+  message: string,
+  opts?: { phoneNumberId?: string; accessToken?: string }
 ): Promise<void> {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const phoneNumberId = opts?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = opts?.accessToken || WHATSAPP_CONFIG.accessToken;
 
   if (!phoneNumberId) {
     console.error("❌ WHATSAPP_PHONE_NUMBER_ID not configured");
@@ -22,7 +24,7 @@ export async function sendWhatsAppMessage(
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${WHATSAPP_CONFIG.accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -49,9 +51,11 @@ export async function sendWhatsAppMessage(
 export async function sendWhatsAppInteractive(
   to: string,
   bodyText: string,
-  buttons: Array<{ id: string; title: string }>
+  buttons: Array<{ id: string; title: string }>,
+  opts?: { phoneNumberId?: string; accessToken?: string }
 ): Promise<void> {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const phoneNumberId = opts?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = opts?.accessToken || WHATSAPP_CONFIG.accessToken;
 
   if (!phoneNumberId) {
     console.error("❌ WHATSAPP_PHONE_NUMBER_ID not configured");
@@ -63,7 +67,7 @@ export async function sendWhatsAppInteractive(
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${WHATSAPP_CONFIG.accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

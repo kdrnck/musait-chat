@@ -5,12 +5,18 @@ import { mutation, query } from "./_generated/server";
 
 /** Get active conversation by customer phone */
 export const getActiveByPhone = query({
-  args: { customerPhone: v.string() },
+  args: {
+    customerPhone: v.string(),
+    inboundPhoneNumberId: v.string(),
+  },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("conversations")
-      .withIndex("by_customer_phone", (q) =>
-        q.eq("customerPhone", args.customerPhone).eq("status", "active")
+      .withIndex("by_customer_phone_inbound", (q) =>
+        q
+          .eq("customerPhone", args.customerPhone)
+          .eq("inboundPhoneNumberId", args.inboundPhoneNumberId)
+          .eq("status", "active")
       )
       .first();
   },
@@ -102,12 +108,14 @@ export const create = mutation({
   args: {
     tenantId: v.union(v.string(), v.null()),
     customerPhone: v.string(),
+    inboundPhoneNumberId: v.string(),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     return await ctx.db.insert("conversations", {
       tenantId: args.tenantId,
       customerPhone: args.customerPhone,
+      inboundPhoneNumberId: args.inboundPhoneNumberId,
       status: "active",
       lastMessageAt: now,
       rollingSummary: "",

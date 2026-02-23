@@ -11,6 +11,10 @@ export interface AgentJob {
   customerPhone: string;
   /** WhatsApp phone_number_id that received the message */
   phoneNumberId: string;
+  /** phone_number_id to use when sending the reply */
+  outboundPhoneNumberId?: string;
+  /** Access token to use for outbound message from this route */
+  outboundAccessToken?: string;
   /** The incoming message content */
   messageContent: string;
   /** Tenant ID (null if unbound/master number) */
