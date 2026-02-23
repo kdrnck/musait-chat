@@ -47,6 +47,37 @@ export const listByTenant = query({
   },
 });
 
+/** List all conversations (admin/master view) */
+export const listAll = query({
+  args: {
+    status: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("archived"),
+        v.literal("handoff")
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    if (args.status) {
+      return await ctx.db
+        .query("conversations")
+        .withIndex("by_status", (q) => q.eq("status", args.status!))
+        .collect();
+    }
+    // Return all non-archived by default
+    const active = await ctx.db
+      .query("conversations")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+    const handoff = await ctx.db
+      .query("conversations")
+      .withIndex("by_status", (q) => q.eq("status", "handoff"))
+      .collect();
+    return [...active, ...handoff];
+  },
+});
+
 /** List conversations in handoff status (for staff dashboard) */
 export const listHandoffs = query({
   args: { tenantId: v.optional(v.string()) },

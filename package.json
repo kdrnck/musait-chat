@@ -8,7 +8,11 @@
     "dev:worker": "pnpm --filter worker dev",
     "build:chat": "pnpm --filter chat build",
     "build:worker": "pnpm --filter worker build",
-    "dev:convex": "npx convex dev",
+    "dev:convex": "npx convex dev --env-file .env.convex.dev",
+    "dev:convex:once": "npx convex dev --env-file .env.convex.dev --once",
+    "deploy:convex:prod": "npx convex deploy --env-file .env.convex.prod --yes",
+    "convex:env:list:dev": "npx convex env list --env-file .env.convex.dev",
+    "convex:env:list:prod": "npx convex env list --env-file .env.convex.prod",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   },

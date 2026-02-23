@@ -23,7 +23,7 @@
 - [x] **Magic Link**: Integrated with Supabase.
 - [x] **Cleanup**: Cleanup job configured.
 
-## 5. Chat UI (MVP) - **PRIORITY**
+## 5. Chat UI (MVP) - 
 - [ ] **Initialize**: `apps/chat` (Next.js + Tailwind + Convex).
 - [ ] **Convex Setup**: Define schema for `conversations`, `messages`.
 - [ ] **UI - Conversation List**: Real-time list of active chats.

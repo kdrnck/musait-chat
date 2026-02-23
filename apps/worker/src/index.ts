@@ -14,6 +14,8 @@ import {
   stopOtpCleanupJob,
 } from "./services/otp/index.js";
 import { getAppBaseUrl } from "./services/otp/config.js";
+import { syncTenantsToConvex } from "./services/tenant-sync.js";
+import { bootstrapWhatsAppNumber } from "./services/bootstrap.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -26,6 +28,10 @@ async function main() {
 
   // --- Initialize Supabase admin client ---
   const supabase = getSupabaseAdmin();
+
+  // --- Bootstrap: register WhatsApp number & sync tenants ---
+  await bootstrapWhatsAppNumber(convex);
+  await syncTenantsToConvex(supabase, convex);
 
   // --- Validate OTP magic-link base URL early ---
   getAppBaseUrl();
