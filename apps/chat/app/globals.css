@@ -1,0 +1,216 @@
+@import "tailwindcss";
+
+/* ===== DESIGN SYSTEM — Müsait Chat "Command Center" ===== */
+
+@theme inline {
+  /* Brand */
+  --color-brand: #7CF855;
+  --color-brand-dim: #5ABF3A;
+  --color-brand-glow: rgba(124, 248, 85, 0.15);
+  --color-brand-glow-strong: rgba(124, 248, 85, 0.3);
+
+  /* Surfaces */
+  --color-surface-base: #0A0A0A;
+  --color-surface-1: #111111;
+  --color-surface-2: #1A1A1A;
+  --color-surface-3: #222222;
+  --color-surface-hover: #2A2A2A;
+  --color-surface-active: #1C2C16;
+
+  /* Text */
+  --color-text-primary: #F0F0F0;
+  --color-text-secondary: #888888;
+  --color-text-muted: #555555;
+  --color-text-brand: #7CF855;
+
+  /* Status */
+  --color-status-ai: #7CF855;
+  --color-status-attention: #FF4D4D;
+  --color-status-handoff: #4DA6FF;
+
+  /* Borders */
+  --color-border: #2A2A2A;
+  --color-border-hover: #3A3A3A;
+  --color-border-brand: rgba(124, 248, 85, 0.3);
+
+  /* Bubble colors */
+  --color-bubble-customer: #1E1E1E;
+  --color-bubble-agent: #142210;
+  --color-bubble-human: #121C2A;
+
+  /* Fonts */
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Outfit", sans-serif;
+}
+
+/* ===== BASE ===== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  height: 100dvh;
+}
+
+/* ===== SCROLLBAR ===== */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ===== UTILITY CLASSES ===== */
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.glow {
+  box-shadow: 0 0 20px var(--color-brand-glow),
+              0 0 40px rgba(124, 248, 85, 0.05);
+}
+
+.glow-text {
+  text-shadow: 0 0 10px var(--color-brand-glow);
+}
+
+.glow-border {
+  border-color: var(--color-border-brand);
+  box-shadow: inset 0 0 12px rgba(124, 248, 85, 0.05),
+              0 0 8px rgba(124, 248, 85, 0.08);
+}
+
+/* ===== STATUS DOTS ===== */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot--ai {
+  background: var(--color-status-ai);
+  box-shadow: 0 0 6px var(--color-status-ai);
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+.status-dot--attention {
+  background: var(--color-status-attention);
+  box-shadow: 0 0 6px var(--color-status-attention);
+  animation: pulse-red 1.5s ease-in-out infinite;
+}
+
+.status-dot--handoff {
+  background: var(--color-status-handoff);
+  box-shadow: 0 0 6px var(--color-status-handoff);
+}
+
+/* ===== ANIMATIONS ===== */
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 4px var(--color-status-ai); }
+  50% { box-shadow: 0 0 12px var(--color-status-ai), 0 0 24px rgba(124, 248, 85, 0.2); }
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 4px var(--color-status-attention); }
+  50% { box-shadow: 0 0 12px var(--color-status-attention), 0 0 24px rgba(255, 77, 77, 0.2); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.animate-slide-left {
+  animation: slide-in-left 0.25s ease-out forwards;
+}
+
+.animate-slide-right {
+  animation: slide-in-right 0.25s ease-out forwards;
+}
+
+/* ===== BADGE ===== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid;
+}
+
+.badge--ai {
+  color: var(--color-status-ai);
+  border-color: rgba(124, 248, 85, 0.3);
+  background: rgba(124, 248, 85, 0.08);
+}
+
+.badge--attention {
+  color: var(--color-status-attention);
+  border-color: rgba(255, 77, 77, 0.3);
+  background: rgba(255, 77, 77, 0.08);
+}
+
+.badge--handoff {
+  color: var(--color-status-handoff);
+  border-color: rgba(77, 166, 255, 0.3);
+  background: rgba(77, 166, 255, 0.08);
+}
+
+/* ===== NOISE TEXTURE OVERLAY ===== */
+
+.noise-overlay::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  opacity: 0.02;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
