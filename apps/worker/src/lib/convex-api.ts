@@ -35,6 +35,7 @@ export const api = {
     listByConversation: ref("messages:listByConversation"),
     getContextWindow: ref("messages:getContextWindow"),
     getPendingMessages: ref("messages:getPendingMessages"),
+    getPendingHumanMessages: ref("messages:getPendingHumanMessages"),
     create: ref("messages:create"),
     updateStatus: ref("messages:updateStatus"),
     markRetry: ref("messages:markRetry"),
@@ -44,6 +45,11 @@ export const api = {
     listByTenant: ref("customerProfiles:listByTenant"),
     upsert: ref("customerProfiles:upsert"),
     appendNotes: ref("customerProfiles:appendNotes"),
+  },
+  customerMemories: {
+    getByPhone: ref("customerMemories:getByPhone"),
+    upsertPreferredTenant: ref("customerMemories:upsertPreferredTenant"),
+    appendNote: ref("customerMemories:appendNote"),
   },
   whatsappNumbers: {
     getByPhoneNumberId: ref("whatsappNumbers:getByPhoneNumberId"),

@@ -10,6 +10,7 @@ interface ToolContext {
   tenantId: string;
   conversationId: string;
   customerPhone: string;
+  customerName?: string;
 }
 
 /**

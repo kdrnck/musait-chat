@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
+import { useEffect, useMemo, useState } from "react";
 import {
     User,
     Phone,
@@ -30,6 +31,41 @@ export default function CustomerPanel({
             }
             : "skip"
     );
+
+    const upsertProfile = useMutation(api.customerProfiles.upsert);
+    const [notesDraft, setNotesDraft] = useState("");
+    const [savingNotes, setSavingNotes] = useState(false);
+
+    const effectiveName = useMemo(() => {
+        const prefName =
+            typeof profile?.preferences?.customerName === "string"
+                ? profile.preferences.customerName
+                : "";
+        return prefName || "—";
+    }, [profile?.preferences]);
+
+    useEffect(() => {
+        setNotesDraft(profile?.personNotes || "");
+    }, [profile?.personNotes, conversationId]);
+
+    const canEditNotes = Boolean(conversation?.tenantId && conversation?.customerPhone);
+    const notesChanged = (profile?.personNotes || "") !== notesDraft;
+
+    const handleSaveNotes = async () => {
+        if (!canEditNotes || !conversation?.tenantId || !conversation?.customerPhone) return;
+        setSavingNotes(true);
+        try {
+            await upsertProfile({
+                tenantId: conversation.tenantId,
+                customerPhone: conversation.customerPhone,
+                personNotes: notesDraft,
+            });
+        } catch (err) {
+            console.error("Failed to save customer notes:", err);
+        } finally {
+            setSavingNotes(false);
+        }
+    };
 
     return (
         <div className="flex flex-col h-full">
@@ -85,6 +121,12 @@ export default function CustomerPanel({
                             >
                                 WhatsApp
                             </span>
+                            <span
+                                className="text-[11px] block mt-1"
+                                style={{ color: "var(--color-text-secondary)" }}
+                            >
+                                İsim: {effectiveName}
+                            </span>
                         </div>
                     </div>
 
@@ -104,19 +146,57 @@ export default function CustomerPanel({
                 </div>
 
                 {/* ── Notes ── */}
-                {(profile?.personNotes || conversation?.personNotes) && (
-                    <Section
-                        icon={<StickyNote size={14} />}
-                        title="Notlar"
-                    >
+                <Section
+                    icon={<StickyNote size={14} />}
+                    title="Müşteri Notları"
+                >
+                    {canEditNotes ? (
+                        <>
+                            <textarea
+                                value={notesDraft}
+                                onChange={(e) => setNotesDraft(e.target.value)}
+                                placeholder="Müşteri tercihleri, hassasiyetler, özel notlar..."
+                                className="w-full min-h-[120px] p-2 text-xs resize-y outline-none"
+                                style={{
+                                    background: "var(--color-surface-2)",
+                                    border: "1px solid var(--color-border)",
+                                    color: "var(--color-text-secondary)",
+                                }}
+                            />
+                            <div className="flex justify-end mt-2">
+                                <button
+                                    onClick={handleSaveNotes}
+                                    disabled={!notesChanged || savingNotes}
+                                    className="px-3 py-1.5 text-[11px] font-semibold transition-colors"
+                                    style={{
+                                        background:
+                                            !notesChanged || savingNotes
+                                                ? "var(--color-surface-3)"
+                                                : "var(--color-brand)",
+                                        color:
+                                            !notesChanged || savingNotes
+                                                ? "var(--color-text-muted)"
+                                                : "var(--color-surface-base)",
+                                        border: "1px solid var(--color-border)",
+                                        cursor:
+                                            !notesChanged || savingNotes
+                                                ? "not-allowed"
+                                                : "pointer",
+                                    }}
+                                >
+                                    {savingNotes ? "Kaydediliyor..." : "Notu Kaydet"}
+                                </button>
+                            </div>
+                        </>
+                    ) : (
                         <p
-                            className="text-xs leading-relaxed whitespace-pre-wrap"
-                            style={{ color: "var(--color-text-secondary)" }}
+                            className="text-xs leading-relaxed"
+                            style={{ color: "var(--color-text-muted)" }}
                         >
-                            {profile?.personNotes || conversation?.personNotes}
+                            Not düzenlemek için tenant-a bağlı bir konuşma seçin.
                         </p>
-                    </Section>
-                )}
+                    )}
+                </Section>
 
                 {/* ── Last Services ── */}
                 {profile?.lastServices && profile.lastServices.length > 0 && (

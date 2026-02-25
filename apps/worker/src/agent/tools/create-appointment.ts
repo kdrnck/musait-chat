@@ -1,9 +1,15 @@
 import { SUPABASE_CONFIG } from "../../config.js";
+import {
+  createCustomer,
+  getCustomerByPhone,
+  updateCustomerName,
+} from "../../services/customers.js";
 
 interface ToolContext {
   tenantId: string;
   conversationId: string;
   customerPhone: string;
+  customerName?: string;
 }
 
 /**
@@ -19,7 +25,8 @@ export async function createAppointment(
   const serviceId = args.service_id as string;
   const staffId = args.staff_id as string;
   const startTime = args.start_time as string;
-  const customerName = args.customer_name as string | undefined;
+  const customerName =
+    (args.customer_name as string | undefined)?.trim() || ctx.customerName;
 
   if (!serviceId || !staffId || !startTime) {
     return { error: "Hizmet, personel ve başlangıç zamanı gereklidir." };
@@ -33,39 +40,46 @@ export async function createAppointment(
   };
 
   // 1. Find or create customer by phone
-  const customerUrl = new URL(`${SUPABASE_CONFIG.url}/rest/v1/customers`);
-  customerUrl.searchParams.set("tenant_id", `eq.${ctx.tenantId}`);
-  customerUrl.searchParams.set("phone", `eq.${ctx.customerPhone}`);
-  customerUrl.searchParams.set("select", "id");
-
-  const custRes = await fetch(customerUrl.toString(), { headers });
-  const customers = await custRes.json();
-
+  const existingCustomer = await getCustomerByPhone(ctx.tenantId, ctx.customerPhone);
   let customerId: string;
 
-  if (customers.length > 0) {
-    customerId = customers[0].id;
-  } else {
-    // Create customer
-    const createCustRes = await fetch(
-      `${SUPABASE_CONFIG.url}/rest/v1/customers`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          tenant_id: ctx.tenantId,
-          phone: ctx.customerPhone,
-          name: customerName || null,
-        }),
-      }
-    );
+  if (existingCustomer) {
+    customerId = existingCustomer.id;
 
-    if (!createCustRes.ok) {
-      return { error: "Müşteri kaydı oluşturulamadı." };
+    if (!existingCustomer.name && !customerName) {
+      return {
+        error:
+          "Randevuyu tamamlamadan önce adınızı ekleyebilir miyim? Adınızı paylaşır mısınız?",
+        code: "missing_customer_name",
+      };
     }
 
-    const newCustomer = await createCustRes.json();
-    customerId = newCustomer[0].id;
+    if (
+      customerName &&
+      (!existingCustomer.name ||
+        existingCustomer.name.toLocaleLowerCase("tr-TR") !==
+          customerName.toLocaleLowerCase("tr-TR"))
+    ) {
+      await updateCustomerName(existingCustomer.id, customerName);
+    }
+  } else {
+    if (!customerName) {
+      return {
+        error:
+          "Randevuyu tamamlamadan önce adınızı ekleyebilir miyim? Adınızı paylaşır mısınız?",
+        code: "missing_customer_name",
+      };
+    }
+
+    const created = await createCustomer(
+      ctx.tenantId,
+      ctx.customerPhone,
+      customerName
+    );
+    if (!created) {
+      return { error: "Müşteri kaydı oluşturulamadı." };
+    }
+    customerId = created.id;
   }
 
   // 2. Get service duration for end_time calculation

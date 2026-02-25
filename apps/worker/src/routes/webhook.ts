@@ -125,11 +125,12 @@ export function createWebhookRouter(
               });
             } else {
               // --- AGENT PATH: Persist + Enqueue (unchanged) ---
-              await handleAgentMessage({
+            await handleAgentMessage({
                 convex,
                 queue,
                 supabase,
                 phoneNumberId,
+                inboundDisplayNumber: metadata.display_phone_number,
                 customerPhone,
                 messageContent,
                 contactName,
@@ -242,11 +243,21 @@ async function handleAgentMessage(params: {
   queue: AgentQueue;
   supabase: SupabaseClient;
   phoneNumberId: string;
+  inboundDisplayNumber?: string;
   customerPhone: string;
   messageContent: string;
   contactName: string;
 }): Promise<void> {
-  const { convex, queue, supabase, phoneNumberId, customerPhone, messageContent } =
+  const {
+    convex,
+    queue,
+    supabase,
+    phoneNumberId,
+    inboundDisplayNumber,
+    customerPhone,
+    messageContent,
+    contactName,
+  } =
     params;
 
   // 1. Look up phone_number_id → tenant mapping
@@ -322,8 +333,10 @@ async function handleAgentMessage(params: {
     conversationId: conversation._id,
     customerPhone,
     phoneNumberId,
+    inboundDisplayNumber,
     outboundPhoneNumberId,
     outboundAccessToken,
+    contactName,
     messageContent,
     tenantId: conversation.tenantId,
     createdAt: Date.now(),

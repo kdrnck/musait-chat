@@ -37,8 +37,15 @@ export const BOOKING_FLOW_PROMPTS = {
     "Saati anlayamadım. Örnek: 14:00 veya 15.30",
   timeUnavailable:
     "Bu saat maalesef dolu görünüyor. Lütfen aşağıdaki müsait saatlerden birini seçin.",
-  bookingSuccess: (serviceName: string, staffName: string, dateLabel: string, time: string) =>
-    `Randevunuz oluşturuldu.\nHizmet: ${serviceName}\nÇalışan: ${staffName}\nTarih: ${dateLabel}\nSaat: ${time}`,
+  bookingSuccess: (
+    serviceName: string,
+    staffName: string,
+    dateLabel: string,
+    time: string,
+    customerName?: string
+  ) =>
+    `${customerName ? `*${customerName}*, ` : ""}randevunuz oluşturuldu.\n` +
+    `Hizmet: ${serviceName}\nÇalışan: ${staffName}\nTarih: ${dateLabel}\nSaat: ${time}`,
 } as const;
 
 export const SESSION_PROMPTS = {
@@ -64,6 +71,9 @@ export function buildAgentSystemPrompt(
 - Randevu oluştururken MUTLAKA müşteriden onay al.
 - Onay almadan asla randevu oluşturma.
 - Kalın metin oluşturmak için *metin* kullan. iki adet yıldız (*) kullanma. Bir adet yıldız (*) kullan.
+- Müşteri adı biliniyorsa adı sadece selamlaşma ve randevu onay/özet mesajlarında doğal şekilde kullan.
+- Müşteri adı kesin değilse konuşmanın başında zorla sorma; randevu tamamlanmaya yakın adını nazikçe iste.
+- İlk greeting cevabında mümkünse hizmetler linkini paylaş: "[Hizmetlerimize buradan göz atabilirsiniz](...)".
 
 ## Randevu Onay Akışı
 1. Müşteri randevu istediğinde, önce uygun slotları göster (view_available_slots).

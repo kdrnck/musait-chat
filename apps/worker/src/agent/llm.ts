@@ -1,9 +1,10 @@
 import type { ConvexHttpClient } from "convex/browser";
 import type { AgentJob, LLMMessage, AgentToolName } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
-import { LLM_CONFIG } from "../config.js";
+import { LLM_CONFIG, SUPABASE_CONFIG } from "../config.js";
 import { buildSystemPrompt } from "./prompts.js";
 import { executeToolCall, getToolDefinitions } from "./tools/index.js";
+import { isLikelyRealName } from "./customer-name.js";
 
 interface Conversation {
   _id: any;
@@ -28,13 +29,16 @@ export async function runAgentLoop(
   conversation: Conversation
 ): Promise<string> {
   const MAX_ITERATIONS = 5;
+  const useReasoning = isComplexMessage(job.messageContent || "");
 
   // 1. Build context
   const messages = await buildContext(convex, job, conversation);
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
-    const response = await callOpenRouter(messages);
+    const response = await callOpenRouter(messages, {
+      useReasoning: i === 0 && useReasoning,
+    });
 
     // 3. Check for tool calls
     if (response.tool_calls && response.tool_calls.length > 0) {
@@ -53,6 +57,7 @@ export async function runAgentLoop(
           tenantId: conversation.tenantId!,
           conversationId: conversation._id,
           customerPhone: job.customerPhone,
+          customerName: job.customerName,
         });
 
         // Add tool result to context
@@ -83,10 +88,38 @@ async function buildContext(
   conversation: Conversation
 ): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = [];
+  let knownCustomerName: string | null = job.customerName || null;
 
   // System prompt
   const systemPrompt = buildSystemPrompt(conversation);
   messages.push({ role: "system", content: systemPrompt });
+
+  if (conversation.tenantId) {
+    const tenantCtx = await fetchTenantContext(conversation.tenantId);
+    const extraPrompt =
+      tenantCtx?.integrationKeys?.ai_extra_system_prompt?.trim() || "";
+    const serviceLink = buildServiceLink(
+      tenantCtx?.slug,
+      job.inboundDisplayNumber
+    );
+
+    messages.push({
+      role: "system",
+      content:
+        `[İşletme]: ${tenantCtx?.name || "Bilinmeyen İşletme"}\n` +
+        `[Hizmet Linki]: ${serviceLink}\n` +
+        `Kural: Müşteriyle ilk greeting cevabında bu linki kısa şekilde paylaşabilirsin.`,
+    });
+
+    if (extraPrompt) {
+      messages.push({
+        role: "system",
+        content:
+          "[Tenant Ek Sistem Promptu]\n" +
+          extraPrompt.slice(0, 3000),
+      });
+    }
+  }
 
   // Customer profile context (if available)
   if (conversation.tenantId) {
@@ -95,12 +128,42 @@ async function buildContext(
       customerPhone: job.customerPhone,
     });
 
-    if (profile && profile.personNotes) {
+    const profileName =
+      typeof profile?.preferences?.customerName === "string"
+        ? profile.preferences.customerName
+        : null;
+
+    if (!knownCustomerName && profileName) {
+      knownCustomerName = profileName;
+    }
+
+    if (profile && (profile.personNotes || profile.preferences)) {
       messages.push({
         role: "system",
-        content: `[Müşteri Notları]: ${profile.personNotes}\n[Tercihler]: ${JSON.stringify(profile.preferences)}`,
+        content:
+          `[Müşteri Notları]: ${profile.personNotes || "-"}\n` +
+          `[Tercihler]: ${JSON.stringify(profile.preferences || {})}`,
       });
     }
+  }
+
+  if (!knownCustomerName && job.contactName && isLikelyRealName(job.contactName)) {
+    knownCustomerName = job.contactName;
+  }
+
+  if (knownCustomerName) {
+    messages.push({
+      role: "system",
+      content:
+        `Bilinen müşteri adı: ${knownCustomerName}\n` +
+        "Kural: Müşteri adını sadece selamlaşma ve randevu onay/özet mesajlarında doğal şekilde kullan.",
+    });
+  } else {
+    messages.push({
+      role: "system",
+      content:
+        "Müşteri adı kesin değil. İlk mesajlarda zorla isim sorma; randevuyu finalize etmeye yakın noktada nazikçe adını sor.",
+    });
   }
 
   // Rolling summary (if exists)
@@ -145,8 +208,39 @@ interface OpenRouterResponse {
 }
 
 async function callOpenRouter(
-  messages: LLMMessage[]
+  messages: LLMMessage[],
+  options: { useReasoning: boolean }
 ): Promise<OpenRouterResponse> {
+  const providerOrder = LLM_CONFIG.providerPriority;
+  const payload: Record<string, unknown> = {
+    model: LLM_CONFIG.model,
+    messages: messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+      ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+      ...(m.name ? { name: m.name } : {}),
+    })),
+    tools: getToolDefinitions(),
+    temperature: LLM_CONFIG.temperature,
+    max_tokens: LLM_CONFIG.maxTokens,
+  };
+
+  if (providerOrder.length > 0) {
+    payload.provider = {
+      order: providerOrder,
+      allow_fallbacks: LLM_CONFIG.providerAllowFallbacks,
+    };
+  }
+
+  if (options.useReasoning && LLM_CONFIG.enableReasoningForComplex) {
+    payload.reasoning = {
+      enabled: true,
+      effort: "low",
+      exclude: true,
+    };
+  }
+
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
     {
@@ -157,19 +251,7 @@ async function callOpenRouter(
         "HTTP-Referer": "https://musait.app",
         "X-Title": "Musait Chat Agent",
       },
-      body: JSON.stringify({
-        model: LLM_CONFIG.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-          ...(m.name ? { name: m.name } : {}),
-        })),
-        tools: getToolDefinitions(),
-        temperature: LLM_CONFIG.temperature,
-        max_tokens: LLM_CONFIG.maxTokens,
-      }),
+      body: JSON.stringify(payload),
     }
   );
 
@@ -196,4 +278,69 @@ async function callOpenRouter(
           : tc.function?.arguments,
     })),
   };
+}
+
+async function fetchTenantContext(tenantId: string): Promise<{
+  name: string | null;
+  slug: string | null;
+  integrationKeys: Record<string, string>;
+} | null> {
+  const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/tenants`);
+  url.searchParams.set("id", `eq.${tenantId}`);
+  url.searchParams.set("select", "name,slug,integration_keys");
+  url.searchParams.set("limit", "1");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_CONFIG.serviceKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+    },
+  });
+  if (!response.ok) return null;
+
+  const rows = (await response.json()) as Array<{
+    name?: string | null;
+    slug?: string | null;
+    integration_keys?: Record<string, string>;
+  }>;
+
+  const tenant = rows[0];
+  if (!tenant) return null;
+
+  return {
+    name: tenant.name || null,
+    slug: tenant.slug || null,
+    integrationKeys: tenant.integration_keys || {},
+  };
+}
+
+function sanitizePhoneForLink(value?: string | null): string {
+  if (!value) return "02128011028";
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "02128011028";
+  return digits;
+}
+
+function buildServiceLink(slug?: string | null, inboundNumber?: string): string {
+  if (!slug) return "https://musait.app/isletme-listesi";
+  const number = sanitizePhoneForLink(inboundNumber);
+  return `https://musait.app/b/${slug}/backToWhatsapp?number=${encodeURIComponent(number)}`;
+}
+
+function isComplexMessage(message: string): boolean {
+  if (!message) return false;
+  const text = message.toLocaleLowerCase("tr-TR");
+  const lengthScore = text.length >= 120;
+  const hasDateToken =
+    /(yarın|bugün|pazartesi|salı|çarşamba|perşembe|cuma|cumartesi|pazar|\d{1,2}[./-]\d{1,2})/i.test(
+      text
+    );
+  const hasTimeToken = /([01]?\d|2[0-3])[:.]?[0-5]?\d/.test(text);
+  const hasMultiIntent =
+    /(ve|ayrıca|hem|sonra|ama|bir de|aynı anda|aynı mesaj)/i.test(text);
+  const hasServiceAndBusiness =
+    /(saç|tırnak|boya|cilt|masaj|hizmet|işletme|kuaför|salon)/i.test(text);
+
+  const score = [lengthScore, hasDateToken, hasTimeToken, hasMultiIntent, hasServiceAndBusiness].filter(Boolean).length;
+  return score >= 3;
 }

@@ -73,6 +73,16 @@ export default defineSchema({
     .index("by_tenant_phone", ["tenantId", "customerPhone"])
     .index("by_tenant", ["tenantId"]),
 
+  // ===== CUSTOMER MEMORIES (GLOBAL, CROSS-TENANT) =====
+  // Stores cross-tenant hints such as preferred last tenant and tenant history.
+  customerMemories: defineTable({
+    customerPhone: v.string(),
+    preferredTenantId: v.union(v.string(), v.null()),
+    tenantHistory: v.array(v.string()),
+    notes: v.string(),
+    updatedAt: v.number(),
+  }).index("by_customer_phone", ["customerPhone"]),
+
   // ===== WHATSAPP NUMBER MAPPINGS =====
   // Maps WhatsApp phone_number_id to tenant.
   // Master number has tenantId = null and isMasterNumber = true.

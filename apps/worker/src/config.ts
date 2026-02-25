@@ -22,6 +22,16 @@ export const LLM_CONFIG = {
   model: process.env.LLM_MODEL || "deepseek/deepseek-chat",
   temperature: 0.7,
   maxTokens: 1024,
+  providerPriority: (process.env.LLM_PROVIDER_PRIORITY || "deepinfra")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean),
+  providerAllowFallbacks:
+    (process.env.LLM_PROVIDER_ALLOW_FALLBACKS || "true").toLowerCase() !==
+    "false",
+  enableReasoningForComplex:
+    (process.env.LLM_ENABLE_REASONING_COMPLEX || "true").toLowerCase() !==
+    "false",
 } as const;
 
 // Supabase config (for appointment tool calls AND OTP)

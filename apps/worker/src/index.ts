@@ -16,6 +16,7 @@ import {
 import { getAppBaseUrl } from "./services/otp/config.js";
 import { syncTenantsToConvex } from "./services/tenant-sync.js";
 import { bootstrapWhatsAppNumber } from "./services/bootstrap.js";
+import { startHandoffHumanDispatcher } from "./services/handoff-human-dispatcher.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
@@ -53,6 +54,12 @@ async function main() {
   // --- Express Server ---
   const app = express();
 
+  // --- Handoff human message dispatcher ---
+  const stopHandoffDispatcher = startHandoffHumanDispatcher({
+    convex,
+    supabase,
+  });
+
   // Capture raw body for webhook signature verification
   // Meta signs the original bytes — we must verify against those, not re-serialized JSON
   app.use(
@@ -78,6 +85,7 @@ async function main() {
   // --- Graceful shutdown ---
   const shutdown = async (signal: string) => {
     console.log(`\n⏳ ${signal} received. Shutting down gracefully...`);
+    stopHandoffDispatcher();
     stopOtpCleanupJob();
     await queue.stop();
     console.log("👋 Worker stopped.");

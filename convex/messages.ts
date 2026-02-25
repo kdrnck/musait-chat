@@ -55,7 +55,20 @@ export const getPendingMessages = query({
       .withIndex("by_status", (q) => q.eq("status", "processing"))
       .collect();
 
-    return [...pending, ...processing];
+    return [...pending, ...processing].filter((m) => m.role !== "human");
+  },
+});
+
+/** Get pending human messages (for handoff outbound delivery) */
+export const getPendingHumanMessages = query({
+  args: {},
+  handler: async (ctx) => {
+    const pending = await ctx.db
+      .query("messages")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .collect();
+
+    return pending.filter((m) => m.role === "human");
   },
 });
 

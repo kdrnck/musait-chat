@@ -4,12 +4,14 @@ import { api } from "../lib/convex-api.js";
 import { SUPABASE_CONFIG } from "../config.js";
 import { createAppointment } from "./tools/create-appointment.js";
 import { BOOKING_FLOW_PROMPTS } from "./master-prompts.js";
+import { extractPossibleName } from "./customer-name.js";
 
 type FlowStep =
   | "awaiting_service"
   | "awaiting_staff"
   | "awaiting_date"
-  | "awaiting_time";
+  | "awaiting_time"
+  | "awaiting_customer_name";
 
 interface BookingFlowState {
   version: 1;
@@ -21,6 +23,7 @@ interface BookingFlowState {
   staffId?: string;
   staffName?: string;
   date?: string; // YYYY-MM-DD
+  pendingTime?: string; // HH:mm (used when waiting for customer name)
 }
 
 interface BookingServiceOption {
@@ -109,6 +112,7 @@ export async function handleStructuredBookingFlow(
       staffId: undefined,
       staffName: undefined,
       date: undefined,
+      pendingTime: undefined,
     };
     await saveFlowState(convex, conversation._id, nextState);
 
@@ -127,6 +131,7 @@ export async function handleStructuredBookingFlow(
       version: 1,
       step: "awaiting_service",
       tenantId: conversation.tenantId,
+      pendingTime: undefined,
     };
     await saveFlowState(convex, conversation._id, resetState);
     return {
@@ -156,6 +161,7 @@ export async function handleStructuredBookingFlow(
       staffId: selectedStaff.id,
       staffName: selectedStaff.name,
       date: undefined,
+      pendingTime: undefined,
     };
     await saveFlowState(convex, conversation._id, nextState);
 
@@ -170,6 +176,7 @@ export async function handleStructuredBookingFlow(
       version: 1,
       step: "awaiting_service",
       tenantId: conversation.tenantId,
+      pendingTime: undefined,
     };
     await saveFlowState(convex, conversation._id, resetState);
     return {
@@ -226,11 +233,87 @@ export async function handleStructuredBookingFlow(
         service_id: state.serviceId!,
         staff_id: state.staffId,
         start_time: startTime,
+        customer_name: job.customerName,
       },
       {
         tenantId: state.tenantId,
         conversationId: conversation._id,
         customerPhone: job.customerPhone,
+        customerName: job.customerName,
+      }
+    )) as { success?: boolean; error?: string; code?: string };
+
+    if (!appointmentResult.success) {
+      if ((appointmentResult as any).code === "missing_customer_name") {
+        await saveFlowState(convex, conversation._id, {
+          ...state,
+          step: "awaiting_customer_name",
+          pendingTime: parsedTime,
+        });
+      }
+      return {
+        handled: true,
+        reply:
+          appointmentResult.error ||
+          "Randevu oluşturulamadı. Lütfen birazdan tekrar deneyin.",
+      };
+    }
+
+    await saveFlowState(convex, conversation._id, {
+      version: 1,
+      step: "awaiting_service",
+      tenantId: state.tenantId,
+      pendingTime: undefined,
+    });
+
+    return {
+      handled: true,
+      reply: BOOKING_FLOW_PROMPTS.bookingSuccess(
+        state.serviceName!,
+        state.staffName,
+        formatDateLabel(state.date!),
+        parsedTime,
+        job.customerName
+      ),
+    };
+  }
+
+  if (state.step === "awaiting_customer_name") {
+    if (!state.date || !state.pendingTime) {
+      await saveFlowState(convex, conversation._id, {
+        version: 1,
+        step: "awaiting_service",
+        tenantId: state.tenantId,
+        pendingTime: undefined,
+      });
+      return {
+        handled: true,
+        reply: BOOKING_FLOW_PROMPTS.serviceQuestion(formatServiceList(services)),
+      };
+    }
+
+    const parsedName = extractPossibleName(text);
+    if (!parsedName) {
+      return {
+        handled: true,
+        reply:
+          "Randevuyu tamamlamak için adınızı da ekleyelim. Adınızı yazar mısınız?",
+      };
+    }
+
+    const startTime = `${state.date}T${state.pendingTime}:00+03:00`;
+    const appointmentResult = (await createAppointment(
+      {
+        service_id: state.serviceId!,
+        staff_id: state.staffId,
+        start_time: startTime,
+        customer_name: parsedName,
+      },
+      {
+        tenantId: state.tenantId,
+        conversationId: conversation._id,
+        customerPhone: job.customerPhone,
+        customerName: parsedName,
       }
     )) as { success?: boolean; error?: string };
 
@@ -247,15 +330,17 @@ export async function handleStructuredBookingFlow(
       version: 1,
       step: "awaiting_service",
       tenantId: state.tenantId,
+      pendingTime: undefined,
     });
 
     return {
       handled: true,
       reply: BOOKING_FLOW_PROMPTS.bookingSuccess(
         state.serviceName!,
-        state.staffName,
-        formatDateLabel(state.date!),
-        parsedTime
+        state.staffName!,
+        formatDateLabel(state.date),
+        state.pendingTime,
+        parsedName
       ),
     };
   }
@@ -282,6 +367,7 @@ async function buildDateAndSlotsReply(
       ...state,
       step: "awaiting_date",
       date: undefined,
+      pendingTime: undefined,
     });
     return {
       handled: true,
@@ -293,6 +379,7 @@ async function buildDateAndSlotsReply(
     ...state,
     step: "awaiting_time",
     date,
+    pendingTime: undefined,
   });
 
   return {

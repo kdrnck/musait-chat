@@ -6,6 +6,16 @@ import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { handleStructuredBookingFlow } from "./booking-flow.js";
 import { SESSION_PROMPTS } from "./master-prompts.js";
+import {
+  extractNameUpdateIntent,
+  isLikelyRealName,
+} from "./customer-name.js";
+import {
+  ensureCustomerRecord,
+  getCustomerByPhone,
+  updateCustomerName,
+  createCustomer,
+} from "../services/customers.js";
 
 /**
  * Creates the job handler function.
@@ -26,13 +36,14 @@ export function createJobHandler(convex: ConvexHttpClient) {
       });
 
       // 2. Get conversation
-      const conversation = await convex.query(api.conversations.getById, {
+      const conversationRaw = await convex.query(api.conversations.getById, {
         id: job.conversationId as any,
       });
 
-      if (!conversation) {
+      if (!conversationRaw) {
         throw new Error(`Conversation ${job.conversationId} not found`);
       }
+      let conversation: any = conversationRaw;
 
       const normalizedMessage = job.messageContent.trim().toLocaleLowerCase("tr-TR");
       if (normalizedMessage === "/bitir") {
@@ -59,10 +70,26 @@ export function createJobHandler(convex: ConvexHttpClient) {
         return;
       }
 
-      // 3. Check if agent is disabled (handoff mode)
+      // 3. Handle handoff mode
       if (
+        conversation.status === "handoff" &&
         conversation.agentDisabledUntil &&
-        Date.now() < conversation.agentDisabledUntil
+        Date.now() >= conversation.agentDisabledUntil
+      ) {
+        await convex.mutation(api.conversations.enableAgent, {
+          id: conversation._id,
+        });
+        conversation = {
+          ...conversation,
+          status: "active",
+          agentDisabledUntil: null,
+        };
+      }
+
+      if (
+        conversation.status === "handoff" &&
+        (!conversation.agentDisabledUntil ||
+          Date.now() < conversation.agentDisabledUntil)
       ) {
         console.log(
           `⏸️ Agent disabled for conversation ${job.conversationId} (handoff mode)`
@@ -85,6 +112,52 @@ export function createJobHandler(convex: ConvexHttpClient) {
           status: "done",
         });
         return;
+      }
+
+      // 4.5 Sync customer identity and handle explicit name updates
+      if (conversation.tenantId) {
+        await convex.mutation(api.customerMemories.upsertPreferredTenant, {
+          customerPhone: job.customerPhone,
+          preferredTenantId: conversation.tenantId,
+        });
+
+        const identity = await syncCustomerIdentity(convex, {
+          tenantId: conversation.tenantId,
+          customerPhone: job.customerPhone,
+          contactName: job.contactName,
+        });
+        if (identity.customerName) {
+          job.customerName = identity.customerName;
+        }
+
+        const requestedName = extractNameUpdateIntent(job.messageContent);
+        if (requestedName && isLikelyRealName(requestedName)) {
+          await applyExplicitNameUpdate(convex, {
+            tenantId: conversation.tenantId,
+            customerPhone: job.customerPhone,
+            newName: requestedName,
+          });
+
+          const updateReply = `Üzgünüm, kaydınızı *${requestedName}* olarak güncelledim.`;
+
+          await convex.mutation(api.messages.create, {
+            conversationId: job.conversationId as any,
+            role: "agent",
+            content: updateReply,
+            status: "done",
+          });
+
+          await sendWhatsAppMessage(job.customerPhone, updateReply, {
+            phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+            accessToken: job.outboundAccessToken,
+          });
+
+          await convex.mutation(api.messages.updateStatus, {
+            id: job.id as any,
+            status: "done",
+          });
+          return;
+        }
       }
 
       // 5. Structured booking flow (service -> staff -> date -> time)
@@ -153,4 +226,83 @@ export function createJobHandler(convex: ConvexHttpClient) {
       throw err; // Re-throw for queue retry logic
     }
   };
+}
+
+async function syncCustomerIdentity(
+  convex: ConvexHttpClient,
+  args: {
+    tenantId: string;
+    customerPhone: string;
+    contactName?: string;
+  }
+): Promise<{ customerName: string | null }> {
+  const candidateName =
+    args.contactName && isLikelyRealName(args.contactName)
+      ? args.contactName
+      : null;
+
+  const customer = await ensureCustomerRecord({
+    tenantId: args.tenantId,
+    customerPhone: args.customerPhone,
+    customerName: candidateName,
+  });
+
+  const resolvedName = customer?.name || candidateName || null;
+  if (!resolvedName) {
+    return { customerName: null };
+  }
+
+  const profile = await convex.query(api.customerProfiles.getByPhone, {
+    tenantId: args.tenantId,
+    customerPhone: args.customerPhone,
+  });
+
+  const nextPreferences = {
+    ...(profile?.preferences || {}),
+    customerName: resolvedName,
+  };
+
+  await convex.mutation(api.customerProfiles.upsert, {
+    tenantId: args.tenantId,
+    customerPhone: args.customerPhone,
+    preferences: nextPreferences,
+  });
+
+  return { customerName: resolvedName };
+}
+
+async function applyExplicitNameUpdate(
+  convex: ConvexHttpClient,
+  args: {
+    tenantId: string;
+    customerPhone: string;
+    newName: string;
+  }
+): Promise<void> {
+  const existingCustomer = await getCustomerByPhone(
+    args.tenantId,
+    args.customerPhone
+  );
+
+  if (existingCustomer) {
+    await updateCustomerName(existingCustomer.id, args.newName);
+  } else {
+    await createCustomer(args.tenantId, args.customerPhone, args.newName);
+  }
+
+  const profile = await convex.query(api.customerProfiles.getByPhone, {
+    tenantId: args.tenantId,
+    customerPhone: args.customerPhone,
+  });
+
+  const nextPreferences = {
+    ...(profile?.preferences || {}),
+    customerName: args.newName,
+  };
+
+  await convex.mutation(api.customerProfiles.upsert, {
+    tenantId: args.tenantId,
+    customerPhone: args.customerPhone,
+    preferences: nextPreferences,
+  });
 }

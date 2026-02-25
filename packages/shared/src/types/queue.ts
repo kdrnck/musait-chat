@@ -17,6 +17,12 @@ export interface AgentJob {
   outboundAccessToken?: string;
   /** The incoming message content */
   messageContent: string;
+  /** Optional WhatsApp contact profile name from webhook payload */
+  contactName?: string;
+  /** Optional display number from webhook metadata (human-readable) */
+  inboundDisplayNumber?: string;
+  /** Resolved customer name (if known) for personalization */
+  customerName?: string;
   /** Tenant ID (null if unbound/master number) */
   tenantId: string | null;
   /** Timestamp when job was created */
