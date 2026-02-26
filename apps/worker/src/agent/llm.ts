@@ -5,6 +5,10 @@ import { LLM_CONFIG, SUPABASE_CONFIG } from "../config.js";
 import { buildSystemPrompt } from "./prompts.js";
 import { executeToolCall, getToolDefinitions } from "./tools/index.js";
 import { isLikelyRealName } from "./customer-name.js";
+import {
+  resolveTenantAiSettings,
+  type TenantAiSettings,
+} from "./tenant-ai-settings.js";
 
 interface Conversation {
   _id: any;
@@ -32,12 +36,15 @@ export async function runAgentLoop(
   const useReasoning = isComplexMessage(job.messageContent || "");
 
   // 1. Build context
-  const messages = await buildContext(convex, job, conversation);
+  const context = await buildContext(convex, job, conversation);
+  const messages = context.messages;
+  const tenantAiSettings = context.tenantAiSettings;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
     const response = await callOpenRouter(messages, {
       useReasoning: i === 0 && useReasoning,
+      tenantAiSettings,
     });
 
     // 3. Check for tool calls
@@ -86,37 +93,49 @@ async function buildContext(
   convex: ConvexHttpClient,
   job: AgentJob,
   conversation: Conversation
-): Promise<LLMMessage[]> {
+): Promise<{ messages: LLMMessage[]; tenantAiSettings: TenantAiSettings }> {
   const messages: LLMMessage[] = [];
   let knownCustomerName: string | null = job.customerName || null;
-
-  // System prompt
-  const systemPrompt = buildSystemPrompt(conversation);
-  messages.push({ role: "system", content: systemPrompt });
+  let tenantAiSettings = resolveTenantAiSettings();
+  let tenantCtx: {
+    name: string | null;
+    slug: string | null;
+    integrationKeys: Record<string, unknown>;
+  } | null = null;
 
   if (conversation.tenantId) {
-    const tenantCtx = await fetchTenantContext(conversation.tenantId);
-    const extraPrompt =
-      tenantCtx?.integrationKeys?.ai_extra_system_prompt?.trim() || "";
+    tenantCtx = await fetchTenantContext(conversation.tenantId);
+    tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys);
+  }
+
+  // System prompt
+  const systemPrompt =
+    tenantAiSettings.systemPromptText || buildSystemPrompt(conversation);
+  messages.push({ role: "system", content: systemPrompt });
+
+  if (conversation.tenantId && tenantCtx) {
     const serviceLink = buildServiceLink(
-      tenantCtx?.slug,
+      tenantCtx.slug,
       job.inboundDisplayNumber
     );
 
     messages.push({
       role: "system",
       content:
-        `[İşletme]: ${tenantCtx?.name || "Bilinmeyen İşletme"}\n` +
+        `[İşletme]: ${tenantCtx.name || "Bilinmeyen İşletme"}\n` +
         `[Hizmet Linki]: ${serviceLink}\n` +
         `Kural: Müşteriyle ilk greeting cevabında bu linki kısa şekilde paylaşabilirsin.`,
     });
 
-    if (extraPrompt) {
+    if (
+      !tenantAiSettings.systemPromptText &&
+      tenantAiSettings.legacyExtraSystemPrompt
+    ) {
       messages.push({
         role: "system",
         content:
           "[Tenant Ek Sistem Promptu]\n" +
-          extraPrompt.slice(0, 3000),
+          tenantAiSettings.legacyExtraSystemPrompt.slice(0, 3000),
       });
     }
   }
@@ -193,7 +212,7 @@ async function buildContext(
     }
   }
 
-  return messages;
+  return { messages, tenantAiSettings };
 }
 
 // --- OpenRouter API Call ---
@@ -209,11 +228,11 @@ interface OpenRouterResponse {
 
 async function callOpenRouter(
   messages: LLMMessage[],
-  options: { useReasoning: boolean }
+  options: { useReasoning: boolean; tenantAiSettings: TenantAiSettings }
 ): Promise<OpenRouterResponse> {
-  const providerOrder = LLM_CONFIG.providerPriority;
+  const providerOrder = options.tenantAiSettings.providerPriority;
   const payload: Record<string, unknown> = {
-    model: LLM_CONFIG.model,
+    model: options.tenantAiSettings.model,
     messages: messages.map((m) => ({
       role: m.role,
       content: m.content,
@@ -229,11 +248,15 @@ async function callOpenRouter(
   if (providerOrder.length > 0) {
     payload.provider = {
       order: providerOrder,
-      allow_fallbacks: LLM_CONFIG.providerAllowFallbacks,
+      allow_fallbacks: options.tenantAiSettings.allowFallbacks,
     };
   }
 
-  if (options.useReasoning && LLM_CONFIG.enableReasoningForComplex) {
+  if (
+    options.useReasoning &&
+    LLM_CONFIG.enableReasoningForComplex &&
+    supportsReasoning(options.tenantAiSettings.model)
+  ) {
     payload.reasoning = {
       enabled: true,
       effort: "low",
@@ -283,7 +306,7 @@ async function callOpenRouter(
 async function fetchTenantContext(tenantId: string): Promise<{
   name: string | null;
   slug: string | null;
-  integrationKeys: Record<string, string>;
+  integrationKeys: Record<string, unknown>;
 } | null> {
   const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/tenants`);
   url.searchParams.set("id", `eq.${tenantId}`);
@@ -301,7 +324,7 @@ async function fetchTenantContext(tenantId: string): Promise<{
   const rows = (await response.json()) as Array<{
     name?: string | null;
     slug?: string | null;
-    integration_keys?: Record<string, string>;
+    integration_keys?: Record<string, unknown>;
   }>;
 
   const tenant = rows[0];
@@ -312,6 +335,10 @@ async function fetchTenantContext(tenantId: string): Promise<{
     slug: tenant.slug || null,
     integrationKeys: tenant.integration_keys || {},
   };
+}
+
+function supportsReasoning(model: string): boolean {
+  return /deepseek/i.test(model);
 }
 
 function sanitizePhoneForLink(value?: string | null): string {

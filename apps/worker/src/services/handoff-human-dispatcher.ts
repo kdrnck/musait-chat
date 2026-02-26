@@ -2,6 +2,7 @@ import type { ConvexHttpClient } from "convex/browser";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "../lib/convex-api.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
+import { resolveOutboundRoute } from "./outbound-route.js";
 
 interface DispatcherDeps {
   convex: ConvexHttpClient;
@@ -15,12 +16,13 @@ export function startHandoffHumanDispatcher({
   intervalMs = 2000,
 }: DispatcherDeps): () => void {
   let running = false;
+  let warnedMissingPendingFn = false;
 
   const tick = async () => {
     if (running) return;
     running = true;
     try {
-      const pending = await convex.query(api.messages.getPendingHumanMessages, {});
+      const pending = await fetchPendingHumanMessages();
       if (!pending || pending.length === 0) return;
 
       for (const message of pending) {
@@ -41,8 +43,7 @@ export function startHandoffHumanDispatcher({
           continue;
         }
 
-        const route = await resolveOutboundRoute({
-          convex,
+        const route = await resolveHandoffOutboundRoute({
           supabase,
           conversation,
         });
@@ -87,46 +88,54 @@ export function startHandoffHumanDispatcher({
   tick().catch((err) => console.error("❌ Handoff dispatcher failed:", err));
 
   return () => clearInterval(timer);
+
+  async function fetchPendingHumanMessages(): Promise<any[]> {
+    try {
+      return await convex.query(api.messages.getPendingHumanMessages, {});
+    } catch (error) {
+      if (!isMissingPublicFunctionError(error, "messages:getPendingHumanMessages")) {
+        throw error;
+      }
+
+      if (!warnedMissingPendingFn) {
+        warnedMissingPendingFn = true;
+        console.warn(
+          "⚠️ Convex function messages:getPendingHumanMessages bulunamadı. " +
+            "Handoff dispatcher fallback modunda çalışıyor; Convex deploy gerekli."
+        );
+      }
+
+      try {
+        const fallback = await convex.query(api.messages.getPendingMessages, {});
+        return (fallback || []).filter((message: any) => message.role === "human");
+      } catch {
+        return [];
+      }
+    }
+  }
 }
 
-async function resolveOutboundRoute(args: {
-  convex: ConvexHttpClient;
+async function resolveHandoffOutboundRoute(args: {
   supabase: SupabaseClient;
   conversation: any;
-}): Promise<{ phoneNumberId: string; accessToken?: string }> {
-  const fallbackPhoneNumberId =
-    args.conversation.inboundPhoneNumberId ||
-    process.env.WHATSAPP_PHONE_NUMBER_ID ||
-    "";
-  let phoneNumberId = fallbackPhoneNumberId;
-  let accessToken = process.env.WHATSAPP_ACCESS_TOKEN || "";
-
-  if (!phoneNumberId) {
-    return { phoneNumberId, accessToken };
-  }
-
-  const mapping = await args.convex.query(api.whatsappNumbers.getByPhoneNumberId, {
-    phoneNumberId,
+}): Promise<{ phoneNumberId: string; accessToken: string }> {
+  const resolved = await resolveOutboundRoute({
+    supabase: args.supabase,
+    tenantId: args.conversation.tenantId,
+    inboundPhoneNumberId: args.conversation.inboundPhoneNumberId,
+    inboundAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
   });
 
-  if (mapping?.isMasterNumber) {
-    return { phoneNumberId, accessToken };
-  }
+  return {
+    phoneNumberId: resolved.phoneNumberId,
+    accessToken: resolved.accessToken,
+  };
+}
 
-  if (!mapping?.tenantId) {
-    return { phoneNumberId, accessToken };
-  }
-
-  const { data: tenantCfg, error } = await args.supabase
-    .from("tenants")
-    .select("waba_phone_number_id, waba_access_token")
-    .eq("id", mapping.tenantId)
-    .single();
-
-  if (!error && tenantCfg) {
-    phoneNumberId = tenantCfg.waba_phone_number_id || phoneNumberId;
-    accessToken = tenantCfg.waba_access_token || accessToken;
-  }
-
-  return { phoneNumberId, accessToken };
+function isMissingPublicFunctionError(error: unknown, fnName: string): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes("Could not find public function") &&
+    error.message.includes(fnName)
+  );
 }

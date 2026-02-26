@@ -13,6 +13,7 @@ import { routeIncomingMessage } from "../services/router/message-router.js";
 import { verifyOtp, normalizePhoneToE164 } from "../services/otp/index.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { OTP_PROMPTS } from "../agent/master-prompts.js";
+import { resolveOutboundRoute } from "../services/outbound-route.js";
 
 /**
  * WhatsApp Webhook Router
@@ -309,23 +310,12 @@ async function handleAgentMessage(params: {
     status: "pending",
   });
 
-  let outboundPhoneNumberId = phoneNumberId;
-  let outboundAccessToken = process.env.WHATSAPP_ACCESS_TOKEN || "";
-
-  if (!numberMapping.isMasterNumber && numberMapping.tenantId) {
-    // For direct tenant numbers, prefer tenant-specific WhatsApp credentials from Supabase.
-    const { data: tenantCfg, error } = await supabase
-      .from("tenants")
-      .select("waba_phone_number_id, waba_access_token")
-      .eq("id", numberMapping.tenantId)
-      .single();
-
-    if (!error && tenantCfg) {
-      outboundPhoneNumberId =
-        tenantCfg.waba_phone_number_id || outboundPhoneNumberId;
-      outboundAccessToken = tenantCfg.waba_access_token || outboundAccessToken;
-    }
-  }
+  const outboundRoute = await resolveOutboundRoute({
+    supabase,
+    tenantId: conversation.tenantId,
+    inboundPhoneNumberId: phoneNumberId,
+    inboundAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+  });
 
   // 4. Enqueue job — NEVER call LLM here
   await queue.enqueue({
@@ -334,8 +324,8 @@ async function handleAgentMessage(params: {
     customerPhone,
     phoneNumberId,
     inboundDisplayNumber,
-    outboundPhoneNumberId,
-    outboundAccessToken,
+    outboundPhoneNumberId: outboundRoute.phoneNumberId,
+    outboundAccessToken: outboundRoute.accessToken,
     contactName,
     messageContent,
     tenantId: conversation.tenantId,

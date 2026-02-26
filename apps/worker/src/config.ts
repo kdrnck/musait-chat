@@ -22,7 +22,7 @@ export const LLM_CONFIG = {
   model: process.env.LLM_MODEL || "deepseek/deepseek-chat",
   temperature: 0.7,
   maxTokens: 1024,
-  providerPriority: (process.env.LLM_PROVIDER_PRIORITY || "deepinfra")
+  providerPriority: (process.env.LLM_PROVIDER_PRIORITY || "groq,deepinfra")
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean),

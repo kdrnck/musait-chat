@@ -7,6 +7,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import ConversationCard from "./ConversationCard";
+import AiControlPanel from "./AiControlPanel";
 import { Search, MessageSquare, AlertTriangle, UserCheck, LogOut } from "lucide-react";
 
 type FilterTab = "all" | "attention" | "handoff";
@@ -275,21 +276,23 @@ export default function ConversationList({
                         </p>
                     </div>
 
-                    {/* Logout button */}
-                    <button
-                        onClick={handleLogout}
-                        className="p-1.5 flex-shrink-0 transition-colors"
-                        style={{ color: "var(--color-text-muted)" }}
-                        onMouseEnter={(e) =>
-                            (e.currentTarget.style.color = "var(--color-status-attention)")
-                        }
-                        onMouseLeave={(e) =>
-                            (e.currentTarget.style.color = "var(--color-text-muted)")
-                        }
-                        title="Çıkış Yap"
-                    >
-                        <LogOut size={15} />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                        <AiControlPanel tenantId={tenantId} />
+                        <button
+                            onClick={handleLogout}
+                            className="p-1.5 flex-shrink-0 transition-colors"
+                            style={{ color: "var(--color-text-muted)" }}
+                            onMouseEnter={(e) =>
+                                (e.currentTarget.style.color = "var(--color-status-attention)")
+                            }
+                            onMouseLeave={(e) =>
+                                (e.currentTarget.style.color = "var(--color-text-muted)")
+                            }
+                            title="Çıkış Yap"
+                        >
+                            <LogOut size={15} />
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
