@@ -30,6 +30,7 @@ export const api = {
     disableAgent: ref("conversations:disableAgent"),
     enableAgent: ref("conversations:enableAgent"),
     archiveAndReset: ref("conversations:archiveAndReset"),
+    resetSession: ref("conversations:resetSession"),
     touchLastMessage: ref("conversations:touchLastMessage"),
   },
   messages: {
@@ -40,6 +41,7 @@ export const api = {
     create: ref("messages:create"),
     updateStatus: ref("messages:updateStatus"),
     markRetry: ref("messages:markRetry"),
+    updateDebugInfo: ref("messages:updateDebugInfo"),
   },
   customerProfiles: {
     getByPhone: ref("customerProfiles:getByPhone"),
