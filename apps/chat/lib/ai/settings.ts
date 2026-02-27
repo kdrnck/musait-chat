@@ -87,6 +87,7 @@ export interface ResolvedAiSettings {
   allowFallbacks: boolean;
   promptText: string;
   outboundNumberMode: OutboundNumberMode;
+  bookingFlowEnabled: boolean;
 }
 
 export function resolveAiSettingsFromIntegrationKeys(
@@ -127,6 +128,9 @@ export function resolveAiSettingsFromIntegrationKeys(
       ? (outboundModeRaw as OutboundNumberMode)
       : DEFAULT_OUTBOUND_NUMBER_MODE;
 
+  // Booking flow disabled by default - LLM handles conversation flow
+  const bookingFlowEnabled = asBoolean(keys.ai_booking_flow_enabled) ?? false;
+
   return {
     modelProfile,
     model,
@@ -134,6 +138,7 @@ export function resolveAiSettingsFromIntegrationKeys(
     allowFallbacks,
     promptText,
     outboundNumberMode,
+    bookingFlowEnabled,
   };
 }
 

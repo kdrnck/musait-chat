@@ -37,6 +37,7 @@ export interface TenantAiSettings {
   systemPromptText: string | null;
   legacyExtraSystemPrompt: string | null;
   outboundNumberMode: OutboundNumberMode;
+  bookingFlowEnabled: boolean;
 }
 
 export function resolveTenantAiSettings(
@@ -75,6 +76,9 @@ export function resolveTenantAiSettings(
       ? (modeRaw as OutboundNumberMode)
       : "inbound";
 
+  // Booking flow disabled by default - LLM handles conversation flow
+  const bookingFlowEnabled = asBoolean(keys.ai_booking_flow_enabled) ?? false;
+
   return {
     modelProfile,
     model,
@@ -83,6 +87,7 @@ export function resolveTenantAiSettings(
     systemPromptText,
     legacyExtraSystemPrompt,
     outboundNumberMode,
+    bookingFlowEnabled,
   };
 }
 

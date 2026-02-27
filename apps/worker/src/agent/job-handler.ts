@@ -6,6 +6,7 @@ import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { handleStructuredBookingFlow } from "./booking-flow.js";
 import { SESSION_PROMPTS } from "./master-prompts.js";
+import { SUPABASE_CONFIG } from "../config.js";
 import {
   extractNameUpdateIntent,
   isLikelyRealName,
@@ -16,6 +17,36 @@ import {
   updateCustomerName,
   createCustomer,
 } from "../services/customers.js";
+
+/**
+ * Check if booking flow is enabled for a tenant
+ */
+async function isBookingFlowEnabled(tenantId: string): Promise<boolean> {
+  try {
+    const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/tenants`);
+    url.searchParams.set("id", `eq.${tenantId}`);
+    url.searchParams.set("select", "integration_keys");
+    url.searchParams.set("limit", "1");
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        apikey: SUPABASE_CONFIG.serviceKey,
+        Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+      },
+    });
+    
+    if (!response.ok) return false;
+    
+    const rows = await response.json();
+    const tenant = rows[0];
+    if (!tenant?.integration_keys) return false;
+    
+    const val = tenant.integration_keys.ai_booking_flow_enabled;
+    return val === true || val === "true";
+  } catch {
+    return false; // Default to disabled on error
+  }
+}
 
 /**
  * Creates the job handler function.
@@ -196,30 +227,40 @@ export function createJobHandler(convex: ConvexHttpClient) {
       }
 
       // 5. Structured booking flow (service -> staff -> date -> time)
-      const structuredResult = await handleStructuredBookingFlow(
-        convex,
-        job,
-        conversation as any
-      );
+      // Only run if explicitly enabled in tenant settings (default: disabled)
+      const bookingFlowEnabled = conversation.tenantId 
+        ? await isBookingFlowEnabled(conversation.tenantId)
+        : false;
 
-      if (structuredResult.handled && structuredResult.reply) {
-        await convex.mutation(api.messages.create, {
-          conversationId: job.conversationId as any,
-          role: "agent",
-          content: structuredResult.reply,
-          status: "done",
-        });
+      if (bookingFlowEnabled) {
+        console.log(`📋 Booking flow ENABLED for tenant ${conversation.tenantId}`);
+        const structuredResult = await handleStructuredBookingFlow(
+          convex,
+          job,
+          conversation as any
+        );
 
-        await sendWhatsAppMessage(job.customerPhone, structuredResult.reply, {
-          phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
-          accessToken: job.outboundAccessToken,
-        });
+        if (structuredResult.handled && structuredResult.reply) {
+          await convex.mutation(api.messages.create, {
+            conversationId: job.conversationId as any,
+            role: "agent",
+            content: structuredResult.reply,
+            status: "done",
+          });
 
-        await convex.mutation(api.messages.updateStatus, {
-          id: job.id as any,
-          status: "done",
-        });
-        return;
+          await sendWhatsAppMessage(job.customerPhone, structuredResult.reply, {
+            phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+            accessToken: job.outboundAccessToken,
+          });
+
+          await convex.mutation(api.messages.updateStatus, {
+            id: job.id as any,
+            status: "done",
+          });
+          return;
+        }
+      } else {
+        console.log(`📋 Booking flow DISABLED - LLM will handle conversation`);
       }
 
       // 6. Run agent loop (LLM + tool calls)

@@ -18,6 +18,7 @@ interface TenantAiSettings {
   allowFallbacks: boolean;
   promptText: string;
   outboundNumberMode: OutboundNumberMode;
+  bookingFlowEnabled: boolean;
   wabaPhoneNumberId: string;
   wabaAccessToken: string;
   wabaBusinessAccountId: string;
@@ -253,6 +254,23 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                           <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-brand)]" />
                         </label>
                         <span className="text-sm font-bold text-white">Yedek Sağlayıcı (Fallback) Aktif</span>
+                      </div>
+
+                      <div className="flex items-center gap-3 pt-6">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={settings.bookingFlowEnabled}
+                            onChange={(e) => setSettings({ ...settings, bookingFlowEnabled: e.target.checked })}
+                            disabled={!canEdit}
+                            className="sr-only peer" 
+                          />
+                          <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-brand)]" />
+                        </label>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-white">Yapılandırılmış Randevu Akışı</span>
+                          <span className="text-[10px] text-[#666]">Kapalı: LLM sohbeti yönetir (önerilen)</span>
+                        </div>
                       </div>
                     </div>
                   </section>

@@ -18,6 +18,7 @@ interface TenantAiResponse {
   allowFallbacks: boolean;
   promptText: string;
   outboundNumberMode: OutboundNumberMode;
+  bookingFlowEnabled: boolean;
   wabaPhoneNumberId: string;
   wabaAccessToken: string;
   wabaBusinessAccountId: string;
@@ -99,6 +100,7 @@ interface UpdateBody {
   allowFallbacks?: boolean;
   promptText?: string;
   outboundNumberMode?: OutboundNumberMode;
+  bookingFlowEnabled?: boolean;
   wabaPhoneNumberId?: string;
   wabaAccessToken?: string;
   wabaBusinessAccountId?: string;
@@ -145,6 +147,7 @@ export async function PUT(request: NextRequest) {
       : preset.allowFallbacks;
   const promptText = normalizePrompt(body.promptText);
   const outboundNumberMode = normalizeOutboundMode(body.outboundNumberMode);
+  const bookingFlowEnabled = typeof body.bookingFlowEnabled === "boolean" ? body.bookingFlowEnabled : false;
 
   if (!promptText) {
     return NextResponse.json(
@@ -187,6 +190,7 @@ export async function PUT(request: NextRequest) {
     ai_allow_fallbacks: String(allowFallbacks),
     ai_system_prompt_text: promptText,
     ai_outbound_number_mode: outboundNumberMode,
+    ai_booking_flow_enabled: String(bookingFlowEnabled),
   } as Record<string, unknown>;
 
   const payload = {
@@ -304,6 +308,7 @@ function buildResponse(args: {
       args.tenantId
     ),
     outboundNumberMode: resolved.outboundNumberMode,
+    bookingFlowEnabled: resolved.bookingFlowEnabled,
     wabaPhoneNumberId: args.canEdit ? wabaPhoneNumberId : "",
     wabaAccessToken: args.canEdit ? wabaAccessToken : "",
     wabaBusinessAccountId: args.canEdit ? wabaBusinessAccountId : "",
