@@ -4,7 +4,6 @@ import { api } from "../lib/convex-api.js";
 import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
-import { handleStructuredBookingFlow } from "./booking-flow.js";
 import { SESSION_PROMPTS, ADMIN_MODE } from "./master-prompts.js";
 import { SUPABASE_CONFIG } from "../config.js";
 import {
@@ -17,36 +16,6 @@ import {
   updateCustomerName,
   createCustomer,
 } from "../services/customers.js";
-
-/**
- * Check if booking flow is enabled for a tenant
- */
-async function isBookingFlowEnabled(tenantId: string): Promise<boolean> {
-  try {
-    const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/tenants`);
-    url.searchParams.set("id", `eq.${tenantId}`);
-    url.searchParams.set("select", "integration_keys");
-    url.searchParams.set("limit", "1");
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        apikey: SUPABASE_CONFIG.serviceKey,
-        Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
-      },
-    });
-    
-    if (!response.ok) return false;
-    
-    const rows = await response.json();
-    const tenant = rows[0];
-    if (!tenant?.integration_keys) return false;
-    
-    const val = tenant.integration_keys.ai_booking_flow_enabled;
-    return val === true || val === "true";
-  } catch {
-    return false; // Default to disabled on error
-  }
-}
 
 /**
  * Creates the job handler function.
@@ -226,70 +195,33 @@ export function createJobHandler(convex: ConvexHttpClient) {
         }
       }
 
-      // 5. Structured booking flow (service -> staff -> date -> time)
-      // Only run if explicitly enabled in tenant settings (default: disabled)
-      const bookingFlowEnabled = conversation.tenantId 
-        ? await isBookingFlowEnabled(conversation.tenantId)
-        : false;
-
-      if (bookingFlowEnabled) {
-        console.log(`📋 Booking flow ENABLED for tenant ${conversation.tenantId}`);
-        const structuredResult = await handleStructuredBookingFlow(
-          convex,
-          job,
-          conversation as any
-        );
-
-        if (structuredResult.handled && structuredResult.reply) {
-          await convex.mutation(api.messages.create, {
-            conversationId: job.conversationId as any,
-            role: "agent",
-            content: structuredResult.reply,
-            status: "done",
-          });
-
-          await sendWhatsAppMessage(job.customerPhone, structuredResult.reply, {
-            phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
-            accessToken: job.outboundAccessToken,
-          });
-
-          await convex.mutation(api.messages.updateStatus, {
-            id: job.id as any,
-            status: "done",
-          });
-          return;
-        }
-      } else {
-        console.log(`📋 Booking flow DISABLED - LLM will handle conversation`);
-      }
-
-      // 6. Run agent loop (LLM + tool calls)
+      // 5. Run agent loop (LLM + tool calls)
       const agentResponse = await runAgentLoop(convex, job, conversation);
 
       // 🔓 ADMIN MODE ACTIVATION
       if (agentResponse === "__ADMIN_MODE_ACTIVATE__") {
         console.log(`🔓 Admin mode activated for conversation ${job.conversationId}`);
-        
+
         // Update conversation with admin mode flag
         await convex.mutation(api.conversations.update, {
           id: conversation._id,
           adminMode: true,
         });
-        
+
         const activationMessage = ADMIN_MODE.activationMessage;
-        
+
         await convex.mutation(api.messages.create, {
           conversationId: job.conversationId as any,
           role: "agent",
           content: activationMessage,
           status: "done",
         });
-        
+
         await sendWhatsAppMessage(job.customerPhone, activationMessage, {
           phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
           accessToken: job.outboundAccessToken,
         });
-        
+
         await convex.mutation(api.messages.updateStatus, {
           id: job.id as any,
           status: "done",
@@ -297,7 +229,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
         return;
       }
 
-      // 7. Save agent response as message
+      // 6. Save agent response as message
       await convex.mutation(api.messages.create, {
         conversationId: job.conversationId as any,
         role: "agent",
@@ -305,13 +237,13 @@ export function createJobHandler(convex: ConvexHttpClient) {
         status: "done",
       });
 
-      // 8. Send WhatsApp reply
+      // 7. Send WhatsApp reply
       await sendWhatsAppMessage(job.customerPhone, agentResponse, {
         phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
         accessToken: job.outboundAccessToken,
       });
 
-      // 9. Mark original message as done
+      // 8. Mark original message as done
       await convex.mutation(api.messages.updateStatus, {
         id: job.id as any,
         status: "done",

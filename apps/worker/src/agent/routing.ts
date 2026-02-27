@@ -4,7 +4,6 @@ import { api } from "../lib/convex-api.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { LLM_CONFIG } from "../config.js";
 import { LLM_PROMPTS, ROUTING_PROMPTS } from "./master-prompts.js";
-import { initializeBookingFlow } from "./booking-flow.js";
 
 interface Conversation {
   _id: any;
@@ -99,16 +98,9 @@ export async function routeMessage(
         tenantId: rememberedTenant.tenantId,
       });
 
-      const flowMessage = await initializeBookingFlow(
-        convex,
-        String(conversation._id),
-        rememberedTenant.tenantId
-      );
-
       const warmStartMessage =
         `Tekrar hoş geldiniz. Son tercihinize göre *${rememberedTenant.tenantName}* ile devam ediyorum.\n` +
-        "İşletme değiştirmek isterseniz \"işletme değiştir\" yazabilirsiniz.\n\n" +
-        flowMessage;
+        "İşletme değiştirmek isterseniz \"işletme değiştir\" yazabilirsiniz.";
 
       await replyAndPersist(convex, {
         job,
@@ -147,16 +139,10 @@ export async function routeMessage(
     tenantId: matchedTenant.tenantId,
   });
 
-  const selectionMessage = await initializeBookingFlow(
-    convex,
-    String(conversation._id),
-    matchedTenant.tenantId
-  );
-
   await replyAndPersist(convex, {
     job,
     conversationId: conversation._id,
-    content: selectionMessage,
+    content: `*${matchedTenant.tenantName}* işletmesine bağlandınız. Size nasıl yardımcı olabilirim?`,
   });
 
   await convex.mutation(api.customerMemories.upsertPreferredTenant, {
@@ -192,19 +178,10 @@ async function performTenantSwitch(
     status: "done",
   });
 
-  const flowMessage = await initializeBookingFlow(
-    convex,
-    String(newConversationId),
-    matchedTenant.tenantId
-  );
-  const switchMessage =
-    `Tamamdır, konuşmayı *${matchedTenant.tenantName}* işletmesine taşıdım.\n\n` +
-    flowMessage;
-
   await replyAndPersist(convex, {
     job,
     conversationId: newConversationId,
-    content: switchMessage,
+    content: `Tamamdır, konuşmayı *${matchedTenant.tenantName}* işletmesine taşıdım. Size nasıl yardımcı olabilirim?`,
   });
 
   await convex.mutation(api.customerMemories.upsertPreferredTenant, {
