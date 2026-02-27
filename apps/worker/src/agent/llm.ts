@@ -7,6 +7,7 @@ import { executeToolCall, getToolDefinitions } from "./tools/index.js";
 import { isLikelyRealName } from "./customer-name.js";
 import {
   resolveTenantAiSettings,
+  resolveSystemPromptPlaceholders,
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
 
@@ -109,8 +110,11 @@ async function buildContext(
   }
 
   // System prompt
-  const systemPrompt =
+  const rawPrompt =
     tenantAiSettings.systemPromptText || buildSystemPrompt(conversation);
+  const systemPrompt = resolveSystemPromptPlaceholders(rawPrompt, {
+    tenantId: conversation.tenantId,
+  });
   messages.push({ role: "system", content: systemPrompt });
 
   if (conversation.tenantId && tenantCtx) {
@@ -292,14 +296,24 @@ async function callOpenRouter(
 
   return {
     content: choice.message?.content || null,
-    tool_calls: choice.message?.tool_calls?.map((tc: any) => ({
-      id: tc.id,
-      name: tc.function?.name as AgentToolName,
-      arguments:
-        typeof tc.function?.arguments === "string"
-          ? JSON.parse(tc.function.arguments)
-          : tc.function?.arguments,
-    })),
+    tool_calls: choice.message?.tool_calls?.map((tc: any) => {
+      let args: Record<string, unknown> = {};
+      try {
+        args =
+          typeof tc.function?.arguments === "string"
+            ? JSON.parse(tc.function.arguments)
+            : tc.function?.arguments ?? {};
+      } catch {
+        console.warn(
+          `⚠️ Failed to parse tool arguments for ${tc.function?.name}: ${tc.function?.arguments}`
+        );
+      }
+      return {
+        id: tc.id,
+        name: (tc.function?.name ?? "unknown") as AgentToolName,
+        arguments: args,
+      };
+    }),
   };
 }
 

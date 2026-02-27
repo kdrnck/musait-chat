@@ -8,7 +8,7 @@ export default defineSchema({
   conversations: defineTable({
     tenantId: v.union(v.string(), v.null()),
     customerPhone: v.string(),
-    inboundPhoneNumberId: v.string(),
+    inboundPhoneNumberId: v.optional(v.string()),
     status: v.union(
       v.literal("active"),
       v.literal("archived"),

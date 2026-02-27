@@ -9,6 +9,7 @@
  */
 
 import type * as conversations from "../conversations.js";
+import type * as customerMemories from "../customerMemories.js";
 import type * as customerProfiles from "../customerProfiles.js";
 import type * as magicLinks from "../magicLinks.js";
 import type * as messages from "../messages.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   conversations: typeof conversations;
+  customerMemories: typeof customerMemories;
   customerProfiles: typeof customerProfiles;
   magicLinks: typeof magicLinks;
   messages: typeof messages;

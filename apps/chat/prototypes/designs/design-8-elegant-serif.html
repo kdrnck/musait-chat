@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Editorial / Magazine Chat UI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Karla:wght@400;500;700&display=swap');
+
+        :root {
+            --bg: #F4F2EC;
+            /* Warm parchment */
+            --text: #2B2A28;
+            /* Soft black */
+            --accent: #B04A3A;
+            /* Editorial red */
+            --border: #D1CFC7;
+            --font-head: 'Playfair Display', serif;
+            --font-body: 'Karla', sans-serif;
+            --bubble-agnt: #FFFFFF;
+            --bubble-user: #E3DCCF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-body);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .col-left {
+            width: 300px;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+        }
+
+        .col-mid {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #FCFCFA;
+            position: relative;
+        }
+
+        .col-right {
+            width: 320px;
+            border-left: 1px solid var(--border);
+            background: var(--bg);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        /* Left */
+        .app-title {
+            font-size: 32px;
+            font-style: italic;
+            font-family: var(--font-head);
+            padding: 40px 30px 20px;
+            border-bottom: 2px solid var(--text);
+            text-align: center;
+        }
+
+        .filter-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .ftab {
+            flex: 1;
+            text-align: center;
+            padding: 12px 0;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 1px;
+            font-weight: 700;
+            color: #7F7A71;
+            transition: 0.3s;
+        }
+
+        .ftab.active {
+            color: var(--text);
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .chat-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .chat-row {
+            padding: 20px 30px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: 0.2s;
+            position: relative;
+        }
+
+        .chat-row:hover {
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .chat-row.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--accent);
+        }
+
+        .c-name {
+            font-family: var(--font-head);
+            font-size: 20px;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .c-time {
+            font-family: var(--font-body);
+            font-size: 12px;
+            color: #7F7A71;
+        }
+
+        .c-preview {
+            font-size: 14px;
+            color: #7F7A71;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Mid */
+        .mid-header {
+            padding: 30px 40px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .mid-h-title {
+            font-size: 36px;
+            line-height: 1;
+            font-family: var(--font-head);
+        }
+
+        .mid-h-sub {
+            font-size: 14px;
+            color: #7F7A71;
+            margin-top: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .take-btn {
+            border: 1px solid var(--text);
+            background: transparent;
+            padding: 8px 16px;
+            font-family: var(--font-body);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .take-btn:hover {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 40px;
+        }
+
+        .message {
+            max-width: 60%;
+            margin-bottom: 30px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message.user {
+            align-self: flex-start;
+        }
+
+        .message.agent {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .msg-content {
+            padding: 20px 24px;
+            font-size: 16px;
+            line-height: 1.6;
+            border: 1px solid var(--border);
+            box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .message.user .msg-content {
+            background: var(--bubble-user);
+        }
+
+        .message.agent .msg-content {
+            background: var(--bubble-agnt);
+        }
+
+        .msg-meta {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7F7A71;
+            margin-top: 8px;
+        }
+
+        .tool-box {
+            width: 100%;
+            max-width: 500px;
+            margin: 20px auto;
+            border: 1px dashed var(--border);
+            padding: 2px;
+        }
+
+        .tool-inner {
+            border: 1px solid var(--border);
+            background: var(--bg);
+            padding: 16px;
+        }
+
+        .tool-lead {
+            font-family: var(--font-head);
+            font-style: italic;
+            font-size: 18px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .tool-data {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: #7F7A71;
+            display: none;
+            margin-top: 10px;
+            border-top: 1px solid var(--border);
+            padding-top: 10px;
+        }
+
+        .tool-box.open .tool-data {
+            display: block;
+        }
+
+        .typing {
+            font-style: italic;
+            color: #7F7A71;
+            font-family: var(--font-head);
+            font-size: 18px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        .sender {
+            border-top: 1px solid var(--border);
+            padding: 30px 40px;
+            background: #FCFCFA;
+        }
+
+        .send-box {
+            border: 1px solid var(--border);
+            background: var(--bg);
+            display: flex;
+            padding: 4px;
+            box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.05);
+            transition: 0.2s;
+        }
+
+        .send-box:focus-within {
+            border-color: var(--text);
+        }
+
+        .send-box textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            padding: 16px;
+            font-family: var(--font-body);
+            font-size: 16px;
+            resize: none;
+            min-height: 56px;
+            max-height: 200px;
+        }
+
+        .send-box button {
+            background: var(--text);
+            color: var(--bg);
+            border: none;
+            cursor: pointer;
+            padding: 0 30px;
+            font-family: var(--font-body);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            transition: 0.2s;
+        }
+
+        .send-box button:hover {
+            background: var(--accent);
+        }
+
+        /* Right */
+        .r-title {
+            font-family: var(--font-head);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        .r-sect {
+            margin-bottom: 40px;
+        }
+
+        .r-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7F7A71;
+            margin-bottom: 4px;
+        }
+
+        .r-val {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .r-val-head {
+            font-family: var(--font-head);
+            font-size: 28px;
+            line-height: 1.2;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border: 1px solid var(--text);
+            border-radius: 20px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            margin-right: 6px;
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="col-left">
+        <div class="app-title">The Desk</div>
+        <div class="filter-tabs">
+            <div class="ftab active" onclick="ft(this)">Inbox</div>
+            <div class="ftab" onclick="ft(this)">Unread</div>
+            <div class="ftab" onclick="ft(this)">Requires Action</div>
+        </div>
+        <div class="chat-list">
+            <div class="chat-row active" onclick="cr(this)">
+                <div class="c-name">Elif Yılmaz <span class="c-time">15:02</span></div>
+                <div class="c-preview">Agent is formulating a response regarding the 15:00 appointment...</div>
+            </div>
+            <div class="chat-row" onclick="cr(this)">
+                <div class="c-name">Caner Tas <span class="c-time">Yesterday</span></div>
+                <div class="c-preview">Yes, the minimalist approach works for me.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-mid">
+        <div class="mid-header">
+            <div>
+                <h2 class="mid-h-title">Elif Yılmaz</h2>
+                <div class="mid-h-sub">+90 532 •••• 45 67 — Active Session</div>
+            </div>
+            <button class="take-btn">Intervene</button>
+        </div>
+
+        <div class="messages" id="msgs">
+
+            <div class="message user" style="align-self: flex-start;">
+                <div class="msg-content">Merhaba, yarın saç kesimi için randevu alabilir miyim?</div>
+                <div class="msg-meta">Received 15:00</div>
+            </div>
+
+            <div class="tool-box">
+                <div class="tool-inner">
+                    <div class="tool-lead" onclick="this.parentElement.parentElement.classList.toggle('open')">
+                        <span>System Inference: check_availability</span>
+                        <span>↓</span>
+                    </div>
+                    <div class="tool-data">Querying database for available slots...<br>Status: OK. Results: [10:00,
+                        15:00]</div>
+                </div>
+            </div>
+
+            <div class="message agent" style="align-self: flex-end;">
+                <div class="msg-content">Merhaba Elif Hanım. Yarın saç kesimi için 10:00 ve 15:00 saatlerimiz uygun.
+                    Hangisini tercih edersiniz?</div>
+                <div class="msg-meta">AI Agent — Sent 15:01</div>
+            </div>
+
+            <div class="message user" style="align-self: flex-start;">
+                <div class="msg-content">15:00 olabilir mi?</div>
+                <div class="msg-meta">Received 15:02</div>
+            </div>
+
+            <div class="tool-box">
+                <div class="tool-inner">
+                    <div class="tool-lead" onclick="this.parentElement.parentElement.classList.toggle('open')">
+                        <span>System Inference: create_appointment</span>
+                        <span>↓</span>
+                    </div>
+                    <div class="tool-data">Processing transaction... State: <strong>PENDING</strong></div>
+                </div>
+            </div>
+
+            <div class="typing" id="typing">Agent is composing...</div>
+        </div>
+
+        <div class="sender">
+            <div class="send-box">
+                <textarea id="inp" placeholder="Author a manual response..." oninput="resize(this)"></textarea>
+                <button onclick="send()">Dispatch</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-right">
+        <div class="r-title">Dossier</div>
+
+        <div class="r-sect">
+            <div class="r-val-head">Elif<br>Yılmaz</div>
+            <div style="margin-top: 10px;">
+                <span class="badge">VIP STATUS</span>
+                <span class="badge">REGULAR</span>
+            </div>
+        </div>
+
+        <div class="r-sect">
+            <div class="r-label">Contact Iteration</div>
+            <div class="r-val">+90 532 •••• 45 67</div>
+        </div>
+
+        <div class="r-sect">
+            <div class="r-label">Lifetime Value</div>
+            <div class="r-val">12 Appointments</div>
+            <div class="r-label" style="margin-top:4px">Last visible 14 days prior</div>
+        </div>
+
+        <div class="r-sect">
+            <div class="r-label">Known Preferences</div>
+            <ul style="font-size: 14px; margin-left:16px; margin-top:8px;">
+                <li>Prefers morning appointments generally</li>
+                <li>Specific styling request: layered cut</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function ft(el) { document.querySelectorAll('.ftab').forEach(e => e.classList.remove('active')); el.classList.add('active'); }
+        function cr(el) { document.querySelectorAll('.chat-row').forEach(e => e.classList.remove('active')); el.classList.add('active'); }
+        function resize(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+        function send() {
+            const v = document.getElementById('inp').value.trim();
+            if (!v) return;
+            document.getElementById('typing')?.remove();
+            const h = `<div class="message agent" style="align-self: flex-end; animation: fade 0.5s"><div class="msg-content" style="background:#2B2A28; color:#fff">${v.replace(/\n/g, '<br>')}</div><div class="msg-meta">Staff Override</div></div>`;
+            document.getElementById('msgs').insertAdjacentHTML('beforeend', h);
+            document.getElementById('inp').value = ''; resize(document.getElementById('inp'));
+            document.getElementById('msgs').scrollTop = document.getElementById('msgs').scrollHeight;
+        }
+    </script>
+    <style>
+        @keyframes fade {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</body>
+
+</html>

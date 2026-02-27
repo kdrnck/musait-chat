@@ -106,6 +106,19 @@ function asBoolean(value: unknown): boolean | null {
   return null;
 }
 
+/**
+ * Replace {{tenant_id}} and other placeholders in system prompt text.
+ */
+export function resolveSystemPromptPlaceholders(
+  prompt: string,
+  vars: { tenantId?: string | null }
+): string {
+  return prompt.replace(
+    /\{\{tenant_id\}\}/gi,
+    vars.tenantId || "belirlenmedi"
+  );
+}
+
 function parseProviderPriority(value: unknown): string[] | null {
   if (Array.isArray(value)) {
     const list = value

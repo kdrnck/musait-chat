@@ -274,7 +274,10 @@ function buildResponse(args: {
     model: resolved.model,
     providerPriority: resolved.providerPriority,
     allowFallbacks: resolved.allowFallbacks,
-    promptText: resolved.promptText,
+    promptText: resolved.promptText.replace(
+      /\{\{tenant_id\}\}/gi,
+      args.tenantId
+    ),
     outboundNumberMode: resolved.outboundNumberMode,
     wabaPhoneNumberId: args.canEdit ? wabaPhoneNumberId : "",
     wabaAccessToken: args.canEdit ? wabaAccessToken : "",

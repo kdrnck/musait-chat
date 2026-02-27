@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
-import { Outfit, JetBrains_Mono } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
 
-const outfit = Outfit({
+const poppins = Poppins({
   subsets: ["latin"],
-  variable: "--font-outfit",
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-poppins",
   display: "swap",
 });
 
@@ -26,10 +21,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className="dark">
+    <html lang="tr" className="light">
       <body
-        className={`${outfit.variable} ${jetbrainsMono.variable} noise-overlay`}
-        style={{ fontFamily: "var(--font-outfit), sans-serif" }}
+        className={`${poppins.variable} antialiased`}
+        style={{ fontFamily: "var(--font-poppins), sans-serif" }}
       >
         <Providers>{children}</Providers>
       </body>

@@ -116,47 +116,59 @@ export function createJobHandler(convex: ConvexHttpClient) {
 
       // 4.5 Sync customer identity and handle explicit name updates
       if (conversation.tenantId) {
-        await convex.mutation(api.customerMemories.upsertPreferredTenant, {
-          customerPhone: job.customerPhone,
-          preferredTenantId: conversation.tenantId,
-        });
+        try {
+          await convex.mutation(api.customerMemories.upsertPreferredTenant, {
+            customerPhone: job.customerPhone,
+            preferredTenantId: conversation.tenantId,
+          });
+        } catch (memErr) {
+          console.warn(`⚠️ customerMemories upsert failed (non-fatal):`, memErr);
+        }
 
-        const identity = await syncCustomerIdentity(convex, {
-          tenantId: conversation.tenantId,
-          customerPhone: job.customerPhone,
-          contactName: job.contactName,
-        });
-        if (identity.customerName) {
-          job.customerName = identity.customerName;
+        try {
+          const identity = await syncCustomerIdentity(convex, {
+            tenantId: conversation.tenantId,
+            customerPhone: job.customerPhone,
+            contactName: job.contactName,
+          });
+          if (identity.customerName) {
+            job.customerName = identity.customerName;
+          }
+        } catch (idErr) {
+          console.warn(`⚠️ syncCustomerIdentity failed (non-fatal):`, idErr);
         }
 
         const requestedName = extractNameUpdateIntent(job.messageContent);
         if (requestedName && isLikelyRealName(requestedName)) {
-          await applyExplicitNameUpdate(convex, {
-            tenantId: conversation.tenantId,
-            customerPhone: job.customerPhone,
-            newName: requestedName,
-          });
+          try {
+            await applyExplicitNameUpdate(convex, {
+              tenantId: conversation.tenantId,
+              customerPhone: job.customerPhone,
+              newName: requestedName,
+            });
 
-          const updateReply = `Üzgünüm, kaydınızı *${requestedName}* olarak güncelledim.`;
+            const updateReply = `Üzgünüm, kaydınızı *${requestedName}* olarak güncelledim.`;
 
-          await convex.mutation(api.messages.create, {
-            conversationId: job.conversationId as any,
-            role: "agent",
-            content: updateReply,
-            status: "done",
-          });
+            await convex.mutation(api.messages.create, {
+              conversationId: job.conversationId as any,
+              role: "agent",
+              content: updateReply,
+              status: "done",
+            });
 
-          await sendWhatsAppMessage(job.customerPhone, updateReply, {
-            phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
-            accessToken: job.outboundAccessToken,
-          });
+            await sendWhatsAppMessage(job.customerPhone, updateReply, {
+              phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+              accessToken: job.outboundAccessToken,
+            });
 
-          await convex.mutation(api.messages.updateStatus, {
-            id: job.id as any,
-            status: "done",
-          });
-          return;
+            await convex.mutation(api.messages.updateStatus, {
+              id: job.id as any,
+              status: "done",
+            });
+            return;
+          } catch (nameErr) {
+            console.warn(`⚠️ applyExplicitNameUpdate failed (non-fatal):`, nameErr);
+          }
         }
       }
 

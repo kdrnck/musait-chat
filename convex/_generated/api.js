@@ -1,65 +1,23 @@
 /* eslint-disable */
 /**
- * Generated `api` utility for HTTP client usage.
+ * Generated `api` utility.
  *
- * THIS CODE IS MANUALLY CREATED FOR HTTP CLIENT COMPATIBILITY.
+ * THIS CODE IS AUTOMATICALLY GENERATED.
  *
+ * To regenerate, run `npx convex dev`.
  * @module
  */
 
-// Helper to create function references
-function makeFunctionReference(path) {
-  return path;
-}
+import { anyApi, componentsGeneric } from "convex/server";
 
-export const api = {
-  conversations: {
-    getActiveByPhone: makeFunctionReference("conversations:getActiveByPhone"),
-    getById: makeFunctionReference("conversations:getById"),
-    listByTenant: makeFunctionReference("conversations:listByTenant"),
-    listHandoffs: makeFunctionReference("conversations:listHandoffs"),
-    create: makeFunctionReference("conversations:create"),
-    bindToTenant: makeFunctionReference("conversations:bindToTenant"),
-    updateStatus: makeFunctionReference("conversations:updateStatus"),
-    updateSummary: makeFunctionReference("conversations:updateSummary"),
-    disableAgent: makeFunctionReference("conversations:disableAgent"),
-    enableAgent: makeFunctionReference("conversations:enableAgent"),
-    archiveAndReset: makeFunctionReference("conversations:archiveAndReset"),
-    touchLastMessage: makeFunctionReference("conversations:touchLastMessage"),
-  },
-  messages: {
-    listByConversation: makeFunctionReference("messages:listByConversation"),
-    getContextWindow: makeFunctionReference("messages:getContextWindow"),
-    getPendingMessages: makeFunctionReference("messages:getPendingMessages"),
-    create: makeFunctionReference("messages:create"),
-    updateStatus: makeFunctionReference("messages:updateStatus"),
-    markRetry: makeFunctionReference("messages:markRetry"),
-  },
-  customerProfiles: {
-    getByPhone: makeFunctionReference("customerProfiles:getByPhone"),
-    listByTenant: makeFunctionReference("customerProfiles:listByTenant"),
-    upsert: makeFunctionReference("customerProfiles:upsert"),
-    appendNotes: makeFunctionReference("customerProfiles:appendNotes"),
-  },
-  whatsappNumbers: {
-    getByPhoneNumberId: makeFunctionReference("whatsappNumbers:getByPhoneNumberId"),
-    getByTenant: makeFunctionReference("whatsappNumbers:getByTenant"),
-    getMasterNumber: makeFunctionReference("whatsappNumbers:getMasterNumber"),
-    listAll: makeFunctionReference("whatsappNumbers:listAll"),
-    register: makeFunctionReference("whatsappNumbers:register"),
-    deactivate: makeFunctionReference("whatsappNumbers:deactivate"),
-  },
-  tenantCodes: {
-    getByCode: makeFunctionReference("tenantCodes:getByCode"),
-    listActive: makeFunctionReference("tenantCodes:listActive"),
-    buildSelectionMessage: makeFunctionReference("tenantCodes:buildSelectionMessage"),
-    upsert: makeFunctionReference("tenantCodes:upsert"),
-  },
-  magicLinks: {
-    validate: makeFunctionReference("magicLinks:validate"),
-    create: makeFunctionReference("magicLinks:create"),
-    markUsed: makeFunctionReference("magicLinks:markUsed"),
-  },
-};
-
-export const internal = {};
+/**
+ * A utility for referencing Convex functions in your app's API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+export const api = anyApi;
+export const internal = anyApi;
+export const components = componentsGeneric();

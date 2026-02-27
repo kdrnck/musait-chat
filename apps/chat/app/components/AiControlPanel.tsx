@@ -4,6 +4,7 @@ import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 import { Settings2, X, Save, RefreshCw } from "lucide-react";
 import {
   AI_MODEL_PRESETS,
+  DEFAULT_AI_SYSTEM_PROMPT,
   type AiModelProfile,
   type OutboundNumberMode,
 } from "@/lib/ai/settings";
@@ -351,6 +352,34 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                   </div>
 
                   <Field label="Mutlak Prompt (System Prompt)">
+                    <div className="flex items-center justify-between mb-1">
+                      <span
+                        className="text-[10px]"
+                        style={{ color: "var(--color-text-muted)" }}
+                      >
+                        {settings.promptText.length} / 8000 karakter
+                      </span>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSettings({
+                              ...settings,
+                              promptText: DEFAULT_AI_SYSTEM_PROMPT,
+                            })
+                          }
+                          className="text-[10px] px-2 py-0.5 transition-colors"
+                          style={{
+                            color: "var(--color-text-muted)",
+                            border: "1px solid var(--color-border)",
+                            background: "transparent",
+                          }}
+                          title="Varsayılan prompt'a sıfırla"
+                        >
+                          Varsayılana Sıfırla
+                        </button>
+                      )}
+                    </div>
                     <textarea
                       value={settings.promptText}
                       onChange={(e) =>
@@ -359,6 +388,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                       disabled={!canEdit}
                       className="w-full min-h-[260px] px-3 py-2 text-xs resize-y"
                       style={inputStyle}
+                      placeholder="Sistem prompt'unu buraya yazın..."
                     />
                   </Field>
 
@@ -393,87 +423,91 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                     </Field>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label="WABA Phone Number ID">
-                      <input
-                        type="text"
-                        value={settings.wabaPhoneNumberId}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            wabaPhoneNumberId: e.target.value,
-                          })
-                        }
-                        disabled={!canEdit}
-                        className="w-full px-3 py-2 text-sm"
-                        style={inputStyle}
-                      />
-                    </Field>
+                  {settings.outboundNumberMode === "tenant" && (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="WABA Phone Number ID">
+                          <input
+                            type="text"
+                            value={settings.wabaPhoneNumberId}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                wabaPhoneNumberId: e.target.value,
+                              })
+                            }
+                            disabled={!canEdit}
+                            className="w-full px-3 py-2 text-sm"
+                            style={inputStyle}
+                          />
+                        </Field>
 
-                    <Field label="WABA Access Token">
-                      <input
-                        type="password"
-                        value={settings.wabaAccessToken}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            wabaAccessToken: e.target.value,
-                          })
-                        }
-                        disabled={!canEdit}
-                        className="w-full px-3 py-2 text-sm"
-                        style={inputStyle}
-                      />
-                    </Field>
+                        <Field label="WABA Access Token">
+                          <input
+                            type="password"
+                            value={settings.wabaAccessToken}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                wabaAccessToken: e.target.value,
+                              })
+                            }
+                            disabled={!canEdit}
+                            className="w-full px-3 py-2 text-sm"
+                            style={inputStyle}
+                          />
+                        </Field>
 
-                    <Field label="WABA Business Account ID">
-                      <input
-                        type="text"
-                        value={settings.wabaBusinessAccountId}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            wabaBusinessAccountId: e.target.value,
-                          })
-                        }
-                        disabled={!canEdit}
-                        className="w-full px-3 py-2 text-sm"
-                        style={inputStyle}
-                      />
-                    </Field>
+                        <Field label="WABA Business Account ID">
+                          <input
+                            type="text"
+                            value={settings.wabaBusinessAccountId}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                wabaBusinessAccountId: e.target.value,
+                              })
+                            }
+                            disabled={!canEdit}
+                            className="w-full px-3 py-2 text-sm"
+                            style={inputStyle}
+                          />
+                        </Field>
 
-                    <Field label="WABA Verify Token">
-                      <input
-                        type="password"
-                        value={settings.wabaVerifyToken}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            wabaVerifyToken: e.target.value,
-                          })
-                        }
-                        disabled={!canEdit}
-                        className="w-full px-3 py-2 text-sm"
-                        style={inputStyle}
-                      />
-                    </Field>
-                  </div>
+                        <Field label="WABA Verify Token">
+                          <input
+                            type="password"
+                            value={settings.wabaVerifyToken}
+                            onChange={(e) =>
+                              setSettings({
+                                ...settings,
+                                wabaVerifyToken: e.target.value,
+                              })
+                            }
+                            disabled={!canEdit}
+                            className="w-full px-3 py-2 text-sm"
+                            style={inputStyle}
+                          />
+                        </Field>
+                      </div>
 
-                  <Field label="WABA App Secret">
-                    <input
-                      type="password"
-                      value={settings.wabaAppSecret}
-                      onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          wabaAppSecret: e.target.value,
-                        })
-                      }
-                      disabled={!canEdit}
-                      className="w-full px-3 py-2 text-sm"
-                      style={inputStyle}
-                    />
-                  </Field>
+                      <Field label="WABA App Secret">
+                        <input
+                          type="password"
+                          value={settings.wabaAppSecret}
+                          onChange={(e) =>
+                            setSettings({
+                              ...settings,
+                              wabaAppSecret: e.target.value,
+                            })
+                          }
+                          disabled={!canEdit}
+                          className="w-full px-3 py-2 text-sm"
+                          style={inputStyle}
+                        />
+                      </Field>
+                    </>
+                  )}
 
                   {!canEdit && (
                     <div
