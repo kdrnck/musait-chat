@@ -114,10 +114,19 @@ export function resolveSystemPromptPlaceholders(
   prompt: string,
   vars: { tenantId?: string | null }
 ): string {
-  return prompt.replace(
+  const now = new Date().toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
+
+  let resolved = prompt.replace(
     /\{\{tenant_id\}\}/gi,
     vars.tenantId || "belirlenmedi"
   );
+
+  resolved = resolved.replace(
+    /\{\{current_date\}\}/gi,
+    now
+  );
+
+  return resolved;
 }
 
 function parseProviderPriority(value: unknown): string[] | null {
