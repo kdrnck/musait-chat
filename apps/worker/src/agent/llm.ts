@@ -118,6 +118,12 @@ async function buildContext(
   });
   messages.push({ role: "system", content: systemPrompt });
 
+  // Temporal awareness for the LLM
+  messages.push({
+    role: "system",
+    content: `Bugünün tarihi ve saati (Türkiye Saati): ${new Date().toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}. "Yarın", "haftaya", "bugün" gibi kavramları buna göre hesapla.`,
+  });
+
   if (conversation.tenantId && tenantCtx) {
     const serviceLink = buildServiceLink(
       tenantCtx.slug,
