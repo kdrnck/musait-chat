@@ -7,7 +7,8 @@ export type AgentToolName =
   | "cancel_appointment"
   | "suggest_least_busy_staff"
   | "ask_human"
-  | "end_session";
+  | "end_session"
+  | "bind_tenant";
 
 /** Base tool call request from LLM */
 export interface ToolCallRequest {

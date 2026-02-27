@@ -7,7 +7,7 @@ import {
   resolveTenantAiSettings,
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
-import { ADMIN_MODE } from "./master-prompts.js";
+import { ADMIN_MODE, UNBOUND_ROUTING_PROMPT } from "./master-prompts.js";
 
 interface Conversation {
   _id: any;
@@ -78,7 +78,7 @@ export async function runAgentLoop(
         console.log(`🔧 Tool call: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`);
 
         const result = await executeToolCall(convex, toolCall, {
-          tenantId: conversation.tenantId!,
+          tenantId: conversation.tenantId,
           conversationId: conversation._id,
           customerPhone: job.customerPhone,
           customerName: job.customerName,
@@ -124,35 +124,44 @@ async function buildContext(
 
   if (conversation.tenantId) {
     const tenantCtx = await fetchTenantContext(conversation.tenantId);
-    
+
     console.log(`📋 Tenant Context Fetched: ${tenantCtx ? 'YES' : 'NO'}`);
     console.log(`📋 Integration Keys: ${tenantCtx?.integrationKeys ? JSON.stringify(Object.keys(tenantCtx.integrationKeys)) : 'NONE'}`);
-    
+
     if (tenantCtx?.integrationKeys) {
       const rawPrompt = tenantCtx.integrationKeys.ai_system_prompt_text;
       console.log(`📋 Raw ai_system_prompt_text type: ${typeof rawPrompt}`);
       console.log(`📋 Raw ai_system_prompt_text value (first 150 chars): ${rawPrompt ? String(rawPrompt).slice(0, 150) : 'NULL/UNDEFINED'}`);
     }
-    
+
     tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys, globalPrompt);
     dashboardPrompt = tenantAiSettings.systemPromptText;
-    
+
     console.log(`📋 Resolved System Prompt Length: ${dashboardPrompt?.length || 0}`);
     console.log(`📋 Resolved System Prompt (first 200 chars): ${dashboardPrompt ? dashboardPrompt.slice(0, 200) : 'NULL'}`);
   }
 
   // ========== STEP 2: SYSTEM PROMPT ==========
   // System prompt is the ONLY source of agent personality/rules
-  // It comes from: Admin Mode > Dashboard (tenant) > Global Settings > Minimal Fallback
-  
+  // It comes from: Admin Mode > Unbound routing > Dashboard (tenant) > Global Settings > Minimal Fallback
+
   // 🔓 ADMIN MODE - Override everything if active
   let systemPromptContent: string;
   let promptSource: string;
-  
+
   if (conversation.adminMode) {
     systemPromptContent = ADMIN_MODE.systemPrompt;
     promptSource = 'ADMIN_MODE';
     console.log(`🔓 ADMIN MODE ACTIVE - Using admin system prompt`);
+  } else if (!conversation.tenantId) {
+    // 🔀 UNBOUND — fetch tenant list and use routing prompt
+    const activeTenants = await fetchActiveTenants(convex);
+    const tenantList = activeTenants.length > 0
+      ? activeTenants.map((t) => `- ${t.tenantName} (tenant_id: ${t.tenantId})`).join("\n")
+      : "Şu anda aktif işletme yok.";
+    systemPromptContent = UNBOUND_ROUTING_PROMPT(tenantList);
+    promptSource = 'ROUTING';
+    console.log(`🔀 UNBOUND - Using routing prompt (${activeTenants.length} tenants)`);
   } else {
     systemPromptContent = dashboardPrompt || globalPrompt || "Sen yardımcı bir asistansın. Kullanıcının isteklerine Türkçe yanıt ver.";
     promptSource = dashboardPrompt ? 'DASHBOARD' : globalPrompt ? 'GLOBAL' : 'FALLBACK';
@@ -403,6 +412,20 @@ async function fetchTenantContext(tenantId: string): Promise<{
     slug: tenant.slug || null,
     integrationKeys: tenant.integration_keys || {},
   };
+}
+
+async function fetchActiveTenants(
+  convex: ConvexHttpClient
+): Promise<Array<{ tenantId: string; tenantName: string }>> {
+  try {
+    const list = await convex.query(api.tenantCodes.listActive);
+    return (list || []).map((t: any) => ({
+      tenantId: t.tenantId,
+      tenantName: t.tenantName,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function fetchGlobalSettings(): Promise<string | null> {

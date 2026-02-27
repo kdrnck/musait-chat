@@ -6,9 +6,10 @@ import { cancelAppointment } from "./cancel-appointment.js";
 import { askHuman } from "./ask-human.js";
 import { endSession } from "./end-session.js";
 import { suggestLeastBusyStaff } from "./suggest-staff.js";
+import { bindTenant } from "./bind-tenant.js";
 
 interface ToolContext {
-  tenantId: string;
+  tenantId: string | null;
   conversationId: string;
   customerPhone: string;
   customerName?: string;
@@ -46,6 +47,11 @@ export async function executeToolCall(
       case "suggest_least_busy_staff":
         result = await suggestLeastBusyStaff(toolCall.arguments, ctx);
         break;
+      case "bind_tenant":
+        result = await bindTenant(convex, toolCall.arguments as { tenant_id: string }, {
+          conversationId: ctx.conversationId,
+        });
+        break;
       default:
         return {
           toolCallId: toolCall.id,
@@ -77,6 +83,24 @@ export async function executeToolCall(
  */
 export function getToolDefinitions() {
   return [
+    {
+      type: "function",
+      function: {
+        name: "bind_tenant",
+        description:
+          "Konuşmayı bir işletmeye bağlar. Yalnızca konuşma henüz bir işletmeye atanmamışken kullanılır.",
+        parameters: {
+          type: "object",
+          properties: {
+            tenant_id: {
+              type: "string",
+              description: "Bağlanacak işletmenin tenant ID'si",
+            },
+          },
+          required: ["tenant_id"],
+        },
+      },
+    },
     {
       type: "function",
       function: {

@@ -129,12 +129,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
       conversation = refreshedConversation;
       
       if (!conversation.tenantId) {
-        console.error(`❌ Tenant not set for conversation ${job.conversationId} - cannot proceed to agent`);
-        await convex.mutation(api.messages.updateStatus, {
-          id: job.id as any,
-          status: "failed",
-        });
-        return;
+        console.log(`🔀 Tenant not set for conversation ${job.conversationId} - routing agent will handle binding`);
       }
 
       // 4.5 Sync customer identity and handle explicit name updates
