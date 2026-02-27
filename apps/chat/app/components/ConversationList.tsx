@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import ConversationCard from "./ConversationCard";
 import AiControlPanel from "./AiControlPanel";
-import { Search, MessageSquare, AlertTriangle, UserCheck, LogOut } from "lucide-react";
+import { Search, MessageSquare, AlertTriangle, UserCheck, LogOut, Bug, LayoutGrid, ChevronDown } from "lucide-react";
 
 type FilterTab = "all" | "attention" | "handoff";
 
@@ -48,10 +48,11 @@ export default function ConversationList({
         router.refresh();
     };
 
-    // Subscribe to conversations in real-time
+    // If tenantId is null and isAdmin is true, we might want to list ALL conversations
+    // Check if the API supports it.
     const conversations = useQuery(
         api.conversations.listByTenant,
-        tenantId ? { tenantId } : "skip"
+        tenantId ? { tenantId } : (isAdmin ? {} : "skip")
     );
 
     const filtered = useMemo(() => {
@@ -59,260 +60,181 @@ export default function ConversationList({
 
         let result = [...conversations];
 
-        // Filter by status
         if (filter === "attention") {
-            result = result.filter(
-                (c) => c.status === "active" && c.retryState.count > 0
-            );
+            result = result.filter((c) => (c.retryState?.count ?? 0) > 0);
         } else if (filter === "handoff") {
             result = result.filter((c) => c.status === "handoff");
         }
 
-        // Search by phone or summary
         if (search.trim()) {
             const q = search.toLowerCase();
             result = result.filter(
                 (c) =>
-                    c.customerPhone.includes(q) ||
-                    c.rollingSummary.toLowerCase().includes(q)
+                    c.customerPhone.toLowerCase().includes(q) ||
+                    (c.rollingSummary || "").toLowerCase().includes(q) ||
+                    (c.tenantName || "").toLowerCase().includes(q)
             );
         }
-
-        // Sort by most recent
-        result.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
 
         return result;
     }, [conversations, filter, search]);
 
-    const tabs: { key: FilterTab; label: string; icon: React.ReactNode }[] = [
-        { key: "all", label: "Tümü", icon: <MessageSquare size={14} /> },
-        {
-            key: "attention",
-            label: "Dikkat",
-            icon: <AlertTriangle size={14} />,
-        },
-        { key: "handoff", label: "İnsan", icon: <UserCheck size={14} /> },
+    const counts = useMemo(() => {
+        if (!conversations) return { all: 0, attention: 0, handoff: 0 };
+        return {
+            all: conversations.length,
+            attention: conversations.filter((c) => (c.retryState?.count ?? 0) > 0).length,
+            handoff: conversations.filter((c) => c.status === "handoff").length,
+        };
+    }, [conversations]);
+
+    const filterTabs: { key: FilterTab; label: string; icon: React.ReactNode; count: number }[] = [
+        { key: "all", label: "Tümü", icon: <MessageSquare size={14} />, count: counts.all },
+        { key: "attention", label: "Dikkat", icon: <AlertTriangle size={14} />, count: counts.attention },
+        { key: "handoff", label: "İnsan", icon: <UserCheck size={14} />, count: counts.handoff },
     ];
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-[#111111]">
             {/* ── Header ── */}
-            <div className="flex items-center justify-between px-6 py-6 pb-4">
-                <div className="flex items-center gap-3 font-bold text-lg tracking-tight" style={{ color: "var(--color-text-primary)" }}>
-                    <div
-                        className="w-8 h-8 flex items-center justify-center rounded-xl"
-                        style={{
-                            background: "var(--color-text-primary)",
-                            color: "var(--color-surface-1)",
-                        }}
-                    >
-                        <MessageSquare size={16} strokeWidth={2.5} />
+            <div className="px-6 pt-8 pb-4 flex-shrink-0">
+                {/* Logo & Brand */}
+                <div className="flex items-center gap-3 mb-8 group cursor-pointer" onClick={() => router.push("/")}>
+                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center glass border-white/5 shadow-xl relative overflow-hidden">
+                        <img src="/musait-dark.png" alt="m" className="w-6 h-6 relative z-10" />
+                        <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10" />
                     </div>
-                    Müsait
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-[18px] font-bold tracking-tight text-white leading-tight">
+                            müsait <span style={{ color: "var(--color-brand)" }}>chat</span>
+                        </h1>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className="status-dot status-dot--ai !w-1.5 !h-1.5" />
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#666666]">Canlı Panel</p>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            {/* ── Admin Tenant Selector ── */}
-            {isAdmin && allTenants && onTenantChange && (
-                <div className="px-6 pb-4">
-                    <select
-                        value={tenantId || ""}
-                        onChange={(e) => {
-                            onSelect("" as Id<"conversations">); // clear selected convo
-                            onTenantChange(e.target.value);
-                        }}
-                        className="w-full bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm font-semibold outline-none"
-                    >
-                        {allTenants.map((t) => (
-                            <option key={t.id} value={t.id}>
-                                {t.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            )}
+                {/* Admin tenant selector */}
+                {isAdmin && allTenants && onTenantChange && (
+                    <div className="relative mb-6">
+                        <LayoutGrid size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#666666]" />
+                        <select
+                            value={tenantId || "all"}
+                            onChange={(e) => onTenantChange(e.target.value === "all" ? "" : e.target.value)}
+                            className="w-full appearance-none bg-white/5 border border-white/10 hover:border-white/20 transition-colors py-3.5 pl-11 pr-10 rounded-2xl text-[13px] font-medium text-white outline-none cursor-pointer"
+                        >
+                            <option value="all" className="bg-[#1a1a1a]">Tüm İşletmeler</option>
+                            {allTenants.map((t) => (
+                                <option key={t.id} value={t.id} className="bg-[#1a1a1a]">{t.name}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#666666] pointer-events-none" />
+                    </div>
+                )}
 
-            {/* ── Search ── */}
-            <div className="px-6 pb-4">
-                <div
-                    className="flex items-center gap-2 px-4 py-3 rounded-xl transition-all"
-                    style={{
-                        background: "var(--color-surface-2)",
-                        border: "1px solid transparent",
-                    }}
-                    onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
-                    onBlur={(e) => (e.currentTarget.style.borderColor = "transparent")}
-                >
-                    <Search size={16} style={{ color: "var(--color-text-muted)" }} />
+                {/* Search */}
+                <div className="relative group mb-6">
+                    <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#666666] group-focus-within:text-[var(--color-brand)] transition-colors" />
                     <input
                         type="text"
-                        placeholder="Ara..."
+                        placeholder="Müşteri veya mesaj ara..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="bg-transparent outline-none flex-1 text-sm font-medium placeholder:text-[var(--color-text-muted)]"
-                        style={{ color: "var(--color-text-primary)" }}
+                        className="w-full bg-white/5 border border-white/10 group-focus-within:border-[var(--color-brand-glow-strong)] transition-all py-3.5 pl-11 pr-4 rounded-2xl text-[13px] font-medium text-white outline-none placeholder:text-[#444444]"
                     />
                 </div>
-            </div>
 
-            {/* ── Filter Tabs ── */}
-            <div className="flex gap-2 px-6 pb-4">
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.key}
-                        onClick={() => setFilter(tab.key)}
-                        className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold rounded-full transition-all"
-                        style={{
-                            background:
-                                filter === tab.key
-                                    ? "var(--color-surface-2)"
-                                    : "transparent",
-                            color:
-                                filter === tab.key
-                                    ? "var(--color-text-primary)"
-                                    : "var(--color-text-secondary)",
-                            border: `1px solid ${filter === tab.key ? "var(--color-border)" : "transparent"}`,
-                        }}
-                    >
-                        {tab.icon}
-                        {tab.label}
-                    </button>
-                ))}
+                {/* Filter tabs */}
+                <div className="flex p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
+                    {filterTabs.map((tab) => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setFilter(tab.key)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-[12px] font-bold rounded-xl transition-all duration-300 ${
+                                filter === tab.key 
+                                ? "bg-white/10 text-white shadow-lg" 
+                                : "text-[#666666] hover:text-[#AAAAAA]"
+                            }`}
+                        >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                            {tab.count > 0 && (
+                                <span className={`flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-[9px] font-black ${
+                                    filter === tab.key ? "bg-[var(--color-brand)] text-[#111]" : "bg-white/5 text-[#444]"
+                                }`}>
+                                    {tab.count}
+                                </span>
+                            )}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* ── Conversation List ── */}
-            <div className="flex-1 overflow-y-auto px-2 pb-2">
+            <div className="flex-1 overflow-y-auto px-3 py-2 sidebar-scroll">
                 {!conversations ? (
-                    // Loading state
-                    <div className="flex flex-col gap-2 px-2 pt-2">
-                        {[...Array(5)].map((_, i) => (
-                            <div
-                                key={i}
-                                className="h-20 animate-pulse"
-                                style={{
-                                    background: "var(--color-surface-2)",
-                                    animationDelay: `${i * 100}ms`,
-                                }}
-                            />
-                        ))}
+                    <div className="flex flex-col items-center justify-center h-48 gap-4">
+                        <div className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin"
+                            style={{ borderColor: "var(--color-brand)", borderTopColor: "transparent" }} />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-[#444444]">Yükleniyor...</span>
                     </div>
                 ) : filtered.length === 0 ? (
-                    // Empty state
-                    <div
-                        className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center"
-                    >
-                        <MessageSquare
-                            size={32}
-                            style={{ color: "var(--color-text-muted)" }}
-                        />
-                        <p
-                            className="text-sm"
-                            style={{ color: "var(--color-text-muted)" }}
-                        >
-                            {search
-                                ? "Sonuç bulunamadı"
-                                : "Henüz konuşma yok"}
-                        </p>
+                    <div className="flex flex-col items-center justify-center h-48 gap-3 animate-fade-in">
+                        <div className="w-12 h-12 rounded-2xl bg-white/[0.02] flex items-center justify-center border border-white/5">
+                            <MessageSquare size={20} className="text-[#333333]" />
+                        </div>
+                        <span className="text-[12px] font-medium text-[#444444]">
+                            {search ? "Sonuç bulunamadı" : "Henüz konuşma yok"}
+                        </span>
                     </div>
                 ) : (
-                    // Conversation cards
-                    <div className="flex flex-col gap-1 pt-1">
-                        {filtered.map((conversation, i) => (
-                            <div
-                                key={conversation._id}
-                                className="animate-fade-in"
-                                style={{ animationDelay: `${i * 40}ms` }}
-                            >
-                                <ConversationCard
-                                    conversation={conversation}
-                                    isSelected={selectedId === conversation._id}
-                                    onClick={() => onSelect(conversation._id)}
-                                />
-                            </div>
+                    <div className="space-y-1">
+                        {filtered.map((c) => (
+                            <ConversationCard
+                                key={c._id}
+                                conversation={c}
+                                isSelected={selectedId === c._id}
+                                onClick={() => onSelect(c._id)}
+                            />
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* ── Footer: Tenant Profile ── */}
-            <div
-                className="border-t"
-                style={{ borderColor: "var(--color-border)" }}
-            >
-                {/* Business info */}
-                <div
-                    className="flex items-center gap-3 px-4 py-3"
-                    style={{
-                        background: "var(--color-surface-2)",
-                    }}
-                >
-                    {/* Logo or initials */}
-                    <div
-                        className="w-9 h-9 flex-shrink-0 flex items-center justify-center overflow-hidden"
-                        style={{
-                            background: tenantLogo ? "transparent" : "var(--color-brand-glow)",
-                            border: "1px solid var(--color-border-brand)",
-                            borderRadius: "10px",
-                        }}
-                    >
-                        {tenantLogo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                                src={tenantLogo}
-                                alt={tenantName || "İşletme"}
-                                className="w-full h-full object-cover"
-                            />
-                        ) : (
-                            <span
-                                className="text-sm font-bold"
-                                style={{ color: "var(--color-brand)" }}
-                            >
-                                {(tenantName || "?")[0].toUpperCase()}
-                            </span>
-                        )}
-                    </div>
+            {/* ── Footer ── */}
+            <div className="mt-auto flex-shrink-0 px-4 py-4 space-y-3">
+                <AiControlPanel tenantId={tenantId} />
 
-                    {/* Text */}
+                <div className="flex items-center gap-3 p-3 rounded-[24px] bg-white/[0.02] border border-white/5">
+                    <div className="w-9 h-9 rounded-xl bg-[var(--color-brand)] flex items-center justify-center text-[#111111] font-bold text-xs shadow-lg shadow-[var(--color-brand-glow)]">
+                        {userEmail?.charAt(0).toUpperCase()}
+                    </div>
                     <div className="flex-1 min-w-0">
-                        <p
-                            className="text-sm font-semibold truncate"
-                            style={{ color: "var(--color-text-primary)" }}
-                        >
-                            {tenantName || "İşletme Yükleniyor..."}
+                        <p className="text-[12px] font-bold text-white truncate">
+                            {userEmail?.split('@')[0]}
                         </p>
-                        <p
-                            className="text-[10px] truncate"
-                            style={{
-                                color: "var(--color-text-muted)",
-                                fontFamily: "var(--font-mono)",
-                            }}
-                        >
-                            {userEmail || ""}
+                        <p className="text-[10px] font-medium text-[#666666] truncate uppercase tracking-tight">
+                            {isAdmin ? 'Süper Yönetici' : 'İşletme Yetkilisi'}
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex gap-1">
                         <button
                             onClick={onToggleDebug}
-                            className={`p-1.5 flex-shrink-0 transition-colors rounded-md ${debugMode ? 'bg-[var(--color-brand-glow)] text-[var(--color-brand)]' : 'text-[var(--color-text-muted)]'}`}
-                            title={debugMode ? "Geliştirici ModuAçık" : "Geliştirici Modu Kapalı"}
+                            className={`p-2 rounded-xl transition-all duration-300 hover:bg-white/5 ${
+                                debugMode ? "text-[var(--color-brand)]" : "text-[#444444]"
+                            }`}
+                            title="Debug modu"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 2 1.88 1.88" /><path d="M14.12 3.88 16 2" /><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" /><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6" /><path d="M12 20v-9" /><path d="M6.53 9C4.6 8.8 3 7.1 3 5" /><path d="M6 13H2" /><path d="M3 21c0-2.1 1.7-3.9 3.8-4" /><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4" /><path d="M22 13h-4" /><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" /></svg>
+                            <Bug size={16} />
                         </button>
-                        <AiControlPanel tenantId={tenantId} />
                         <button
                             onClick={handleLogout}
-                            className="p-1.5 flex-shrink-0 transition-colors"
-                            style={{ color: "var(--color-text-muted)" }}
-                            onMouseEnter={(e) =>
-                                (e.currentTarget.style.color = "var(--color-status-attention)")
-                            }
-                            onMouseLeave={(e) =>
-                                (e.currentTarget.style.color = "var(--color-text-muted)")
-                            }
-                            title="Çıkış Yap"
+                            className="p-2 rounded-xl text-[#444444] hover:text-[#FF5A5F] hover:bg-red-500/10 transition-all duration-300"
+                            title="Çıkış yap"
                         >
-                            <LogOut size={15} />
+                            <LogOut size={16} />
                         </button>
                     </div>
                 </div>

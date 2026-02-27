@@ -1,173 +1,135 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import { useState } from "react";
-import { Send, Hand, Play } from "lucide-react";
+import { Send, Zap, UserPlus, Loader2, Sparkles } from "lucide-react";
 
 export default function ChatInput({
     conversationId,
-    conversationStatus,
+    status,
 }: {
     conversationId: Id<"conversations">;
-    conversationStatus: "active" | "archived" | "handoff";
+    status: "active" | "handoff";
 }) {
     const [text, setText] = useState("");
     const [sending, setSending] = useState(false);
+    
+    const sendMessage = useMutation(api.messages.send);
+    const updateStatus = useMutation(api.conversations.updateStatus);
 
-    const sendMessage = useMutation(api.messages.create);
-    const disableAgent = useMutation(api.conversations.disableAgent);
-    const enableAgent = useMutation(api.conversations.enableAgent);
+    const handleSend = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!text.trim() || sending) return;
 
-    const isHandoff = conversationStatus === "handoff";
-    const canSend = isHandoff && text.trim().length > 0;
-
-    const handleSend = async () => {
-        if (!canSend || sending) return;
         setSending(true);
         try {
             await sendMessage({
                 conversationId,
-                role: "human",
                 content: text.trim(),
-                status: "pending",
+                role: "human",
             });
             setText("");
         } catch (err) {
-            console.error("Failed to send message:", err);
+            console.error(err);
         } finally {
             setSending(false);
         }
     };
 
-    const handleTakeOver = async () => {
-        try {
-            // Disable agent for 24 hours
-            await disableAgent({
-                id: conversationId,
-                disabledUntilMs: Date.now() + 24 * 60 * 60 * 1000,
-            });
-        } catch (err) {
-            console.error("Failed to take over:", err);
-        }
+    const handleHandoffToggle = async () => {
+        await updateStatus({
+            id: conversationId,
+            status: status === "handoff" ? "active" : "handoff",
+        });
     };
 
-    const handleResumeAI = async () => {
-        try {
-            await enableAgent({ id: conversationId });
-        } catch (err) {
-            console.error("Failed to resume AI:", err);
-        }
-    };
+    const isHandoff = status === "handoff";
 
     return (
-        <div
-            className="border-t px-4 py-3"
-            style={{
-                borderColor: "var(--color-border)",
-                background: "var(--color-surface-1)",
-            }}
-        >
-            {/* Handoff controls */}
-            <div className="flex items-center gap-2 mb-3">
-                {!isHandoff ? (
-                    <button
-                        onClick={handleTakeOver}
-                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all"
-                        style={{
-                            background: "transparent",
-                            border: "1px solid var(--color-border-brand)",
-                            color: "var(--color-brand)",
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "var(--color-brand-glow)";
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = "transparent";
-                        }}
-                    >
-                        <Hand size={14} />
-                        Devral
-                    </button>
-                ) : (
-                    <button
-                        onClick={handleResumeAI}
-                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all"
-                        style={{
-                            background: "var(--color-brand)",
-                            color: "var(--color-surface-base)",
-                            border: "1px solid var(--color-brand)",
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "var(--color-brand-dim)";
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = "var(--color-brand)";
-                        }}
-                    >
-                        <Play size={14} />
-                        AI&apos;ı Devam Ettir
-                    </button>
-                )}
+        <div className="px-6 py-6 pb-8 bg-gradient-to-t from-[var(--color-surface-base)] via-[var(--color-surface-base)] to-transparent z-20">
+            <div className="max-w-4xl mx-auto space-y-4">
+                
+                {/* Status Bar / Actions */}
+                <div className="flex items-center justify-between px-2">
+                    <div className="flex items-center gap-3">
+                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border transition-all ${
+                            isHandoff 
+                            ? 'bg-[var(--color-brand-light)] border-[var(--color-brand-glow-strong)] text-[var(--color-brand-dim)]' 
+                            : 'bg-white border-black/5 text-[var(--color-text-muted)]'
+                        }`}>
+                            <div className={`w-2 h-2 rounded-full ${isHandoff ? 'bg-[var(--color-brand-dim)] animate-pulse' : 'bg-gray-300'}`} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                                {isHandoff ? "İnsan Modu Aktif" : "Yapay Zeka Yönetiyor"}
+                            </span>
+                        </div>
+                    </div>
 
-                {isHandoff && (
-                    <span
-                        className="text-[10px] uppercase tracking-wider"
-                        style={{
-                            color: "var(--color-status-handoff)",
-                            fontFamily: "var(--font-mono)",
-                        }}
+                    <button
+                        onClick={handleHandoffToggle}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-[12px] font-bold transition-all ${
+                            isHandoff
+                            ? "bg-white border border-black/5 text-[var(--color-text-primary)] hover:bg-black/5"
+                            : "bg-[var(--color-brand)] text-[#111111] shadow-xl shadow-[var(--color-brand-glow)] hover:scale-105"
+                        }`}
                     >
-                        ● İnsan kontrolünde
-                    </span>
-                )}
-            </div>
+                        {isHandoff ? (
+                            <>
+                                <Zap size={14} />
+                                <span>AI'yı Devam Ettir</span>
+                            </>
+                        ) : (
+                            <>
+                                <UserPlus size={14} />
+                                <span>Görüşmeyi Devral</span>
+                            </>
+                        )}
+                    </button>
+                </div>
 
-            {/* Text input */}
-            <div
-                className="flex items-center gap-2 px-3 py-2 rounded-2xl mx-4 mb-4"
-                style={{
-                    background: "var(--color-surface-base)",
-                    border: `1px solid ${isHandoff ? "var(--color-border-brand)" : "var(--color-border)"}`,
-                    opacity: isHandoff ? 1 : 0.6,
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.02)"
-                }}
-            >
-                <input
-                    type="text"
-                    placeholder={
-                        isHandoff
-                            ? "Mesajınızı yazın..."
-                            : "Mesaj göndermek için önce devralın"
-                    }
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSend();
-                        }
-                    }}
-                    disabled={!isHandoff}
-                    className="flex-1 bg-transparent outline-none px-3 py-2 text-[15px] placeholder:text-[var(--color-text-muted)]"
-                    style={{ color: "var(--color-text-primary)" }}
-                />
-                <button
-                    onClick={handleSend}
-                    disabled={!canSend || sending}
-                    className="flex items-center justify-center w-10 h-10 rounded-xl transition-all"
-                    style={{
-                        background: canSend ? "var(--color-brand)" : "var(--color-surface-3)",
-                        color: canSend
-                            ? "var(--color-surface-1)"
-                            : "var(--color-text-muted)",
-                        cursor: canSend ? "pointer" : "not-allowed",
-                        boxShadow: canSend ? "0 4px 12px var(--color-brand-glow)" : "none"
-                    }}
+                {/* Input Area */}
+                <form 
+                    onSubmit={handleSend}
+                    className={`relative glass-pill p-2 flex items-center gap-2 transition-all duration-300 border ${
+                        !isHandoff && !text ? "opacity-60 grayscale-[0.5]" : "opacity-100"
+                    }`}
                 >
-                    <Send size={18} />
-                </button>
+                    <div className="w-12 h-12 flex items-center justify-center text-[var(--color-text-muted)]">
+                        {isHandoff ? <Sparkles size={20} className="text-[var(--color-brand-dim)]" /> : <Zap size={20} />}
+                    </div>
+                    
+                    <input
+                        type="text"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        placeholder={isHandoff ? "Mesajınızı yazın..." : "Mesaj yazmak için önce görüşmeyi devralın"}
+                        disabled={!isHandoff}
+                        className="flex-1 bg-transparent border-none outline-none py-4 px-2 text-[15px] font-medium text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] placeholder:font-normal"
+                    />
+
+                    <button
+                        type="submit"
+                        disabled={!text.trim() || sending || !isHandoff}
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                            text.trim() && isHandoff
+                            ? "bg-[var(--color-brand)] text-[#111111] shadow-lg shadow-[var(--color-brand-glow)] scale-100 rotate-0" 
+                            : "bg-black/[0.03] text-[var(--color-text-muted)] scale-90"
+                        }`}
+                    >
+                        {sending ? (
+                            <Loader2 className="animate-spin" size={20} />
+                        ) : (
+                            <Send size={20} className={text.trim() && isHandoff ? "translate-x-0.5 -translate-y-0.5" : ""} />
+                        )}
+                    </button>
+                </form>
+
+                {!isHandoff && (
+                    <p className="text-center text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest animate-fade-in">
+                        Asistan şu an müşteriye cevap veriyor
+                    </p>
+                )}
             </div>
         </div>
     );

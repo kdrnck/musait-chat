@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, RefreshCw, Settings } from "lucide-react";
+import { Save, RefreshCw, Shield, Sparkles } from "lucide-react";
 
 export default function GlobalAiSettingsPanel() {
     const [loading, setLoading] = useState(false);
@@ -55,11 +55,12 @@ export default function GlobalAiSettingsPanel() {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "Settings could not be saved.");
+                throw new Error(data.error || "Ayarlar kaydedilemedi.");
             }
 
             setPromptText(data.promptText);
-            setSuccess("Global Master Prompt kaydedildi.");
+            setSuccess("Global Master Prompt başarıyla güncellendi.");
+            setTimeout(() => setSuccess(null), 3000);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Beklenmeyen hata.");
         } finally {
@@ -68,73 +69,75 @@ export default function GlobalAiSettingsPanel() {
     };
 
     return (
-        <div className="bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-xl overflow-hidden mb-6">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface-base)]">
-                <div className="flex items-center gap-2">
-                    <Settings size={18} className="text-[var(--color-brand)]" />
+        <div className="bg-white border border-black/[0.03] rounded-[32px] overflow-hidden shadow-sm animate-fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-8 py-6 border-b border-black/[0.03] bg-gradient-to-br from-white to-[var(--color-surface-base)]">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-center text-[var(--color-text-primary)]">
+                        <Shield size={20} />
+                    </div>
                     <div>
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-[var(--color-text-primary)]">
+                        <h2 className="text-[14px] font-black uppercase tracking-widest text-[var(--color-text-primary)]">
                             Global Master Prompt
                         </h2>
-                        <p className="text-[11px] text-[var(--color-text-muted)]">
-                            Tüm işletmeler için varsayılan sistem promptu
+                        <p className="text-[11px] font-medium text-[var(--color-text-muted)] mt-0.5">
+                            Tüm işletmeler için temel AI yönergeleri
                         </p>
                     </div>
                 </div>
                 <button
                     onClick={loadSettings}
                     disabled={loading || saving}
-                    className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
-                    title="Yenile"
+                    className="p-2.5 rounded-xl hover:bg-black/5 text-[var(--color-text-muted)] transition-colors disabled:opacity-50"
                 >
-                    <RefreshCw size={14} className={loading && !saving ? "animate-spin" : ""} />
+                    <RefreshCw size={16} className={loading && !saving ? "animate-spin" : ""} />
                 </button>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="p-8 space-y-6">
                 {loading && !promptText ? (
-                    <div className="text-sm text-[var(--color-text-muted)]">Yükleniyor...</div>
+                    <div className="flex items-center gap-3 py-10">
+                        <div className="w-5 h-5 border-2 border-t-transparent border-[var(--color-brand)] rounded-full animate-spin" />
+                        <span className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-widest">Master ayarlar yükleniyor...</span>
+                    </div>
                 ) : (
-                    <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                Master Prompt
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between px-1">
+                            <label className="text-[12px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide">
+                                Sistem Talimatları (System Instructions)
                             </label>
-                            <span className="text-[10px] text-[var(--color-text-muted)]">
-                                {promptText.length} / 8000 karakter
+                            <span className="text-[11px] font-bold text-[var(--color-brand-dim)] bg-[var(--color-brand-light)] px-2.5 py-1 rounded-lg">
+                                {promptText.length} Karakter
                             </span>
                         </div>
                         <textarea
                             value={promptText}
                             onChange={(e) => setPromptText(e.target.value)}
                             disabled={loading || saving}
-                            className="w-full min-h-[300px] px-3 py-2 text-xs resize-y bg-[var(--color-surface-2)] border border-[var(--color-border)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-brand)] rounded-xl"
+                            className="w-full min-h-[400px] px-6 py-6 text-sm font-medium leading-relaxed bg-[var(--color-surface-base)] border border-black/[0.03] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-glow-strong)] focus:bg-white transition-all rounded-[24px] shadow-inner"
                             placeholder="Tüm sistem için varsayılan prompt'u buraya yazın..."
                         />
                     </div>
                 )}
 
-                {error && (
-                    <div className="text-xs px-3 py-2 border border-orange-500/50 bg-orange-500/10 text-orange-400 rounded-lg">
-                        {error}
-                    </div>
-                )}
-
-                {success && (
-                    <div className="text-xs px-3 py-2 border border-green-500/50 bg-green-500/10 text-green-400 rounded-lg">
-                        {success}
+                {(error || success) && (
+                    <div className={`p-4 rounded-2xl text-[13px] font-bold animate-fade-in text-center ${
+                        error ? "bg-red-50 text-red-500 border border-red-100" : "bg-[var(--color-brand-light)] text-[var(--color-brand-dim)] border border-[var(--color-brand-glow-strong)]"
+                    }`}>
+                        {error || success}
                     </div>
                 )}
             </div>
 
-            <div className="px-4 py-3 border-t border-[var(--color-border)] flex items-center justify-end bg-[var(--color-surface-base)]">
+            {/* Footer */}
+            <div className="px-8 py-6 border-t border-black/[0.03] flex items-center justify-end bg-gradient-to-br from-white to-[var(--color-surface-base)]">
                 <button
                     onClick={handleSave}
                     disabled={saving || loading || !promptText}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold bg-[var(--color-brand)] text-[var(--color-surface-base)] rounded-xl hover:opacity-90 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-8 py-3.5 bg-[var(--color-brand)] text-[#111111] text-[14px] font-black rounded-2xl shadow-xl shadow-[var(--color-brand-glow)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100"
                 >
-                    <Save size={14} />
-                    {saving ? "Kaydediliyor..." : "Kaydet"}
+                    <Save size={18} />
+                    {saving ? "Güncelleniyor..." : "Sisteme Uygula"}
                 </button>
             </div>
         </div>

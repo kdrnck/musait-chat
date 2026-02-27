@@ -1,308 +1,114 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import { useEffect, useMemo, useState } from "react";
-import {
-    User,
-    Phone,
-    Calendar,
-    Scissors,
-    StickyNote,
-    Clock,
-} from "lucide-react";
+import { User, Phone, MapPin, Calendar, Clock, CreditCard, ChevronRight, X, UserCheck, Star } from "lucide-react";
 
 export default function CustomerPanel({
     conversationId,
+    onClose,
 }: {
     conversationId: Id<"conversations">;
+    onClose?: () => void;
 }) {
-    const conversation = useQuery(api.conversations.getById, {
-        id: conversationId,
-    });
+    const conversation = useQuery(api.conversations.get, { id: conversationId });
 
-    const profile = useQuery(
-        api.customerProfiles.getByPhone,
-        conversation?.tenantId && conversation?.customerPhone
-            ? {
-                tenantId: conversation.tenantId,
-                customerPhone: conversation.customerPhone,
-            }
-            : "skip"
-    );
-
-    const upsertProfile = useMutation(api.customerProfiles.upsert);
-    const [notesDraft, setNotesDraft] = useState("");
-    const [savingNotes, setSavingNotes] = useState(false);
-
-    const effectiveName = useMemo(() => {
-        const prefName =
-            typeof profile?.preferences?.customerName === "string"
-                ? profile.preferences.customerName
-                : "";
-        return prefName || "—";
-    }, [profile?.preferences]);
-
-    useEffect(() => {
-        setNotesDraft(profile?.personNotes || "");
-    }, [profile?.personNotes, conversationId]);
-
-    const canEditNotes = Boolean(conversation?.tenantId && conversation?.customerPhone);
-    const notesChanged = (profile?.personNotes || "") !== notesDraft;
-
-    const handleSaveNotes = async () => {
-        if (!canEditNotes || !conversation?.tenantId || !conversation?.customerPhone) return;
-        setSavingNotes(true);
-        try {
-            await upsertProfile({
-                tenantId: conversation.tenantId,
-                customerPhone: conversation.customerPhone,
-                personNotes: notesDraft,
-            });
-        } catch (err) {
-            console.error("Failed to save customer notes:", err);
-        } finally {
-            setSavingNotes(false);
-        }
-    };
+    if (!conversation) return null;
 
     return (
-        <div className="flex flex-col h-full bg-[var(--color-surface-1)]">
-            {/* ── Header ── */}
-            <div className="px-6 py-5 border-b z-10" style={{ borderColor: "var(--color-border)", background: "var(--color-surface-base)" }}>
-                <h3 className="text-[13px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)]">
-                    Müşteri Bilgileri
-                </h3>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* ── Profile Card ── */}
-                <div
-                    className="p-5 rounded-2xl shadow-sm"
-                    style={{
-                        background: "var(--color-surface-base)",
-                        border: "1px solid var(--color-border)",
-                    }}
-                >
-                    {/* Avatar + Phone */}
-                    <div className="flex items-center gap-4 mb-5">
-                        <div
-                            className="w-14 h-14 flex items-center justify-center rounded-full"
-                            style={{
-                                background: "var(--color-surface-2)",
-                            }}
-                        >
-                            <User size={24} style={{ color: "var(--color-text-secondary)" }} />
-                        </div>
-                        <div>
-                            <span
-                                className="text-[16px] font-bold block"
-                                style={{
-                                    color: "var(--color-text-primary)"
-                                }}
-                            >
-                                {conversation?.customerPhone || "—"}
-                            </span>
-                            <span
-                                className="text-[11px] font-medium uppercase tracking-wider block mt-0.5"
-                                style={{ color: "var(--color-text-muted)" }}
-                            >
-                                WhatsApp
-                            </span>
-                            <span
-                                className="text-[13px] font-medium block mt-1"
-                                style={{ color: "var(--color-text-secondary)" }}
-                            >
-                                {effectiveName}
-                            </span>
-                        </div>
+        <div className="flex flex-col h-full bg-white overflow-hidden">
+            {/* Header */}
+            <div className="p-6 border-b border-black/[0.05] flex items-center justify-between bg-gradient-to-br from-white to-[var(--color-surface-base)]">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[var(--color-brand)] flex items-center justify-center text-[#111111] shadow-lg shadow-[var(--color-brand-glow)]">
+                        <User size={24} />
                     </div>
-
-                    {/* Quick stats */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <InfoChip
-                            icon={<Phone size={14} />}
-                            label="Telefon"
-                            value={conversation?.customerPhone?.slice(-4) || "—"}
-                        />
-                        <InfoChip
-                            icon={<Clock size={14} />}
-                            label="Durum"
-                            value={conversation?.status === "handoff" ? "İnsan" : "AI"}
-                        />
+                    <div>
+                        <h3 className="text-[16px] font-bold text-[var(--color-text-primary)] tracking-tight">Müşteri Profili</h3>
+                        <p className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest mt-0.5">Müsait Chat CRM</p>
                     </div>
                 </div>
+                {onClose && (
+                    <button onClick={onClose} className="p-2.5 rounded-xl hover:bg-black/5 transition-colors">
+                        <X size={20} className="text-[var(--color-text-muted)]" />
+                    </button>
+                )}
+            </div>
 
-                {/* ── Notes ── */}
-                <Section
-                    icon={<StickyNote size={16} />}
-                    title="Müşteri Notları"
-                >
-                    {canEditNotes ? (
-                        <>
-                            <textarea
-                                value={notesDraft}
-                                onChange={(e) => setNotesDraft(e.target.value)}
-                                placeholder="Müşteri tercihleri, hassasiyetler, özel notlar..."
-                                className="w-full min-h-[120px] p-4 text-[13px] resize-y outline-none rounded-2xl transition-colors"
-                                style={{
-                                    background: "var(--color-surface-base)",
-                                    border: "1px solid var(--color-border)",
-                                    color: "var(--color-text-primary)",
-                                }}
-                                onFocus={(e) => e.target.style.borderColor = "var(--color-border-hover)"}
-                                onBlur={(e) => e.target.style.borderColor = "var(--color-border)"}
-                            />
-                            <div className="flex justify-end mt-3">
-                                <button
-                                    onClick={handleSaveNotes}
-                                    disabled={!notesChanged || savingNotes}
-                                    className="px-4 py-2 text-[12px] font-bold rounded-xl transition-all"
-                                    style={{
-                                        background:
-                                            !notesChanged || savingNotes
-                                                ? "var(--color-surface-2)"
-                                                : "var(--color-brand)",
-                                        color:
-                                            !notesChanged || savingNotes
-                                                ? "var(--color-text-muted)"
-                                                : "var(--color-surface-1)",
-                                        cursor:
-                                            !notesChanged || savingNotes
-                                                ? "not-allowed"
-                                                : "pointer",
-                                    }}
-                                >
-                                    {savingNotes ? "Kaydediliyor..." : "Notu Kaydet"}
-                                </button>
+            <div className="flex-1 overflow-y-auto content-scroll p-6 space-y-8">
+                {/* Contact Info */}
+                <section className="space-y-4">
+                    <h4 className="text-[12px] font-black uppercase tracking-widest text-[var(--color-text-muted)] px-1">İletişim Bilgileri</h4>
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-4 p-4 rounded-[24px] bg-[var(--color-surface-base)] border border-black/[0.02]">
+                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[var(--color-text-secondary)] shadow-sm">
+                                <Phone size={18} />
                             </div>
-                        </>
-                    ) : (
-                        <p
-                            className="text-[13px] leading-relaxed"
-                            style={{ color: "var(--color-text-muted)" }}
-                        >
-                            Not düzenlemek için bir konuşma seçin.
-                        </p>
-                    )}
-                </Section>
-
-                {/* ── Last Services ── */}
-                {profile?.lastServices && profile.lastServices.length > 0 && (
-                    <Section icon={<Scissors size={16} />} title="Son Hizmetler">
-                        <div className="flex flex-wrap gap-2">
-                            {profile.lastServices.map((service, i) => (
-                                <span
-                                    key={i}
-                                    className="text-[12px] font-medium px-3 py-1.5 rounded-full"
-                                    style={{
-                                        background: "var(--color-surface-base)",
-                                        border: "1px solid var(--color-border)",
-                                        color: "var(--color-text-secondary)",
-                                    }}
-                                >
-                                    {service}
-                                </span>
-                            ))}
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-tight">Telefon</span>
+                                <span className="text-[14px] font-bold text-[var(--color-text-primary)]">{conversation.customerPhone}</span>
+                            </div>
                         </div>
-                    </Section>
-                )}
-
-                {/* ── Conversation Summary ── */}
-                {conversation?.rollingSummary && (
-                    <Section icon={<Calendar size={16} />} title="Konuşma Özeti">
-                        <div className="p-4 rounded-xl" style={{ background: "var(--color-surface-base)", border: "1px solid var(--color-border)" }}>
-                            <p
-                                className="text-[13px] leading-relaxed"
-                                style={{ color: "var(--color-text-secondary)" }}
-                            >
-                                {conversation.rollingSummary}
-                            </p>
+                        <div className="flex items-center gap-4 p-4 rounded-[24px] bg-[var(--color-surface-base)] border border-black/[0.02]">
+                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[var(--color-text-secondary)] shadow-sm">
+                                <MapPin size={18} />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-tight">Konum</span>
+                                <span className="text-[14px] font-bold text-[var(--color-text-primary)]">Belirtilmedi</span>
+                            </div>
                         </div>
-                    </Section>
-                )}
+                    </div>
+                </section>
 
-                {/* ── No profile state ── */}
-                {!profile && conversation && (
-                    <div
-                        className="text-center py-8"
-                        style={{ color: "var(--color-text-muted)" }}
-                    >
-                        <User
-                            size={32}
-                            className="mx-auto mb-3"
-                            style={{ opacity: 0.2 }}
-                        />
-                        <p className="text-[13px] font-medium">
-                            Müşteri profili henüz oluşturulmamış
+                {/* AI Summary */}
+                <section className="space-y-4">
+                    <h4 className="text-[12px] font-black uppercase tracking-widest text-[var(--color-text-muted)] px-1">Akıllı Özet</h4>
+                    <div className="p-5 rounded-[24px] bg-[var(--color-brand-light)] border border-[var(--color-brand-glow-strong)] relative overflow-hidden group">
+                        <div className="absolute top-[-20%] right-[-10%] w-24 h-24 bg-[var(--color-brand)] opacity-5 blur-2xl rounded-full" />
+                        <p className="text-[13px] font-medium leading-relaxed text-[var(--color-brand-dim)] relative z-10">
+                            {conversation.rollingSummary || "Yapay zeka henüz yeterli veri toplamadı."}
                         </p>
                     </div>
-                )}
-            </div>
-        </div>
-    );
-}
+                </section>
 
-/* ── Sub-components ── */
+                {/* Appointment History Placeholder */}
+                <section className="space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                        <h4 className="text-[12px] font-black uppercase tracking-widest text-[var(--color-text-muted)]">Randevular</h4>
+                        <span className="px-2 py-0.5 rounded-md bg-black/5 text-[9px] font-black text-[var(--color-text-muted)] uppercase tracking-widest">0 Kayıt</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-center justify-center py-10 px-6 border-2 border-dashed border-black/[0.05] rounded-[32px] text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-black/[0.02] flex items-center justify-center mb-4">
+                            <Calendar size={24} className="text-black/[0.1]" />
+                        </div>
+                        <p className="text-[13px] font-bold text-[var(--color-text-muted)] mb-1">Geçmiş Randevu Bulunmuyor</p>
+                        <p className="text-[11px] font-medium text-black/[0.2]">Müşteri henüz bir işlem gerçekleştirmedi.</p>
+                    </div>
+                </section>
 
-function InfoChip({
-    icon,
-    label,
-    value,
-}: {
-    icon: React.ReactNode;
-    label: string;
-    value: string;
-}) {
-    return (
-        <div
-            className="flex flex-col gap-1.5 p-3 rounded-xl transition-colors"
-            style={{
-                background: "var(--color-surface-base)",
-                border: "1px solid var(--color-border)",
-            }}
-        >
-            <div
-                className="flex items-center gap-2"
-                style={{ color: "var(--color-text-muted)" }}
-            >
-                {icon}
-                <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>
+                {/* Staff Preference Placeholder */}
+                <section className="space-y-4 pb-10">
+                    <h4 className="text-[12px] font-black uppercase tracking-widest text-[var(--color-text-muted)] px-1">Tercih Edilen Personel</h4>
+                    <div className="flex items-center gap-3 p-4 rounded-[24px] bg-[var(--color-surface-base)] border border-black/[0.02]">
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[var(--color-text-secondary)] shadow-sm">
+                            <UserCheck size={18} />
+                        </div>
+                        <span className="text-[13px] font-bold text-[var(--color-text-primary)] flex-1">Farketmez / Herhangi biri</span>
+                        <ChevronRight size={16} className="text-[var(--color-text-muted)]" />
+                    </div>
+                </section>
             </div>
-            <span
-                className="text-[14px] font-bold"
-                style={{
-                    color: "var(--color-text-primary)",
-                }}
-            >
-                {value}
-            </span>
-        </div>
-    );
-}
 
-function Section({
-    icon,
-    title,
-    children,
-}: {
-    icon: React.ReactNode;
-    title: string;
-    children: React.ReactNode;
-}) {
-    return (
-        <div className="mb-6">
-            <div
-                className="flex items-center gap-2 mb-3 px-1"
-                style={{ color: "var(--color-text-muted)" }}
-            >
-                {icon}
-                <span className="text-[11px] font-bold uppercase tracking-widest">
-                    {title}
-                </span>
+            {/* Footer Action */}
+            <div className="p-6 border-t border-black/[0.05] bg-[var(--color-surface-base)]">
+                <button className="w-full py-4 rounded-2xl bg-white border border-black/5 shadow-sm text-[14px] font-bold text-[var(--color-text-primary)] hover:bg-black/5 transition-all flex items-center justify-center gap-2">
+                    <Star size={16} className="text-amber-400" />
+                    <span>Önemli Müşteri Olarak İşaretle</span>
+                </button>
             </div>
-            {children}
         </div>
     );
 }

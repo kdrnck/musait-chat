@@ -27,16 +27,23 @@ export default function ChatLayout({
 }: ChatLayoutProps) {
     const [selectedConversationId, setSelectedConversationId] =
         useState<Id<"conversations"> | null>(null);
-    const [showCustomerPanel, setShowCustomerPanel] = useState(true);
+    const [showCustomerPanel, setShowCustomerPanel] = useState(false); // Default false for cleaner start
     const [debugMode, setDebugMode] = useState(false);
 
     return (
-        <div className="flex h-full w-full overflow-hidden bg-[var(--color-surface-base)] relative">
-            {/* ── Left: Conversation Sidebar ── */}
+        <div className="flex h-full w-full overflow-hidden relative">
+            {/* ── Left: Dark Sidebar ── */}
             <aside
-                className={`flex flex-col border-r bg-[var(--color-surface-1)] z-20 absolute inset-y-0 left-0 w-full md:relative md:w-[320px] lg:w-[320px] transition-transform duration-300 ease-in-out ${selectedConversationId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}`}
+                className={`
+                    flex flex-col z-30
+                    absolute inset-y-0 left-0 w-full
+                    md:relative md:w-[360px] lg:w-[380px] md:flex-shrink-0
+                    transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
+                    ${selectedConversationId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
+                `}
                 style={{
-                    borderColor: "var(--color-border)",
+                    background: "var(--color-sidebar-bg)",
+                    borderRight: "1px solid var(--color-sidebar-border)",
                 }}
             >
                 <ConversationList
@@ -54,8 +61,15 @@ export default function ChatLayout({
                 />
             </aside>
 
-            {/* ── Center: Chat View ── */}
-            <main className="flex-1 flex flex-col min-w-0 bg-[var(--color-surface-2)] z-10 w-full">
+            {/* ── Center: Light Chat Area ── */}
+            <main
+                className={`
+                    flex-1 flex flex-col min-w-0 z-10 w-full h-full relative
+                    transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
+                    ${selectedConversationId ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
+                `}
+                style={{ background: "var(--color-surface-base)" }}
+            >
                 <ChatView
                     conversationId={selectedConversationId}
                     onToggleCustomerPanel={() => setShowCustomerPanel((p) => !p)}
@@ -65,16 +79,35 @@ export default function ChatLayout({
                 />
             </main>
 
-            {/* ── Right: Customer Panel ── */}
+            {/* ── Right: Customer Detail Panel (Overlay on small screens, sidebar on large) ── */}
+            <aside
+                className={`
+                    flex flex-col z-40
+                    fixed inset-y-0 right-0 w-[85%] sm:w-[380px] lg:relative lg:w-[380px] lg:flex-shrink-0
+                    transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
+                    shadow-[-20px_0_40px_rgba(0,0,0,0.05)] lg:shadow-none
+                    ${showCustomerPanel && selectedConversationId ? 'translate-x-0' : 'translate-x-full'}
+                    ${!showCustomerPanel && 'hidden lg:hidden'}
+                `}
+                style={{
+                    background: "var(--color-surface-1)",
+                    borderLeft: "1px solid var(--color-border)",
+                }}
+            >
+                {selectedConversationId && (
+                    <CustomerPanel 
+                        conversationId={selectedConversationId} 
+                        onClose={() => setShowCustomerPanel(false)}
+                    />
+                )}
+            </aside>
+
+            {/* Mobile Backdrop for Customer Panel */}
             {showCustomerPanel && selectedConversationId && (
-                <aside
-                    className="hidden lg:flex flex-col border-l bg-[var(--color-surface-1)] z-10 w-[300px] flex-shrink-0"
-                    style={{
-                        borderColor: "var(--color-border)",
-                    }}
-                >
-                    <CustomerPanel conversationId={selectedConversationId} />
-                </aside>
+                <div 
+                    className="fixed inset-0 bg-black/20 backdrop-blur-sm z-35 lg:hidden animate-fade-in"
+                    onClick={() => setShowCustomerPanel(false)}
+                />
             )}
         </div>
     );

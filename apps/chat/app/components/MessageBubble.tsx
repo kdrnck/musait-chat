@@ -1,7 +1,7 @@
 "use client";
 
 import { Doc } from "../../../../convex/_generated/dataModel";
-import { Bot, User, Headset, Code2, Wrench } from "lucide-react";
+import { Bot, User, Headset, Code2, Wrench, CheckCircle2 } from "lucide-react";
 
 function formatTime(timestamp: number): string {
     return new Date(timestamp).toLocaleTimeString("tr-TR", {
@@ -12,86 +12,79 @@ function formatTime(timestamp: number): string {
 
 const roleConfig = {
     customer: {
-        align: "right" as const,
+        align: "left" as const,
         bg: "var(--color-bubble-customer)",
         color: "var(--color-text-primary)",
-        border: "var(--color-border)",
+        shadow: "0 4px 12px rgba(0,0,0,0.03), 0 1px 2px rgba(0,0,0,0.02)",
         icon: <User size={12} />,
         label: "Müşteri",
-        labelColor: "var(--color-text-secondary)",
-        borderRadius: "16px 16px 4px 16px",
+        labelColor: "var(--color-text-muted)",
+        borderRadius: "4px 24px 24px 24px",
     },
     agent: {
-        align: "left" as const,
+        align: "right" as const,
         bg: "var(--color-bubble-agent)",
         color: "#FFFFFF",
-        border: "transparent",
+        shadow: "0 10px 25px rgba(0,0,0,0.1)",
         icon: <Bot size={12} />,
-        label: "Yapay Zeka",
-        labelColor: "var(--color-text-secondary)",
-        borderRadius: "16px 16px 16px 4px",
+        label: "Asistan",
+        labelColor: "var(--color-brand)",
+        borderRadius: "24px 24px 4px 24px",
     },
     human: {
         align: "right" as const,
-        bg: "var(--color-status-handoff)",
-        color: "#FFFFFF",
-        border: "transparent",
+        bg: "var(--color-bubble-human)",
+        color: "#111111",
+        shadow: "0 10px 25px var(--color-brand-glow)",
         icon: <Headset size={12} />,
-        label: "İnsan Yönetici",
-        labelColor: "var(--color-text-secondary)",
-        borderRadius: "16px 16px 4px 16px",
+        label: "Yönetici",
+        labelColor: "#111111",
+        borderRadius: "24px 24px 4px 24px",
     },
 };
 
-// Helper to reliably detect and parse tool calls (JSON or markdown JSON)
 function parseToolCall(content: string) {
     try {
         const parsed = JSON.parse(content);
-        if (typeof parsed === 'object' && parsed !== null) return parsed;
-    } catch (e) {
-        // Not direct JSON, check if it's markdown
-    }
+        if (typeof parsed === "object" && parsed !== null) return parsed;
+    } catch { /* not JSON */ }
 
-    // Check for markdown code blocks
     const match = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (match) {
         try {
             const parsed = JSON.parse(match[1]);
-            if (typeof parsed === 'object' && parsed !== null) return parsed;
-        } catch (e) { }
+            if (typeof parsed === "object" && parsed !== null) return parsed;
+        } catch { /* not JSON in markdown */ }
     }
 
-    // Check if it looks vaguely like a tool call string e.g. "tool_call: get_times"
     if (content.includes("tool_call") || (content.includes("{") && content.includes("}"))) {
         try {
-            // Find the first { and last }
             const start = content.indexOf("{");
             const end = content.lastIndexOf("}");
             if (start !== -1 && end !== -1 && end > start) {
                 const parsed = JSON.parse(content.substring(start, end + 1));
-                if (typeof parsed === 'object' && parsed !== null) return parsed;
+                if (typeof parsed === "object" && parsed !== null) return parsed;
             }
-        } catch (e) { }
+        } catch { /* not extractable */ }
     }
 
     return null;
 }
 
 function getTurkishToolCallName(toolName: string) {
-    if (!toolName) return "Yapay zeka sistem işlemi yapıyor";
+    if (!toolName) return "İşlem yapılıyor...";
     const lookup: Record<string, string> = {
-        "check_calendar": "Müsaitlik durumu kontrol edildi",
-        "create_appointment": "Yeni bir randevu oluşturuldu",
-        "cancel_appointment": "Randevu iptal edildi",
-        "get_business_info": "İşletme bilgileri sorgulandı",
-        "get_pricing": "Fiyat bilgisi sorgulandı",
-        "human_handoff": "İnsan desteğine aktarıldı",
-        "ask_human": "İnsan desteğine aktarıldı",
-        "get_staff": "Personel bilgileri sorgulandı",
-        "get_services": "Hizmetler listelendi"
+        check_calendar: "Müsaitlik durumu kontrol edildi",
+        create_appointment: "Randevu oluşturuldu",
+        cancel_appointment: "Randevu iptal edildi",
+        get_business_info: "İşletme bilgileri kontrol edildi",
+        get_pricing: "Fiyatlar incelendi",
+        human_handoff: "İnsan desteği talebi iletildi",
+        ask_human: "Yöneticiye danışıldı",
+        get_staff: "Personel müsaitliği sorgulandı",
+        get_services: "Hizmet listesi güncellendi",
     };
-
-    return lookup[toolName] || `Sistem işlemi: ${toolName}`;
+    return lookup[toolName] || `${toolName} işlemi gerçekleştirildi`;
 }
 
 export default function MessageBubble({
@@ -104,7 +97,6 @@ export default function MessageBubble({
     const config = roleConfig[message.role];
     const isRight = config.align === "right";
 
-    // Attempt to parse content as a tool call if it's from the agent
     let isToolCall = false;
     let parsedData = null;
     let displayText: React.ReactNode = message.content;
@@ -113,86 +105,113 @@ export default function MessageBubble({
         parsedData = parseToolCall(message.content);
         if (parsedData) {
             isToolCall = true;
-            const toolName = parsedData.tool || parsedData.name || parsedData.action || parsedData.tool_name || Object.keys(parsedData)[0];
+            const toolName =
+                parsedData.tool ||
+                parsedData.name ||
+                parsedData.action ||
+                parsedData.tool_name ||
+                Object.keys(parsedData)[0];
 
             if (debugMode) {
-                // Raw / Debug view
                 displayText = (
-                    <div className="font-mono text-[11px] bg-black/20 p-2 rounded-md overflow-x-auto my-1">
-                        <div className="flex items-center gap-1.5 text-[10px] uppercase text-white/70 mb-1 border-b border-white/10 pb-1">
+                    <div className="font-mono text-[11px] p-4 rounded-2xl overflow-x-auto my-1 border border-white/5"
+                        style={{ background: "rgba(0,0,0,0.2)" }}>
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest mb-3 pb-3 border-b border-white/5"
+                            style={{ color: "var(--color-brand)" }}>
                             <Code2 size={12} />
-                            <span>Tool Call Details</span>
+                            <span>Teknik Detay (Debug)</span>
                         </div>
-                        <pre className="whitespace-pre-wrap">{JSON.stringify(parsedData, null, 2)}</pre>
+                        <pre className="whitespace-pre-wrap text-[11px] leading-relaxed"
+                            style={{ color: "rgba(255,255,255,0.7)" }}>
+                            {JSON.stringify(parsedData, null, 2)}
+                        </pre>
                     </div>
                 );
             } else {
-                // Human readable view
                 displayText = (
-                    <div className="flex items-center gap-2 italic text-[14px] text-white/90">
-                        <Wrench size={14} className="opacity-70" />
-                        <span>{getTurkishToolCallName(toolName)}</span>
+                    <div className="flex items-center gap-3 py-1">
+                        <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                            <Wrench size={14} className="text-[var(--color-brand)]" />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[13px] font-bold text-white leading-none mb-1">AI İşlemi</span>
+                            <span className="text-[11px] font-medium text-white/50">{getTurkishToolCallName(toolName)}</span>
+                        </div>
                     </div>
                 );
             }
         }
     }
 
+    // Tool call (non-debug) — compact minimalist view
+    if (isToolCall && !debugMode) {
+        return (
+            <div className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-6 animate-fade-in w-full`}>
+                <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-white border border-black/[0.03] shadow-sm">
+                    <div className="w-6 h-6 rounded-lg bg-[var(--color-brand-light)] flex items-center justify-center">
+                        <CheckCircle2 size={14} className="text-[var(--color-brand-dim)]" />
+                    </div>
+                    <span className="text-[12px] font-bold text-[var(--color-text-secondary)] tracking-tight">
+                        {getTurkishToolCallName(parsedData?.name || parsedData?.tool || "işlem")}
+                    </span>
+                    <span className="text-[10px] font-medium text-[var(--color-text-muted)] ml-2">
+                        {formatTime(message.createdAt)}
+                    </span>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div
-            className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-4`}
-            style={{ maxWidth: "75%", marginLeft: isRight ? "auto" : 0 }}
+            className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-6 animate-fade-in`}
+            style={{ maxWidth: "85%", marginLeft: isRight ? "auto" : 0, marginRight: isRight ? 0 : "auto" }}
         >
             {/* Sender label */}
-            <div
-                className="flex items-center gap-1.5 mb-1.5 px-1"
-                style={{ color: config.labelColor }}
-            >
-                {config.icon}
-                <span className="text-[11px] font-semibold tracking-wide">
+            <div className="flex items-center gap-2 mb-2 px-1" style={{ color: config.labelColor }}>
+                <div className="w-5 h-5 rounded-lg flex items-center justify-center bg-current/5">
+                    {config.icon}
+                </div>
+                <span className="text-[10px] font-black tracking-widest uppercase">
                     {config.label}
                 </span>
             </div>
 
             {/* Bubble */}
             <div
-                className={`px-5 py-3.5 text-[15px] leading-relaxed relative group ${isToolCall && !debugMode ? 'bg-[var(--color-surface-3)] !text-[var(--color-text-secondary)] !border-dashed' : ''}`}
+                className="px-5 py-3.5 text-[15px] font-medium leading-[1.6] relative"
                 style={{
-                    background: isToolCall && !debugMode ? "transparent" : config.bg,
-                    border: isToolCall && !debugMode ? "1px dashed var(--color-border)" : `1px solid ${config.border}`,
-                    color: isToolCall && !debugMode ? "var(--color-text-muted)" : config.color,
+                    background: config.bg,
+                    color: config.color,
                     borderRadius: config.borderRadius,
-                    boxShadow: isToolCall && !debugMode ? "none" : (isRight ? "0 2px 8px rgba(0,0,0,0.02)" : "0 4px 12px rgba(0,0,0,0.05)")
+                    boxShadow: config.shadow,
+                    border: message.role === "customer" ? "1px solid rgba(0,0,0,0.03)" : "none",
                 }}
             >
                 {displayText}
+                
+                {/* Subtle glass effect for right-aligned bubbles */}
+                {isRight && (
+                    <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 rounded-[inherit] pointer-events-none" />
+                )}
             </div>
 
-            {/* Timestamp + status */}
-            <div className="flex items-center gap-2 mt-1.5 px-1">
-                <span
-                    className="text-[11px] font-medium"
-                    style={{
-                        color: "var(--color-text-muted)",
-                    }}
-                >
+            {/* Timestamp & Status */}
+            <div className={`flex items-center gap-2 mt-2 px-1 ${isRight ? "flex-row-reverse" : "flex-row"}`}>
+                <span className="text-[10px] font-bold tracking-tight text-[var(--color-text-muted)] uppercase">
                     {formatTime(message.createdAt)}
                 </span>
                 {message.status === "failed" && (
-                    <span
-                        className="text-[10px] font-bold"
-                        style={{ color: "var(--color-status-attention)" }}
-                    >
-                        HATA
+                    <span className="px-2 py-0.5 rounded-md bg-red-50 text-[9px] font-black text-red-500 uppercase tracking-widest">
+                        GÖNDERİLEMEDİ
                     </span>
                 )}
                 {message.status === "processing" && (
-                    <span
-                        className="text-[11px] font-medium"
-                        style={{ color: "var(--color-text-muted)" }}
-                    >
-                        işleniyor...
-                    </span>
+                    <div className="flex items-center gap-1.5 ml-1">
+                        <div className="w-1 h-1 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-1 h-1 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-1 h-1 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
                 )}
             </div>
         </div>

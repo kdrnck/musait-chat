@@ -3,10 +3,10 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
+import { useRef, useEffect } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
-import { useEffect, useRef } from "react";
-import { Bot, User, PanelRightOpen, PanelRightClose, ChevronLeft } from "lucide-react";
+import { ChevronLeft, Info, Phone, Calendar, User, MoreVertical, Search } from "lucide-react";
 
 export default function ChatView({
     conversationId,
@@ -21,194 +21,145 @@ export default function ChatView({
     debugMode: boolean;
     onBack: () => void;
 }) {
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     const conversation = useQuery(
-        api.conversations.getById,
+        api.conversations.get,
         conversationId ? { id: conversationId } : "skip"
     );
 
     const messages = useQuery(
-        api.messages.listByConversation,
+        api.messages.list,
         conversationId ? { conversationId } : "skip"
     );
 
-    // Auto-scroll to bottom on new messages
     useEffect(() => {
-        if (messages && messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages]);
 
-    // Empty state — no conversation selected
     if (!conversationId) {
         return (
-            <div
-                className="flex-1 flex flex-col items-center justify-center gap-4 hidden md:flex"
-                style={{ background: "var(--color-surface-base)" }}
-            >
-                <div
-                    className="w-16 h-16 flex items-center justify-center glow rounded-full"
-                    style={{
-                        background: "var(--color-surface-2)",
-                    }}
-                >
-                    <Bot size={28} style={{ color: "var(--color-text-muted)" }} />
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-fade-in"
+                 style={{ background: "var(--color-surface-base)" }}>
+                <div className="w-24 h-24 rounded-[40px] bg-white shadow-2xl flex items-center justify-center mb-8 relative group">
+                    <img src="/musait-dark.png" alt="m" className="w-12 h-12 grayscale opacity-10 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700" />
+                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-black/[0.01] to-black/[0.03] rounded-[40px]" />
                 </div>
-                <div className="text-center">
-                    <h2
-                        className="text-lg font-bold tracking-wide"
-                        style={{ color: "var(--color-text-primary)" }}
-                    >
-                        Konuşma Seçin
-                    </h2>
-                    <p
-                        className="text-sm mt-1"
-                        style={{ color: "var(--color-text-muted)" }}
-                    >
-                        Soldan bir konuşma seçerek başlayın
-                    </p>
-                </div>
+                <h2 className="text-2xl font-bold text-[var(--color-text-primary)] mb-3 tracking-tight">Sohbet Seçin</h2>
+                <p className="text-[var(--color-text-secondary)] max-w-xs leading-relaxed font-medium">
+                    Müşterilerle iletişime geçmek ve asistanı izlemek için soldan bir konuşma seçin.
+                </p>
             </div>
         );
     }
 
-    const statusLabel =
-        conversation?.status === "handoff"
-            ? "İnsan Kontrolünde"
-            : conversation?.retryState?.count && conversation.retryState.count > 0
-                ? "Dikkat Gerekli"
-                : "AI Aktif";
+    if (!conversation) return null;
 
-    const statusBadgeClass =
-        conversation?.status === "handoff"
-            ? "badge--handoff"
-            : conversation?.retryState?.count && conversation.retryState.count > 0
-                ? "badge--attention"
-                : "badge--ai";
+    const hasAttention = (conversation.retryState?.count ?? 0) > 0;
+    const isHandoff = conversation.status === "handoff";
 
     return (
-        <div
-            className="flex-1 flex flex-col h-full bg-[var(--color-surface-base)]"
-        >
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-surface-base)]">
             {/* ── Chat Header ── */}
-            <header
-                className="flex items-center justify-between px-4 md:px-8 py-4 md:py-5 border-b z-10 sticky top-0 bg-[var(--color-surface-base)]"
-                style={{
-                    borderColor: "var(--color-border)",
-                }}
-            >
-                <div className="flex items-center gap-2 md:gap-4">
+            <header className="h-20 flex-shrink-0 flex items-center justify-between px-6 z-20 glass-light border-b border-black/[0.05] shadow-sm">
+                <div className="flex items-center gap-4">
                     <button
                         onClick={onBack}
-                        className="md:hidden p-2 -ml-2 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                        className="md:hidden p-2.5 rounded-2xl hover:bg-black/5 transition-colors"
                     >
-                        <ChevronLeft size={24} />
+                        <ChevronLeft size={20} />
                     </button>
-                    <div
-                        className="w-10 h-10 flex flex-shrink-0 items-center justify-center rounded-full"
-                        style={{
-                            background: "var(--color-surface-2)",
-                        }}
-                    >
-                        <User size={18} style={{ color: "var(--color-text-secondary)" }} />
-                    </div>
-                    <div>
-                        <span
-                            className="text-[15px] md:text-[16px] font-bold"
-                            style={{
-                                color: "var(--color-text-primary)",
-                            }}
-                        >
-                            {conversation?.customerPhone || "..."}
-                        </span>
-                        <div className="flex items-center gap-2 mt-0.5 md:mt-1">
-                            <span className={`badge ${statusBadgeClass} rounded-full px-2 py-0.5`} style={{ fontSize: 10 }}>
-                                {statusLabel}
-                            </span>
+                    
+                    <div className="relative">
+                        <div className="w-11 h-11 rounded-2xl bg-white shadow-md border border-black/[0.05] flex items-center justify-center">
+                            <User size={20} className="text-[var(--color-text-secondary)]" />
                         </div>
+                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-lg border-2 border-white flex items-center justify-center ${
+                            hasAttention ? 'bg-[var(--color-status-attention)]' : 
+                            isHandoff ? 'bg-[var(--color-status-handoff)]' : 'bg-[var(--color-status-ai)]'
+                        }`}>
+                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-[16px] font-bold text-[var(--color-text-primary)] tracking-tight leading-none">
+                                {conversation.customerPhone}
+                            </h2>
+                            {isHandoff && (
+                                <span className="badge badge--handoff !py-0.5">İnsan</span>
+                            )}
+                            {hasAttention && (
+                                <span className="badge badge--attention !py-0.5">Hata</span>
+                            )}
+                        </div>
+                        <p className="text-[11px] font-bold text-[var(--color-text-muted)] mt-1.5 uppercase tracking-widest flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-status-ai)]" />
+                            {isHandoff ? 'Yönetici Devraldı' : 'Yapay Zeka Aktif'}
+                        </p>
                     </div>
                 </div>
 
-                <button
-                    onClick={onToggleCustomerPanel}
-                    className="p-2 transition-all rounded-full flex items-center justify-center md:hidden lg:flex"
-                    style={{
-                        color: showCustomerPanel ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                        background: showCustomerPanel ? "var(--color-surface-3)" : "transparent"
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.color = "var(--color-text-primary)";
-                        e.currentTarget.style.background = "var(--color-surface-2)";
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.color = showCustomerPanel ? "var(--color-text-primary)" : "var(--color-text-muted)";
-                        e.currentTarget.style.background = showCustomerPanel ? "var(--color-surface-3)" : "transparent";
-                    }}
-                    title={showCustomerPanel ? "Paneli kapat" : "Paneli aç"}
-                >
-                    {showCustomerPanel ? (
-                        <PanelRightClose size={20} />
-                    ) : (
-                        <PanelRightOpen size={20} />
-                    )}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button className="hidden sm:flex p-3 rounded-2xl hover:bg-black/5 text-[var(--color-text-secondary)] transition-all">
+                        <Search size={18} />
+                    </button>
+                    <button className="hidden sm:flex p-3 rounded-2xl hover:bg-black/5 text-[var(--color-text-secondary)] transition-all">
+                        <Phone size={18} />
+                    </button>
+                    <button
+                        onClick={onToggleCustomerPanel}
+                        className={`p-3 rounded-2xl transition-all ${
+                            showCustomerPanel 
+                            ? "bg-[var(--color-brand)] text-[#111111] shadow-lg shadow-[var(--color-brand-glow)]" 
+                            : "hover:bg-black/5 text-[var(--color-text-secondary)]"
+                        }`}
+                        title="Müşteri Detayları"
+                    >
+                        <Info size={18} />
+                    </button>
+                    <div className="w-px h-6 bg-black/[0.05] mx-2" />
+                    <button className="p-3 rounded-2xl hover:bg-black/5 text-[var(--color-text-secondary)] transition-all">
+                        <MoreVertical size={18} />
+                    </button>
+                </div>
             </header>
 
-            {/* ── Messages ── */}
+            {/* ── Messages Area ── */}
             <div
-                className="flex-1 overflow-y-auto px-6 py-4"
-                style={{ background: "var(--color-surface-base)" }}
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto px-6 py-8 content-scroll space-y-2"
+                style={{ scrollBehavior: 'smooth' }}
             >
+                {/* Scroll padding-top */}
+                <div className="h-4" />
+                
                 {!messages ? (
-                    // Loading
-                    <div className="flex flex-col gap-3">
-                        {[...Array(4)].map((_, i) => (
-                            <div
-                                key={i}
-                                className="animate-pulse flex-shrink-0"
-                                style={{
-                                    height: 48,
-                                    width: i % 2 === 0 ? "60%" : "45%",
-                                    marginLeft: i % 2 !== 0 ? "auto" : 0,
-                                    background: "var(--color-surface-2)",
-                                    borderRadius: "16px",
-                                }}
-                            />
-                        ))}
+                    <div className="flex justify-center py-20">
+                        <div className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin border-[var(--color-brand)]" />
                     </div>
                 ) : messages.length === 0 ? (
-                    // Empty messages
-                    <div className="flex items-center justify-center h-full">
-                        <p
-                            className="text-[14px] font-medium"
-                            style={{ color: "var(--color-text-muted)" }}
-                        >
-                            Henüz mesaj yok
-                        </p>
+                    <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+                        <div className="w-16 h-16 rounded-3xl bg-white border border-black/5 shadow-sm flex items-center justify-center mb-6">
+                            <Calendar size={24} className="text-[var(--color-text-muted)] opacity-20" />
+                        </div>
+                        <p className="text-[14px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest">Henüz mesaj yok</p>
                     </div>
                 ) : (
-                    // Message bubbles
-                    <div className="flex flex-col gap-2">
-                        {messages.map((message, i) => (
-                            <div
-                                key={message._id}
-                                className="animate-fade-in"
-                                style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
-                            >
-                                <MessageBubble message={message} debugMode={debugMode} />
-                            </div>
-                        ))}
-                        <div ref={messagesEndRef} />
-                    </div>
+                    messages.map((m) => (
+                        <MessageBubble key={m._id} message={m} debugMode={debugMode} />
+                    ))
                 )}
+                
+                {/* Scroll padding-bottom */}
+                <div className="h-8" />
             </div>
 
-            {/* ── Input Area ── */}
-            <ChatInput
-                conversationId={conversationId}
-                conversationStatus={conversation?.status ?? "active"}
-            />
+            {/* ── Chat Input ── */}
+            <ChatInput conversationId={conversationId} status={conversation.status} />
         </div>
     );
 }
