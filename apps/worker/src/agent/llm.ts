@@ -5,7 +5,6 @@ import { LLM_CONFIG, SUPABASE_CONFIG } from "../config.js";
 import { executeToolCall, getToolDefinitions } from "./tools/index.js";
 import {
   resolveTenantAiSettings,
-  resolveSystemPromptPlaceholders,
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
 
@@ -95,97 +94,112 @@ async function buildContext(
 ): Promise<{ messages: LLMMessage[]; tenantAiSettings: TenantAiSettings }> {
   const messages: LLMMessage[] = [];
   
-  // Fetch tenant AI settings (system prompt comes from here)
+  // ========== STEP 1: FETCH SETTINGS ==========
   const globalPrompt = await fetchGlobalSettings();
   let tenantAiSettings = resolveTenantAiSettings(null, globalPrompt);
+  let dashboardPrompt: string | null = null;
+
+  console.log(`\n========== BUILD CONTEXT START ==========`);
+  console.log(`📋 Tenant ID: ${conversation.tenantId || 'NULL (unbound)'}`);
+  console.log(`📋 Customer Phone: ${job.customerPhone}`);
 
   if (conversation.tenantId) {
     const tenantCtx = await fetchTenantContext(conversation.tenantId);
-    tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys, globalPrompt);
     
-    // Debug: Log prompt source
-    const tenantPrompt = tenantCtx?.integrationKeys?.ai_system_prompt_text;
-    console.log(`🔧 [DEBUG] Tenant ID: ${conversation.tenantId}`);
-    console.log(`🔧 [DEBUG] Tenant prompt (from dashboard): ${tenantPrompt ? 'YES (' + String(tenantPrompt).slice(0, 80) + '...)' : 'NO - using global/default'}`);
+    console.log(`📋 Tenant Context Fetched: ${tenantCtx ? 'YES' : 'NO'}`);
+    console.log(`📋 Integration Keys: ${tenantCtx?.integrationKeys ? JSON.stringify(Object.keys(tenantCtx.integrationKeys)) : 'NONE'}`);
+    
+    if (tenantCtx?.integrationKeys) {
+      const rawPrompt = tenantCtx.integrationKeys.ai_system_prompt_text;
+      console.log(`📋 Raw ai_system_prompt_text type: ${typeof rawPrompt}`);
+      console.log(`📋 Raw ai_system_prompt_text value (first 150 chars): ${rawPrompt ? String(rawPrompt).slice(0, 150) : 'NULL/UNDEFINED'}`);
+    }
+    
+    tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys, globalPrompt);
+    dashboardPrompt = tenantAiSettings.systemPromptText;
+    
+    console.log(`📋 Resolved System Prompt Length: ${dashboardPrompt?.length || 0}`);
+    console.log(`📋 Resolved System Prompt (first 200 chars): ${dashboardPrompt ? dashboardPrompt.slice(0, 200) : 'NULL'}`);
   }
 
-  // 1. System prompt from dashboard
-  if (tenantAiSettings.systemPromptText) {
-    const systemPrompt = resolveSystemPromptPlaceholders(tenantAiSettings.systemPromptText, {
-      tenantId: conversation.tenantId,
-    });
-    messages.push({ role: "system", content: systemPrompt });
-    console.log(`🔧 [DEBUG] System prompt loaded from dashboard (${systemPrompt.length} chars)`);
-  } else {
-    // No system prompt set - use minimal fallback
-    messages.push({ 
-      role: "system", 
-      content: "Sen yardımcı bir asistansın. Türkçe yanıt ver." 
-    });
-    console.log(`🔧 [DEBUG] No system prompt set - using minimal fallback`);
-  }
+  // ========== STEP 2: SYSTEM PROMPT ==========
+  // System prompt is the ONLY source of agent personality/rules
+  // It comes from: Dashboard (tenant) > Global Settings > Minimal Fallback
+  
+  const systemPromptContent = dashboardPrompt || globalPrompt || "Sen yardımcı bir asistansın. Kullanıcının isteklerine Türkçe yanıt ver.";
+  
+  const systemPromptFormatted = `<system_prompt>
+${systemPromptContent}
+</system_prompt>`;
 
-  // 2. Customer profile (preferences, notes, preferred staff) - if exists
+  messages.push({ role: "system", content: systemPromptFormatted });
+  
+  console.log(`✅ SYSTEM PROMPT ADDED (source: ${dashboardPrompt ? 'DASHBOARD' : globalPrompt ? 'GLOBAL' : 'FALLBACK'})`);
+  console.log(`   Length: ${systemPromptContent.length} chars`);
+
+  // ========== STEP 3: CUSTOMER PROFILE (if exists) ==========
   if (conversation.tenantId) {
-    const profile = await convex.query(api.customerProfiles.getByPhone, {
-      tenantId: conversation.tenantId,
-      customerPhone: job.customerPhone,
-    });
+    try {
+      const profile = await convex.query(api.customerProfiles.getByPhone, {
+        tenantId: conversation.tenantId,
+        customerPhone: job.customerPhone,
+      });
 
-    if (profile) {
-      const contextParts: string[] = [];
-      
-      // AI notes about customer
-      if (profile.personNotes && profile.personNotes.trim()) {
-        contextParts.push(`Müşteri Notları: ${profile.personNotes}`);
-      }
-      
-      // Preferred staff
-      if (profile.lastStaff && profile.lastStaff.length > 0) {
-        contextParts.push(`Tercih Edilen Çalışanlar: ${profile.lastStaff.join(", ")}`);
-      }
-      
-      // Last used services
-      if (profile.lastServices && profile.lastServices.length > 0) {
-        contextParts.push(`Son Alınan Hizmetler: ${profile.lastServices.join(", ")}`);
-      }
+      if (profile) {
+        const profileParts: string[] = [];
+        
+        if (profile.personNotes?.trim()) {
+          profileParts.push(`<ai_notes>${profile.personNotes.trim()}</ai_notes>`);
+        }
+        
+        if (profile.lastStaff?.length > 0) {
+          profileParts.push(`<preferred_staff>${profile.lastStaff.join(", ")}</preferred_staff>`);
+        }
+        
+        if (profile.lastServices?.length > 0) {
+          profileParts.push(`<recent_services>${profile.lastServices.join(", ")}</recent_services>`);
+        }
 
-      // Customer name from preferences
-      const customerName = profile.preferences?.customerName;
-      if (customerName && typeof customerName === "string") {
-        contextParts.push(`Müşteri Adı: ${customerName}`);
-      }
+        const customerName = profile.preferences?.customerName;
+        if (customerName && typeof customerName === "string") {
+          profileParts.push(`<customer_name>${customerName}</customer_name>`);
+        }
 
-      if (contextParts.length > 0) {
-        messages.push({
-          role: "system",
-          content: `[Müşteri Profili]\n${contextParts.join("\n")}`,
-        });
-        console.log(`🔧 [DEBUG] Customer profile loaded: ${contextParts.length} fields`);
+        if (profileParts.length > 0) {
+          const profileContent = `<customer_profile>
+${profileParts.join("\n")}
+</customer_profile>`;
+          
+          messages.push({ role: "system", content: profileContent });
+          console.log(`✅ CUSTOMER PROFILE ADDED (${profileParts.length} fields)`);
+        }
       }
+    } catch (err) {
+      console.warn(`⚠️ Failed to fetch customer profile:`, err);
     }
   }
 
-  // 3. Conversation history (recent messages)
+  // ========== STEP 4: MESSAGE HISTORY ==========
   const recentMessages = await convex.query(api.messages.getContextWindow, {
     conversationId: conversation._id,
     limit: 20,
   });
 
-  console.log(`🔧 [DEBUG] Loading ${recentMessages.length} messages from conversation history`);
+  console.log(`📋 Message History: ${recentMessages.length} messages`);
 
-  for (const msg of recentMessages) {
-    if (msg.role === "customer") {
-      messages.push({ role: "user", content: msg.content });
-    } else if (msg.role === "agent") {
-      messages.push({ role: "assistant", content: msg.content });
-    } else if (msg.role === "human") {
-      // Human operator messages shown as assistant
-      messages.push({ role: "assistant", content: msg.content });
+  // Format message history
+  if (recentMessages.length > 0) {
+    for (const msg of recentMessages) {
+      if (msg.role === "customer") {
+        messages.push({ role: "user", content: msg.content });
+      } else if (msg.role === "agent" || msg.role === "human") {
+        messages.push({ role: "assistant", content: msg.content });
+      }
     }
   }
 
-  console.log(`🔧 [DEBUG] Total messages to LLM: ${messages.length}`);
+  console.log(`✅ TOTAL MESSAGES TO LLM: ${messages.length}`);
+  console.log(`========== BUILD CONTEXT END ==========\n`);
 
   return { messages, tenantAiSettings };
 }
