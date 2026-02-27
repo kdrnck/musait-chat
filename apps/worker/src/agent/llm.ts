@@ -31,29 +31,31 @@ export async function runAgentLoop(
   convex: ConvexHttpClient,
   job: AgentJob,
   conversation: Conversation
-): Promise<string> {
+): Promise<AgentLoopResult> {
   const MAX_ITERATIONS = 5;
-  
+
   // Check for admin mode activation
   const messageNormalized = (job.messageContent || "").trim().toLowerCase();
   const isAdminModeActivation = messageNormalized === ADMIN_MODE.secretCode;
   const isSuperUltraThink = messageNormalized.includes(ADMIN_MODE.superThinkCommand.toLowerCase());
-  
+
   // If activating admin mode, return activation message
   if (isAdminModeActivation && !conversation.adminMode) {
-    // Mark admin mode on conversation (will be handled by job-handler)
-    return `__ADMIN_MODE_ACTIVATE__`;
+    return { response: `__ADMIN_MODE_ACTIVATE__` };
   }
-  
+
   // Determine reasoning mode
-  const useReasoning = conversation.adminMode 
-    ? isSuperUltraThink  // In admin mode, use reasoning only with "süper ultra düşün"
+  const useReasoning = conversation.adminMode
+    ? isSuperUltraThink
     : isComplexMessage(job.messageContent || "");
 
   // 1. Build context
   const context = await buildContext(convex, job, conversation);
   const messages = context.messages;
   const tenantAiSettings = context.tenantAiSettings;
+
+  const loopStartTime = Date.now();
+  let lastResponse: OpenRouterResponse | null = null;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
@@ -63,6 +65,7 @@ export async function runAgentLoop(
       isAdminMode: conversation.adminMode,
       isSuperThink: isSuperUltraThink,
     });
+    lastResponse = response;
 
     // 3. Check for tool calls
     if (response.tool_calls && response.tool_calls.length > 0) {
@@ -97,11 +100,22 @@ export async function runAgentLoop(
       continue;
     }
 
-    // 4. No tool calls — return text response
-    return response.content || "Üzgünüm, şu anda yanıt veremiyorum.";
+    // 4. No tool calls — return text response with debug info
+    const responseTimeMs = Date.now() - loopStartTime;
+    const debugInfo: AgentDebugInfo = {
+      responseTimeMs,
+      model: lastResponse?.model || tenantAiSettings.model,
+      promptTokens: lastResponse?.usage?.prompt_tokens,
+      completionTokens: lastResponse?.usage?.completion_tokens,
+      totalTokens: lastResponse?.usage?.total_tokens,
+    };
+    return {
+      response: response.content || "Üzgünüm, şu anda yanıt veremiyorum.",
+      debugInfo,
+    };
   }
 
-  return "Üzgünüm, işleminizi tamamlayamadım. Lütfen tekrar deneyin.";
+  return { response: "Üzgünüm, işleminizi tamamlayamadım. Lütfen tekrar deneyin." };
 }
 
 // --- Build agent context ---
@@ -252,6 +266,25 @@ interface OpenRouterResponse {
     name: AgentToolName;
     arguments: Record<string, unknown>;
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  model?: string;
+}
+
+export interface AgentDebugInfo {
+  responseTimeMs: number;
+  model: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
+export interface AgentLoopResult {
+  response: string;
+  debugInfo?: AgentDebugInfo;
 }
 
 async function callOpenRouter(
@@ -377,6 +410,8 @@ async function callOpenRouter(
         arguments: args,
       };
     }),
+    usage: data.usage,
+    model: data.model,
   };
 }
 

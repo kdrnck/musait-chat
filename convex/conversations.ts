@@ -130,6 +130,40 @@ export const listAll = query({
   },
 });
 
+/** List unbound conversations (tenantId=null) - routing agent admin view */
+export const listUnbound = query({
+  args: {},
+  handler: async (ctx) => {
+    const active = await ctx.db
+      .query("conversations")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", null).eq("status", "active"))
+      .collect();
+    const handoff = await ctx.db
+      .query("conversations")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", null).eq("status", "handoff"))
+      .collect();
+
+    const conversations = [...active, ...handoff];
+
+    const enriched = await Promise.all(
+      conversations.map(async (conv) => {
+        const lastMessage = await ctx.db
+          .query("messages")
+          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+          .order("desc")
+          .first();
+        return {
+          ...conv,
+          lastMessage: lastMessage?.content ?? null,
+          lastMessageRole: lastMessage?.role ?? null,
+        };
+      })
+    );
+
+    return enriched.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+  },
+});
+
 /** List conversations in handoff status (for staff dashboard) */
 export const listHandoffs = query({
   args: { tenantId: v.optional(v.string()) },

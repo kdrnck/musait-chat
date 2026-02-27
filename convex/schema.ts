@@ -55,6 +55,14 @@ export default defineSchema({
     ),
     retryCount: v.number(),
     createdAt: v.number(),
+    // Debug metrics (admin-only, populated by worker)
+    debugInfo: v.optional(v.object({
+      responseTimeMs: v.number(),
+      model: v.string(),
+      promptTokens: v.optional(v.number()),
+      completionTokens: v.optional(v.number()),
+      totalTokens: v.optional(v.number()),
+    })),
   })
     .index("by_conversation", ["conversationId", "createdAt"])
     .index("by_status", ["status"])

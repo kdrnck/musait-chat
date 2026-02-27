@@ -191,7 +191,9 @@ export function createJobHandler(convex: ConvexHttpClient) {
       }
 
       // 5. Run agent loop (LLM + tool calls)
-      const agentResponse = await runAgentLoop(convex, job, conversation);
+      const agentResult = await runAgentLoop(convex, job, conversation);
+      const agentResponse = agentResult.response;
+      const agentDebugInfo = agentResult.debugInfo;
 
       // 🔓 ADMIN MODE ACTIVATION
       if (agentResponse === "__ADMIN_MODE_ACTIVATE__") {
@@ -230,7 +232,8 @@ export function createJobHandler(convex: ConvexHttpClient) {
         role: "agent",
         content: agentResponse,
         status: "done",
-      });
+        ...(agentDebugInfo ? { debugInfo: agentDebugInfo } : {}),
+      } as any);
 
       // 7. Send WhatsApp reply
       await sendWhatsAppMessage(job.customerPhone, agentResponse, {

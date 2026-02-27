@@ -90,6 +90,13 @@ export const create = mutation({
       v.literal("done"),
       v.literal("failed")
     ),
+    debugInfo: v.optional(v.object({
+      responseTimeMs: v.number(),
+      model: v.string(),
+      promptTokens: v.optional(v.number()),
+      completionTokens: v.optional(v.number()),
+      totalTokens: v.optional(v.number()),
+    })),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -100,6 +107,7 @@ export const create = mutation({
       status: args.status,
       retryCount: 0,
       createdAt: now,
+      ...(args.debugInfo ? { debugInfo: args.debugInfo } : {}),
     });
 
     // Touch conversation last message timestamp

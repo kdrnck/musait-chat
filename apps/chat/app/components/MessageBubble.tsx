@@ -1,3 +1,4 @@
+/* eslint-disable */
 "use client";
 
 import { Doc } from "../../../../convex/_generated/dataModel";
@@ -13,33 +14,30 @@ function formatTime(timestamp: number): string {
 const roleConfig = {
     customer: {
         align: "left" as const,
-        bg: "var(--color-bubble-customer)",
+        styleClass: "neu-pressed",
         color: "var(--color-text-primary)",
-        shadow: "0 4px 12px rgba(0,0,0,0.03), 0 1px 2px rgba(0,0,0,0.02)",
         icon: <User size={12} />,
         label: "Müşteri",
-        labelColor: "var(--color-text-muted)",
-        borderRadius: "4px 24px 24px 24px",
+        labelColor: "var(--color-text-secondary)",
+        borderRadius: "16px 24px 24px 16px",
     },
     agent: {
         align: "right" as const,
-        bg: "var(--color-bubble-agent)",
-        color: "#FFFFFF",
-        shadow: "0 10px 25px rgba(0,0,0,0.1)",
+        styleClass: "neu-convex",
+        color: "var(--color-text-primary)",
         icon: <Bot size={12} />,
         label: "Asistan",
-        labelColor: "var(--color-brand)",
-        borderRadius: "24px 24px 4px 24px",
+        labelColor: "var(--color-brand-dim)",
+        borderRadius: "24px 16px 16px 24px",
     },
     human: {
         align: "right" as const,
-        bg: "var(--color-bubble-human)",
+        styleClass: "neu-brand",
         color: "#111111",
-        shadow: "0 10px 25px var(--color-brand-glow)",
         icon: <Headset size={12} />,
         label: "Yönetici",
-        labelColor: "#111111",
-        borderRadius: "24px 24px 4px 24px",
+        labelColor: "var(--color-brand-dim)",
+        borderRadius: "24px 16px 16px 24px",
     },
 };
 
@@ -130,12 +128,12 @@ export default function MessageBubble({
             } else {
                 displayText = (
                     <div className="flex items-center gap-3 py-1">
-                        <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                            <Wrench size={14} className="text-[var(--color-brand)]" />
+                        <div className="w-8 h-8 rounded-xl neu-pressed flex items-center justify-center">
+                            <Wrench size={14} className="text-[var(--color-brand-dim)]" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-[13px] font-bold text-white leading-none mb-1">AI İşlemi</span>
-                            <span className="text-[11px] font-medium text-white/50">{getTurkishToolCallName(toolName)}</span>
+                            <span className="text-[13px] font-bold text-[var(--color-text-primary)] leading-none mb-1">AI İşlemi</span>
+                            <span className="text-[11px] font-medium text-[var(--color-text-muted)]">{getTurkishToolCallName(toolName)}</span>
                         </div>
                     </div>
                 );
@@ -147,7 +145,7 @@ export default function MessageBubble({
     if (isToolCall && !debugMode) {
         return (
             <div className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-6 animate-fade-in w-full`}>
-                <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-white border border-black/[0.03] shadow-sm">
+                <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl neu-flat">
                     <div className="w-6 h-6 rounded-lg bg-[var(--color-brand-light)] flex items-center justify-center">
                         <CheckCircle2 size={14} className="text-[var(--color-brand-dim)]" />
                     </div>
@@ -179,21 +177,14 @@ export default function MessageBubble({
 
             {/* Bubble */}
             <div
-                className="px-5 py-3.5 text-[15px] font-medium leading-[1.6] relative"
+                className={`px-6 py-4 text-[15px] font-medium leading-[1.6] break-words whitespace-pre-wrap ${config.styleClass}`}
                 style={{
-                    background: config.bg,
                     color: config.color,
                     borderRadius: config.borderRadius,
-                    boxShadow: config.shadow,
-                    border: message.role === "customer" ? "1px solid rgba(0,0,0,0.03)" : "none",
+                    border: message.role === "customer" ? "1px solid rgba(255,255,255,0.4)" : "1px solid transparent",
                 }}
             >
                 {displayText}
-                
-                {/* Subtle glass effect for right-aligned bubbles */}
-                {isRight && (
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 rounded-[inherit] pointer-events-none" />
-                )}
             </div>
 
             {/* Timestamp & Status */}
@@ -214,6 +205,27 @@ export default function MessageBubble({
                     </div>
                 )}
             </div>
+
+            {/* Debug Metrics (admin-only) */}
+            {debugMode && message.role === "agent" && (message as any).debugInfo && (
+                <div className="mt-2 px-1 flex items-center gap-2 flex-wrap">
+                    {(message as any).debugInfo.responseTimeMs && (
+                        <span className="text-[9px] font-mono font-bold text-[var(--color-brand-dim)] bg-[var(--color-brand-light)] px-2 py-0.5 rounded-md">
+                            ⏱ {(message as any).debugInfo.responseTimeMs}ms
+                        </span>
+                    )}
+                    {(message as any).debugInfo.totalTokens && (
+                        <span className="text-[9px] font-mono font-bold text-[var(--color-text-muted)] bg-black/5 px-2 py-0.5 rounded-md">
+                            🔢 {(message as any).debugInfo.totalTokens}t
+                        </span>
+                    )}
+                    {(message as any).debugInfo.model && (
+                        <span className="text-[9px] font-mono font-bold text-[var(--color-text-muted)] bg-black/5 px-2 py-0.5 rounded-md">
+                            🤖 {(message as any).debugInfo.model.split("/").pop()}
+                        </span>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

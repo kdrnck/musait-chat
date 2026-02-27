@@ -42,8 +42,7 @@ export default function ChatLayout({
                     ${selectedConversationId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
                 `}
                 style={{
-                    background: "var(--color-sidebar-bg)",
-                    borderRight: "1px solid var(--color-sidebar-border)",
+                    background: "var(--color-sidebar-bg)"
                 }}
             >
                 <ConversationList
@@ -76,6 +75,8 @@ export default function ChatLayout({
                     showCustomerPanel={showCustomerPanel}
                     debugMode={debugMode}
                     onBack={() => setSelectedConversationId(null)}
+                    isAdmin={isAdmin}
+                    allTenants={allTenants}
                 />
             </main>
 
@@ -90,13 +91,13 @@ export default function ChatLayout({
                     ${!showCustomerPanel && 'hidden lg:hidden'}
                 `}
                 style={{
-                    background: "var(--color-surface-1)",
-                    borderLeft: "1px solid var(--color-border)",
+                    background: "var(--color-surface-base)",
+                    borderLeft: "2px solid var(--color-surface-1)",
                 }}
             >
                 {selectedConversationId && (
-                    <CustomerPanel 
-                        conversationId={selectedConversationId} 
+                    <CustomerPanel
+                        conversationId={selectedConversationId}
                         onClose={() => setShowCustomerPanel(false)}
                     />
                 )}
@@ -104,7 +105,7 @@ export default function ChatLayout({
 
             {/* Mobile Backdrop for Customer Panel */}
             {showCustomerPanel && selectedConversationId && (
-                <div 
+                <div
                     className="fixed inset-0 bg-black/20 backdrop-blur-sm z-35 lg:hidden animate-fade-in"
                     onClick={() => setShowCustomerPanel(false)}
                 />
