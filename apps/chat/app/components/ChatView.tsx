@@ -42,7 +42,7 @@ export default function ChatView({
 
     const messages = useQuery(
         api.messages.listByConversation,
-        conversationId ? { conversationId } : "skip"
+        conversationId ? { conversationId, isAdmin: isAdmin ?? false } : "skip"
     );
 
     useEffect(() => {
@@ -193,9 +193,14 @@ export default function ChatView({
                         <p className="text-[13px] font-medium text-[var(--color-text-muted)]">Henüz mesaj yok</p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        {messages.map((m) => (
-                            <MessageBubble key={m._id} message={m} debugMode={debugMode} />
+                    <div className="space-y-1.5">
+                        {messages.map((m, i) => (
+                            <MessageBubble
+                                key={m._id}
+                                message={m}
+                                debugMode={debugMode}
+                                prevRole={i > 0 ? messages[i - 1].role : null}
+                            />
                         ))}
                     </div>
                 )}

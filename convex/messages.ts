@@ -3,15 +3,25 @@ import { mutation, query } from "./_generated/server";
 
 // ===== QUERIES =====
 
-/** Get messages for a conversation (ordered by creation time) */
+/** Get messages for a conversation (ordered by creation time)
+ * 
+ * Session visibility:
+ * - isAdmin=true: Shows ALL messages (full history)
+ * - isAdmin=false/undefined (tenant): Shows only current session messages (after sessionStartedAt)
+ */
 export const listByConversation = query({
   args: {
     conversationId: v.id("conversations"),
     limit: v.optional(v.number()),
+    isAdmin: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
-    return await ctx.db
+    
+    // Get conversation to check sessionStartedAt
+    const conversation = await ctx.db.get(args.conversationId);
+    
+    let messages = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId)
@@ -19,6 +29,14 @@ export const listByConversation = query({
       .order("desc")
       .take(limit)
       .then((msgs) => msgs.reverse()); // Return in chronological order
+    
+    // If NOT admin and conversation has sessionStartedAt, filter to current session only
+    // This means tenants only see messages from the active session
+    if (!args.isAdmin && conversation?.sessionStartedAt) {
+      messages = messages.filter(msg => msg.createdAt >= conversation.sessionStartedAt!);
+    }
+    
+    return messages;
   },
 });
 
