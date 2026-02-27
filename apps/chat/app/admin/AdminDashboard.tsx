@@ -4,6 +4,7 @@ import { useState } from "react";
 import ChatLayout from "../components/ChatLayout";
 import GlobalAiSettingsPanel from "./components/GlobalAiSettingsPanel";
 import ModelTestPanel from "./components/ModelTestPanel";
+import TenantSystemPromptPanel from "./components/TenantSystemPromptPanel";
 import { Settings, Shield, Activity, Terminal, ExternalLink } from "lucide-react";
 
 interface Tenant {
@@ -135,6 +136,19 @@ export default function AdminDashboard({
                                     </div>
                                 </div>
                                 <GlobalAiSettingsPanel />
+                            </section>
+
+                            <section>
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-12 h-12 rounded-2xl bg-white shadow-xl flex items-center justify-center text-[var(--color-text-primary)] border border-black/[0.03]">
+                                        <Shield size={24} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">Tenant Prompt</h2>
+                                        <p className="text-sm font-medium text-[var(--color-text-muted)] mt-1">İşletme bazlı sistem prompt override</p>
+                                    </div>
+                                </div>
+                                <TenantSystemPromptPanel tenants={tenants} />
                             </section>
 
                             <section className="pb-24">

@@ -24,6 +24,7 @@ export const api = {
     listHandoffs: ref("conversations:listHandoffs"),
     create: ref("conversations:create"),
     bindToTenant: ref("conversations:bindToTenant"),
+    update: ref("conversations:update"),
     updateStatus: ref("conversations:updateStatus"),
     updateSummary: ref("conversations:updateSummary"),
     disableAgent: ref("conversations:disableAgent"),
