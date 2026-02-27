@@ -7,12 +7,14 @@ import {
   resolveTenantAiSettings,
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
+import { ADMIN_MODE } from "./master-prompts.js";
 
 interface Conversation {
   _id: any;
   tenantId: string | null;
   rollingSummary: string;
   personNotes: string;
+  adminMode?: boolean;
   [key: string]: any;
 }
 
@@ -31,7 +33,22 @@ export async function runAgentLoop(
   conversation: Conversation
 ): Promise<string> {
   const MAX_ITERATIONS = 5;
-  const useReasoning = isComplexMessage(job.messageContent || "");
+  
+  // Check for admin mode activation
+  const messageNormalized = (job.messageContent || "").trim().toLowerCase();
+  const isAdminModeActivation = messageNormalized === ADMIN_MODE.secretCode;
+  const isSuperUltraThink = messageNormalized.includes(ADMIN_MODE.superThinkCommand.toLowerCase());
+  
+  // If activating admin mode, return activation message
+  if (isAdminModeActivation && !conversation.adminMode) {
+    // Mark admin mode on conversation (will be handled by job-handler)
+    return `__ADMIN_MODE_ACTIVATE__`;
+  }
+  
+  // Determine reasoning mode
+  const useReasoning = conversation.adminMode 
+    ? isSuperUltraThink  // In admin mode, use reasoning only with "süper ultra düşün"
+    : isComplexMessage(job.messageContent || "");
 
   // 1. Build context
   const context = await buildContext(convex, job, conversation);
@@ -43,6 +60,8 @@ export async function runAgentLoop(
     const response = await callOpenRouter(messages, {
       useReasoning: i === 0 && useReasoning,
       tenantAiSettings,
+      isAdminMode: conversation.adminMode,
+      isSuperThink: isSuperUltraThink,
     });
 
     // 3. Check for tool calls
@@ -124,9 +143,20 @@ async function buildContext(
 
   // ========== STEP 2: SYSTEM PROMPT ==========
   // System prompt is the ONLY source of agent personality/rules
-  // It comes from: Dashboard (tenant) > Global Settings > Minimal Fallback
+  // It comes from: Admin Mode > Dashboard (tenant) > Global Settings > Minimal Fallback
   
-  const systemPromptContent = dashboardPrompt || globalPrompt || "Sen yardımcı bir asistansın. Kullanıcının isteklerine Türkçe yanıt ver.";
+  // 🔓 ADMIN MODE - Override everything if active
+  let systemPromptContent: string;
+  let promptSource: string;
+  
+  if (conversation.adminMode) {
+    systemPromptContent = ADMIN_MODE.systemPrompt;
+    promptSource = 'ADMIN_MODE';
+    console.log(`🔓 ADMIN MODE ACTIVE - Using admin system prompt`);
+  } else {
+    systemPromptContent = dashboardPrompt || globalPrompt || "Sen yardımcı bir asistansın. Kullanıcının isteklerine Türkçe yanıt ver.";
+    promptSource = dashboardPrompt ? 'DASHBOARD' : globalPrompt ? 'GLOBAL' : 'FALLBACK';
+  }
   
   const systemPromptFormatted = `<system_prompt>
 ${systemPromptContent}
@@ -134,7 +164,7 @@ ${systemPromptContent}
 
   messages.push({ role: "system", content: systemPromptFormatted });
   
-  console.log(`✅ SYSTEM PROMPT ADDED (source: ${dashboardPrompt ? 'DASHBOARD' : globalPrompt ? 'GLOBAL' : 'FALLBACK'})`);
+  console.log(`✅ SYSTEM PROMPT ADDED (source: ${promptSource})`);
   console.log(`   Length: ${systemPromptContent.length} chars`);
 
   // ========== STEP 3: CUSTOMER PROFILE (if exists) ==========
@@ -217,7 +247,7 @@ interface OpenRouterResponse {
 
 async function callOpenRouter(
   messages: LLMMessage[],
-  options: { useReasoning: boolean; tenantAiSettings: TenantAiSettings }
+  options: { useReasoning: boolean; tenantAiSettings: TenantAiSettings; isAdminMode?: boolean; isSuperThink?: boolean }
 ): Promise<OpenRouterResponse> {
   const providerOrder = options.tenantAiSettings.providerPriority;
   const payload: Record<string, unknown> = {
@@ -241,14 +271,17 @@ async function callOpenRouter(
     };
   }
 
+  // 🔓 ADMIN MODE + SÜPER ULTRA DÜŞÜN: Use high effort reasoning
+  const shouldUseDeepReasoning = options.isAdminMode && options.isSuperThink;
+  
   if (
-    options.useReasoning &&
+    (options.useReasoning || shouldUseDeepReasoning) &&
     LLM_CONFIG.enableReasoningForComplex &&
     supportsReasoning(options.tenantAiSettings.model)
   ) {
     payload.reasoning = {
       enabled: true,
-      effort: "low",
+      effort: shouldUseDeepReasoning ? "high" : "low",  // 🚀 Süper ultra düşün = high effort
       exclude: true,
     };
   }

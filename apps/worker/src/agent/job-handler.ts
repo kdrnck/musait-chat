@@ -5,7 +5,7 @@ import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { handleStructuredBookingFlow } from "./booking-flow.js";
-import { SESSION_PROMPTS } from "./master-prompts.js";
+import { SESSION_PROMPTS, ADMIN_MODE } from "./master-prompts.js";
 import { SUPABASE_CONFIG } from "../config.js";
 import {
   extractNameUpdateIntent,
@@ -265,6 +265,37 @@ export function createJobHandler(convex: ConvexHttpClient) {
 
       // 6. Run agent loop (LLM + tool calls)
       const agentResponse = await runAgentLoop(convex, job, conversation);
+
+      // 🔓 ADMIN MODE ACTIVATION
+      if (agentResponse === "__ADMIN_MODE_ACTIVATE__") {
+        console.log(`🔓 Admin mode activated for conversation ${job.conversationId}`);
+        
+        // Update conversation with admin mode flag
+        await convex.mutation(api.conversations.update, {
+          id: conversation._id,
+          adminMode: true,
+        });
+        
+        const activationMessage = ADMIN_MODE.activationMessage;
+        
+        await convex.mutation(api.messages.create, {
+          conversationId: job.conversationId as any,
+          role: "agent",
+          content: activationMessage,
+          status: "done",
+        });
+        
+        await sendWhatsAppMessage(job.customerPhone, activationMessage, {
+          phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+          accessToken: job.outboundAccessToken,
+        });
+        
+        await convex.mutation(api.messages.updateStatus, {
+          id: job.id as any,
+          status: "done",
+        });
+        return;
+      }
 
       // 7. Save agent response as message
       await convex.mutation(api.messages.create, {

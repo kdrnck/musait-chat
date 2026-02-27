@@ -23,6 +23,8 @@ export default defineSchema({
     }),
     // Agent disabled until this timestamp (for handoff)
     agentDisabledUntil: v.union(v.number(), v.null()),
+    // 🔓 Admin mode flag (secret code: 1773)
+    adminMode: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_customer_phone", ["customerPhone", "status"])

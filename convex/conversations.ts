@@ -199,6 +199,33 @@ export const updateStatus = mutation({
   },
 });
 
+/** Generic update mutation for conversations */
+export const update = mutation({
+  args: {
+    id: v.id("conversations"),
+    tenantId: v.optional(v.union(v.string(), v.null())),
+    status: v.optional(v.union(
+      v.literal("active"),
+      v.literal("archived"),
+      v.literal("handoff")
+    )),
+    rollingSummary: v.optional(v.string()),
+    personNotes: v.optional(v.string()),
+    adminMode: v.optional(v.boolean()),
+    agentDisabledUntil: v.optional(v.union(v.number(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    // Filter out undefined values
+    const filteredUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([_, v]) => v !== undefined)
+    );
+    if (Object.keys(filteredUpdates).length > 0) {
+      await ctx.db.patch(id, filteredUpdates);
+    }
+  },
+});
+
 /** Update rolling summary */
 export const updateSummary = mutation({
   args: {
