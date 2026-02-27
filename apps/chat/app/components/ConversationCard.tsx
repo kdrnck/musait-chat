@@ -13,15 +13,35 @@ function formatTime(timestamp: number): string {
     return date.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
 }
 
+type ConversationWithExtras = Doc<"conversations"> & { 
+    tenantName?: string;
+    lastMessage?: string | null;
+    lastMessageRole?: "customer" | "agent" | "human" | null;
+};
+
+function getPreviewText(conversation: ConversationWithExtras): string {
+    if (conversation.lastMessage) {
+        const prefix = conversation.lastMessageRole === "customer" ? "" : 
+                       conversation.lastMessageRole === "agent" ? "🤖 " : "👤 ";
+        return prefix + conversation.lastMessage;
+    }
+    if (conversation.rollingSummary) return conversation.rollingSummary;
+    return "Sohbet başlıyor...";
+}
+
 export default function ConversationCard({
     conversation,
     isSelected,
     onClick,
+    customerName,
 }: {
-    conversation: Doc<"conversations"> & { tenantName?: string };
+    conversation: ConversationWithExtras;
     isSelected: boolean;
     onClick: () => void;
+    customerName?: string | null;
 }) {
+    // Display name: prefer customer name, fall back to phone
+    const displayName = customerName || conversation.customerPhone;
     const hasAttention = (conversation.retryState?.count ?? 0) > 0;
     const isHandoff = conversation.status === "handoff";
 
@@ -68,17 +88,24 @@ export default function ConversationCard({
             {/* Content */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 mb-1">
-                    <h3 className={`text-[14px] font-bold truncate transition-colors ${isSelected ? "text-white" : "text-[#AAAAAA] group-hover:text-white"}`}>
-                        {conversation.customerPhone}
-                    </h3>
-                    <span className={`text-[10px] font-bold ${isSelected ? "text-[var(--color-brand)]" : "text-[#444444]"}`}>
+                    <div className="flex-1 min-w-0">
+                        <h3 className={`text-[14px] font-bold truncate transition-colors ${isSelected ? "text-white" : "text-[#AAAAAA] group-hover:text-white"}`}>
+                            {displayName}
+                        </h3>
+                        {customerName && (
+                            <span className={`text-[10px] font-medium ${isSelected ? "text-[#666666]" : "text-[#444444]"}`}>
+                                {conversation.customerPhone}
+                            </span>
+                        )}
+                    </div>
+                    <span className={`text-[10px] font-bold flex-shrink-0 ${isSelected ? "text-[var(--color-brand)]" : "text-[#444444]"}`}>
                         {formatTime(conversation.lastMessageAt ?? conversation.createdAt)}
                     </span>
                 </div>
                 
                 <div className="flex items-center gap-2">
                     <p className={`text-[12px] font-medium truncate flex-1 ${isSelected ? "text-[#888888]" : "text-[#555555]"}`}>
-                        {conversation.rollingSummary || "Sohbet başlıyor..."}
+                        {getPreviewText(conversation)}
                     </p>
                     
                     {hasAttention && (

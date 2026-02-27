@@ -30,7 +30,7 @@ export const getById = query({
   },
 });
 
-/** List conversations for a tenant */
+/** List conversations for a tenant with last message */
 export const listByTenant = query({
   args: {
     tenantId: v.string(),
@@ -43,17 +43,42 @@ export const listByTenant = query({
     ),
   },
   handler: async (ctx, args) => {
-    let q = ctx.db
+    // Fetch conversations
+    const conversations = await ctx.db
       .query("conversations")
       .withIndex("by_tenant", (q) => {
         const base = q.eq("tenantId", args.tenantId);
         return args.status ? base.eq("status", args.status) : base;
-      });
-    return await q.collect();
+      })
+      .collect();
+    
+    // Filter out archived by default
+    const filtered = args.status 
+      ? conversations 
+      : conversations.filter(c => c.status !== "archived");
+    
+    // Enrich with last message for each conversation
+    const enriched = await Promise.all(
+      filtered.map(async (conv) => {
+        const lastMessage = await ctx.db
+          .query("messages")
+          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+          .order("desc")
+          .first();
+        return {
+          ...conv,
+          lastMessage: lastMessage?.content ?? null,
+          lastMessageRole: lastMessage?.role ?? null,
+        };
+      })
+    );
+    
+    // Sort by lastMessageAt descending (newest first)
+    return enriched.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
   },
 });
 
-/** List all conversations (admin/master view) */
+/** List all conversations (admin/master view) with last message */
 export const listAll = query({
   args: {
     status: v.optional(
@@ -65,22 +90,43 @@ export const listAll = query({
     ),
   },
   handler: async (ctx, args) => {
+    let conversations;
     if (args.status) {
-      return await ctx.db
+      conversations = await ctx.db
         .query("conversations")
         .withIndex("by_status", (q) => q.eq("status", args.status!))
         .collect();
+    } else {
+      // Return all non-archived by default
+      const active = await ctx.db
+        .query("conversations")
+        .withIndex("by_status", (q) => q.eq("status", "active"))
+        .collect();
+      const handoff = await ctx.db
+        .query("conversations")
+        .withIndex("by_status", (q) => q.eq("status", "handoff"))
+        .collect();
+      conversations = [...active, ...handoff];
     }
-    // Return all non-archived by default
-    const active = await ctx.db
-      .query("conversations")
-      .withIndex("by_status", (q) => q.eq("status", "active"))
-      .collect();
-    const handoff = await ctx.db
-      .query("conversations")
-      .withIndex("by_status", (q) => q.eq("status", "handoff"))
-      .collect();
-    return [...active, ...handoff];
+    
+    // Enrich with last message for each conversation
+    const enriched = await Promise.all(
+      conversations.map(async (conv) => {
+        const lastMessage = await ctx.db
+          .query("messages")
+          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+          .order("desc")
+          .first();
+        return {
+          ...conv,
+          lastMessage: lastMessage?.content ?? null,
+          lastMessageRole: lastMessage?.role ?? null,
+        };
+      })
+    );
+    
+    // Sort by lastMessageAt descending (newest first)
+    return enriched.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
   },
 });
 

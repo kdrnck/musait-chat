@@ -22,6 +22,9 @@ const PORT = parseInt(process.env.PORT || "3001", 10);
 
 async function main() {
   console.log("🚀 Musait Chat Worker starting...");
+  console.log(`📋 [DEBUG] Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📋 [DEBUG] CONVEX_URL: ${process.env.CONVEX_URL || 'NOT SET'}`);
+  console.log(`📋 [DEBUG] SUPABASE_URL: ${process.env.SUPABASE_URL || 'NOT SET'}`);
 
   // --- Initialize Convex client ---
   const convex = createConvexClient();

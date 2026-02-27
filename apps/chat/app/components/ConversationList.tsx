@@ -3,7 +3,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import ConversationCard from "./ConversationCard";
@@ -58,10 +58,38 @@ export default function ConversationList({
     );
     const conversations = tenantId ? tenantConversations : (isAdmin ? allConversations : undefined);
 
+    // Fetch customer names from Supabase
+    const [customerNames, setCustomerNames] = useState<Record<string, string | null>>({});
+    
+    useEffect(() => {
+        if (!conversations || conversations.length === 0) return;
+        
+        const phones = [...new Set(conversations.map(c => c.customerPhone))];
+        
+        fetch("/api/customer-names", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phones }),
+        })
+            .then(res => res.json())
+            .then(data => setCustomerNames(data.names || {}))
+            .catch(() => {}); // Silently fail
+    }, [conversations]);
+
     const filtered = useMemo(() => {
         if (!conversations) return [];
 
         let result = [...conversations];
+
+        // Deduplicate by customerPhone - keep most recent per phone number
+        const phoneMap = new Map<string, typeof result[0]>();
+        for (const conv of result) {
+            const existing = phoneMap.get(conv.customerPhone);
+            if (!existing || (conv.lastMessageAt ?? 0) > (existing.lastMessageAt ?? 0)) {
+                phoneMap.set(conv.customerPhone, conv);
+            }
+        }
+        result = Array.from(phoneMap.values());
 
         if (filter === "attention") {
             result = result.filter((c) => (c.retryState?.count ?? 0) > 0);
@@ -78,17 +106,33 @@ export default function ConversationList({
             );
         }
 
+        // Sort by lastMessageAt descending
+        result.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+
         return result;
     }, [conversations, filter, search]);
 
-    const counts = useMemo(() => {
-        if (!conversations) return { all: 0, attention: 0, handoff: 0 };
-        return {
-            all: conversations.length,
-            attention: conversations.filter((c) => (c.retryState?.count ?? 0) > 0).length,
-            handoff: conversations.filter((c) => c.status === "handoff").length,
-        };
+    // Deduplicated base for counts
+    const deduplicatedConversations = useMemo(() => {
+        if (!conversations) return [];
+        const phoneMap = new Map<string, typeof conversations[0]>();
+        for (const conv of conversations) {
+            const existing = phoneMap.get(conv.customerPhone);
+            if (!existing || (conv.lastMessageAt ?? 0) > (existing.lastMessageAt ?? 0)) {
+                phoneMap.set(conv.customerPhone, conv);
+            }
+        }
+        return Array.from(phoneMap.values());
     }, [conversations]);
+
+    const counts = useMemo(() => {
+        if (!deduplicatedConversations.length) return { all: 0, attention: 0, handoff: 0 };
+        return {
+            all: deduplicatedConversations.length,
+            attention: deduplicatedConversations.filter((c) => (c.retryState?.count ?? 0) > 0).length,
+            handoff: deduplicatedConversations.filter((c) => c.status === "handoff").length,
+        };
+    }, [deduplicatedConversations]);
 
     const filterTabs: { key: FilterTab; label: string; icon: React.ReactNode; count: number }[] = [
         { key: "all", label: "Tümü", icon: <MessageSquare size={14} />, count: counts.all },
@@ -198,6 +242,7 @@ export default function ConversationList({
                                 conversation={c}
                                 isSelected={selectedId === c._id}
                                 onClick={() => onSelect(c._id)}
+                                customerName={customerNames[c.customerPhone]}
                             />
                         ))}
                     </div>

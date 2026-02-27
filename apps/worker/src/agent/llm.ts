@@ -105,9 +105,18 @@ async function buildContext(
     integrationKeys: Record<string, unknown>;
   } | null = null;
 
+  // Debug: Log global prompt
+  console.log(`🔧 [DEBUG] Global prompt loaded: ${globalPrompt ? 'YES (' + globalPrompt.slice(0, 50) + '...)' : 'NO'}`);
+
   if (conversation.tenantId) {
     tenantCtx = await fetchTenantContext(conversation.tenantId);
     tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys, globalPrompt);
+    
+    // Debug: Log tenant-specific prompt
+    const tenantPrompt = tenantCtx?.integrationKeys?.ai_system_prompt_text;
+    console.log(`🔧 [DEBUG] Tenant ID: ${conversation.tenantId}`);
+    console.log(`🔧 [DEBUG] Tenant prompt (from integration_keys): ${tenantPrompt ? 'YES (' + String(tenantPrompt).slice(0, 50) + '...)' : 'NO'}`);
+    console.log(`🔧 [DEBUG] Final systemPromptText: ${tenantAiSettings.systemPromptText ? 'YES (' + tenantAiSettings.systemPromptText.slice(0, 50) + '...)' : 'USING DEFAULT'}`);
   }
 
   // System prompt
@@ -116,6 +125,10 @@ async function buildContext(
   const systemPrompt = resolveSystemPromptPlaceholders(rawPrompt, {
     tenantId: conversation.tenantId,
   });
+  
+  // Debug: Log final system prompt being used
+  console.log(`🔧 [DEBUG] Final system prompt (first 100 chars): ${systemPrompt.slice(0, 100)}...`);
+  
   messages.push({ role: "system", content: systemPrompt });
 
   if (conversation.tenantId && tenantCtx) {
