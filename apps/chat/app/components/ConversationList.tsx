@@ -19,6 +19,11 @@ export default function ConversationList({
     tenantName,
     tenantLogo,
     userEmail,
+    debugMode,
+    onToggleDebug,
+    isAdmin,
+    allTenants,
+    onTenantChange,
 }: {
     tenantId: string | null;
     selectedId: Id<"conversations"> | null;
@@ -26,6 +31,11 @@ export default function ConversationList({
     tenantName: string | null;
     tenantLogo: string | null;
     userEmail: string | null;
+    debugMode: boolean;
+    onToggleDebug: () => void;
+    isAdmin?: boolean;
+    allTenants?: { id: string; name: string; logo_url: string | null }[];
+    onTenantChange?: (id: string) => void;
 }) {
     const [filter, setFilter] = useState<FilterTab>("all");
     const [search, setSearch] = useState("");
@@ -87,77 +97,81 @@ export default function ConversationList({
     return (
         <div className="flex flex-col h-full">
             {/* ── Header ── */}
-            <div
-                className="flex items-center justify-between px-5 py-4 border-b"
-                style={{ borderColor: "var(--color-border)" }}
-            >
-                <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between px-6 py-6 pb-4">
+                <div className="flex items-center gap-3 font-bold text-lg tracking-tight" style={{ color: "var(--color-text-primary)" }}>
                     <div
-                        className="w-8 h-8 flex items-center justify-center"
+                        className="w-8 h-8 flex items-center justify-center rounded-xl"
                         style={{
-                            background: "var(--color-brand)",
-                            color: "var(--color-surface-base)",
+                            background: "var(--color-text-primary)",
+                            color: "var(--color-surface-1)",
                         }}
                     >
                         <MessageSquare size={16} strokeWidth={2.5} />
                     </div>
-                    <div>
-                        <h1
-                            className="text-sm font-bold tracking-wide"
-                            style={{ color: "var(--color-text-primary)" }}
-                        >
-                            MÜSAIT CHAT
-                        </h1>
-                        <p
-                            className="text-[10px] tracking-widest uppercase"
-                            style={{ color: "var(--color-text-muted)" }}
-                        >
-                            Command Center
-                        </p>
-                    </div>
+                    Müsait
                 </div>
             </div>
 
+            {/* ── Admin Tenant Selector ── */}
+            {isAdmin && allTenants && onTenantChange && (
+                <div className="px-6 pb-4">
+                    <select
+                        value={tenantId || ""}
+                        onChange={(e) => {
+                            onSelect("" as Id<"conversations">); // clear selected convo
+                            onTenantChange(e.target.value);
+                        }}
+                        className="w-full bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+                    >
+                        {allTenants.map((t) => (
+                            <option key={t.id} value={t.id}>
+                                {t.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
             {/* ── Search ── */}
-            <div className="px-3 py-3">
+            <div className="px-6 pb-4">
                 <div
-                    className="flex items-center gap-2 px-3 py-2"
+                    className="flex items-center gap-2 px-4 py-3 rounded-xl transition-all"
                     style={{
                         background: "var(--color-surface-2)",
-                        border: "1px solid var(--color-border)",
+                        border: "1px solid transparent",
                     }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = "transparent")}
                 >
-                    <Search size={14} style={{ color: "var(--color-text-muted)" }} />
+                    <Search size={16} style={{ color: "var(--color-text-muted)" }} />
                     <input
                         type="text"
-                        placeholder="Telefon, özet ara..."
+                        placeholder="Ara..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="bg-transparent outline-none flex-1 text-sm placeholder:text-[var(--color-text-muted)]"
+                        className="bg-transparent outline-none flex-1 text-sm font-medium placeholder:text-[var(--color-text-muted)]"
                         style={{ color: "var(--color-text-primary)" }}
                     />
                 </div>
             </div>
 
             {/* ── Filter Tabs ── */}
-            <div
-                className="flex gap-1 px-3 pb-2"
-            >
+            <div className="flex gap-2 px-6 pb-4">
                 {tabs.map((tab) => (
                     <button
                         key={tab.key}
                         onClick={() => setFilter(tab.key)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all"
+                        className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold rounded-full transition-all"
                         style={{
                             background:
                                 filter === tab.key
-                                    ? "var(--color-brand-glow)"
+                                    ? "var(--color-surface-2)"
                                     : "transparent",
                             color:
                                 filter === tab.key
-                                    ? "var(--color-brand)"
-                                    : "var(--color-text-muted)",
-                            border: `1px solid ${filter === tab.key ? "var(--color-border-brand)" : "transparent"}`,
+                                    ? "var(--color-text-primary)"
+                                    : "var(--color-text-secondary)",
+                            border: `1px solid ${filter === tab.key ? "var(--color-border)" : "transparent"}`,
                         }}
                     >
                         {tab.icon}
@@ -238,6 +252,7 @@ export default function ConversationList({
                         style={{
                             background: tenantLogo ? "transparent" : "var(--color-brand-glow)",
                             border: "1px solid var(--color-border-brand)",
+                            borderRadius: "10px",
                         }}
                     >
                         {tenantLogo ? (
@@ -277,6 +292,13 @@ export default function ConversationList({
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={onToggleDebug}
+                            className={`p-1.5 flex-shrink-0 transition-colors rounded-md ${debugMode ? 'bg-[var(--color-brand-glow)] text-[var(--color-brand)]' : 'text-[var(--color-text-muted)]'}`}
+                            title={debugMode ? "Geliştirici ModuAçık" : "Geliştirici Modu Kapalı"}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 2 1.88 1.88" /><path d="M14.12 3.88 16 2" /><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" /><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6" /><path d="M12 20v-9" /><path d="M6.53 9C4.6 8.8 3 7.1 3 5" /><path d="M6 13H2" /><path d="M3 21c0-2.1 1.7-3.9 3.8-4" /><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4" /><path d="M22 13h-4" /><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" /></svg>
+                        </button>
                         <AiControlPanel tenantId={tenantId} />
                         <button
                             onClick={handleLogout}

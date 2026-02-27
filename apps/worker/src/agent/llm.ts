@@ -97,7 +97,8 @@ async function buildContext(
 ): Promise<{ messages: LLMMessage[]; tenantAiSettings: TenantAiSettings }> {
   const messages: LLMMessage[] = [];
   let knownCustomerName: string | null = job.customerName || null;
-  let tenantAiSettings = resolveTenantAiSettings();
+  const globalPrompt = await fetchGlobalSettings();
+  let tenantAiSettings = resolveTenantAiSettings(null, globalPrompt);
   let tenantCtx: {
     name: string | null;
     slug: string | null;
@@ -106,7 +107,7 @@ async function buildContext(
 
   if (conversation.tenantId) {
     tenantCtx = await fetchTenantContext(conversation.tenantId);
-    tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys);
+    tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys, globalPrompt);
   }
 
   // System prompt
@@ -349,6 +350,29 @@ async function fetchTenantContext(tenantId: string): Promise<{
     slug: tenant.slug || null,
     integrationKeys: tenant.integration_keys || {},
   };
+}
+
+async function fetchGlobalSettings(): Promise<string | null> {
+  const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/global_settings`);
+  url.searchParams.set("id", "eq.default");
+  url.searchParams.set("select", "ai_system_prompt_text");
+  url.searchParams.set("limit", "1");
+
+  try {
+    const response = await fetch(url.toString(), {
+      headers: {
+        apikey: SUPABASE_CONFIG.serviceKey,
+        Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+      },
+    });
+    if (!response.ok) return null;
+
+    const rows = (await response.json()) as Array<{ ai_system_prompt_text?: string | null }>;
+    return rows[0]?.ai_system_prompt_text || null;
+  } catch (err) {
+    console.error("Failed to fetch global settings:", err);
+    return null;
+  }
 }
 
 function supportsReasoning(model: string): boolean {

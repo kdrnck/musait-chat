@@ -6,16 +6,20 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
 import { useEffect, useRef } from "react";
-import { Bot, User, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Bot, User, PanelRightOpen, PanelRightClose, ChevronLeft } from "lucide-react";
 
 export default function ChatView({
     conversationId,
     onToggleCustomerPanel,
     showCustomerPanel,
+    debugMode,
+    onBack,
 }: {
     conversationId: Id<"conversations"> | null;
     onToggleCustomerPanel: () => void;
     showCustomerPanel: boolean;
+    debugMode: boolean;
+    onBack: () => void;
 }) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -40,17 +44,16 @@ export default function ChatView({
     if (!conversationId) {
         return (
             <div
-                className="flex-1 flex flex-col items-center justify-center gap-4"
+                className="flex-1 flex flex-col items-center justify-center gap-4 hidden md:flex"
                 style={{ background: "var(--color-surface-base)" }}
             >
                 <div
-                    className="w-16 h-16 flex items-center justify-center glow"
+                    className="w-16 h-16 flex items-center justify-center glow rounded-full"
                     style={{
-                        background: "var(--color-brand-glow)",
-                        border: "1px solid var(--color-border-brand)",
+                        background: "var(--color-surface-2)",
                     }}
                 >
-                    <Bot size={28} style={{ color: "var(--color-brand)" }} />
+                    <Bot size={28} style={{ color: "var(--color-text-muted)" }} />
                 </div>
                 <div className="text-center">
                     <h2
@@ -86,39 +89,41 @@ export default function ChatView({
 
     return (
         <div
-            className="flex-1 flex flex-col h-full"
-            style={{ background: "var(--color-surface-base)" }}
+            className="flex-1 flex flex-col h-full bg-[var(--color-surface-base)]"
         >
             {/* ── Chat Header ── */}
             <header
-                className="flex items-center justify-between px-5 py-3 border-b"
+                className="flex items-center justify-between px-4 md:px-8 py-4 md:py-5 border-b z-10 sticky top-0 bg-[var(--color-surface-base)]"
                 style={{
                     borderColor: "var(--color-border)",
-                    background: "var(--color-surface-1)",
                 }}
             >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 md:gap-4">
+                    <button
+                        onClick={onBack}
+                        className="md:hidden p-2 -ml-2 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                    >
+                        <ChevronLeft size={24} />
+                    </button>
                     <div
-                        className="w-8 h-8 flex items-center justify-center"
+                        className="w-10 h-10 flex flex-shrink-0 items-center justify-center rounded-full"
                         style={{
-                            background: "var(--color-surface-3)",
-                            border: "1px solid var(--color-border)",
+                            background: "var(--color-surface-2)",
                         }}
                     >
-                        <User size={14} style={{ color: "var(--color-text-secondary)" }} />
+                        <User size={18} style={{ color: "var(--color-text-secondary)" }} />
                     </div>
                     <div>
                         <span
-                            className="text-sm font-semibold"
+                            className="text-[15px] md:text-[16px] font-bold"
                             style={{
                                 color: "var(--color-text-primary)",
-                                fontFamily: "var(--font-mono)",
                             }}
                         >
                             {conversation?.customerPhone || "..."}
                         </span>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            <span className={`badge ${statusBadgeClass}`}>
+                        <div className="flex items-center gap-2 mt-0.5 md:mt-1">
+                            <span className={`badge ${statusBadgeClass} rounded-full px-2 py-0.5`} style={{ fontSize: 10 }}>
                                 {statusLabel}
                             </span>
                         </div>
@@ -127,20 +132,25 @@ export default function ChatView({
 
                 <button
                     onClick={onToggleCustomerPanel}
-                    className="p-2 transition-colors"
-                    style={{ color: "var(--color-text-muted)" }}
-                    onMouseEnter={(e) =>
-                        (e.currentTarget.style.color = "var(--color-brand)")
-                    }
-                    onMouseLeave={(e) =>
-                        (e.currentTarget.style.color = "var(--color-text-muted)")
-                    }
+                    className="p-2 transition-all rounded-full flex items-center justify-center md:hidden lg:flex"
+                    style={{
+                        color: showCustomerPanel ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                        background: showCustomerPanel ? "var(--color-surface-3)" : "transparent"
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.color = "var(--color-text-primary)";
+                        e.currentTarget.style.background = "var(--color-surface-2)";
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.color = showCustomerPanel ? "var(--color-text-primary)" : "var(--color-text-muted)";
+                        e.currentTarget.style.background = showCustomerPanel ? "var(--color-surface-3)" : "transparent";
+                    }}
                     title={showCustomerPanel ? "Paneli kapat" : "Paneli aç"}
                 >
                     {showCustomerPanel ? (
-                        <PanelRightClose size={18} />
+                        <PanelRightClose size={20} />
                     ) : (
-                        <PanelRightOpen size={18} />
+                        <PanelRightOpen size={20} />
                     )}
                 </button>
             </header>
@@ -156,12 +166,13 @@ export default function ChatView({
                         {[...Array(4)].map((_, i) => (
                             <div
                                 key={i}
-                                className="animate-pulse"
+                                className="animate-pulse flex-shrink-0"
                                 style={{
                                     height: 48,
                                     width: i % 2 === 0 ? "60%" : "45%",
                                     marginLeft: i % 2 !== 0 ? "auto" : 0,
                                     background: "var(--color-surface-2)",
+                                    borderRadius: "16px",
                                 }}
                             />
                         ))}
@@ -170,7 +181,7 @@ export default function ChatView({
                     // Empty messages
                     <div className="flex items-center justify-center h-full">
                         <p
-                            className="text-sm"
+                            className="text-[14px] font-medium"
                             style={{ color: "var(--color-text-muted)" }}
                         >
                             Henüz mesaj yok
@@ -185,7 +196,7 @@ export default function ChatView({
                                 className="animate-fade-in"
                                 style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
                             >
-                                <MessageBubble message={message} />
+                                <MessageBubble message={message} debugMode={debugMode} />
                             </div>
                         ))}
                         <div ref={messagesEndRef} />

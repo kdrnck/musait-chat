@@ -126,11 +126,12 @@ export default function ChatInput({
 
             {/* Text input */}
             <div
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 px-3 py-2 rounded-2xl mx-4 mb-4"
                 style={{
-                    background: "var(--color-surface-2)",
+                    background: "var(--color-surface-base)",
                     border: `1px solid ${isHandoff ? "var(--color-border-brand)" : "var(--color-border)"}`,
-                    opacity: isHandoff ? 1 : 0.5,
+                    opacity: isHandoff ? 1 : 0.6,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.02)"
                 }}
             >
                 <input
@@ -149,22 +150,23 @@ export default function ChatInput({
                         }
                     }}
                     disabled={!isHandoff}
-                    className="flex-1 bg-transparent outline-none px-4 py-3 text-sm placeholder:text-[var(--color-text-muted)]"
+                    className="flex-1 bg-transparent outline-none px-3 py-2 text-[15px] placeholder:text-[var(--color-text-muted)]"
                     style={{ color: "var(--color-text-primary)" }}
                 />
                 <button
                     onClick={handleSend}
                     disabled={!canSend || sending}
-                    className="flex items-center justify-center w-10 h-10 mr-1 transition-all"
+                    className="flex items-center justify-center w-10 h-10 rounded-xl transition-all"
                     style={{
-                        background: canSend ? "var(--color-brand)" : "transparent",
+                        background: canSend ? "var(--color-brand)" : "var(--color-surface-3)",
                         color: canSend
-                            ? "var(--color-surface-base)"
+                            ? "var(--color-surface-1)"
                             : "var(--color-text-muted)",
                         cursor: canSend ? "pointer" : "not-allowed",
+                        boxShadow: canSend ? "0 4px 12px var(--color-brand-glow)" : "none"
                     }}
                 >
-                    <Send size={16} />
+                    <Send size={18} />
                 </button>
             </div>
         </div>

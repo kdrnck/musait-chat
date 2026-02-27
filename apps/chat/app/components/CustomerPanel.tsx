@@ -68,77 +68,66 @@ export default function CustomerPanel({
     };
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-[var(--color-surface-1)]">
             {/* ── Header ── */}
-            <div
-                className="px-4 py-3 border-b"
-                style={{
-                    borderColor: "var(--color-border)",
-                    background: "var(--color-surface-1)",
-                }}
-            >
-                <h3
-                    className="text-xs font-bold uppercase tracking-widest"
-                    style={{ color: "var(--color-text-muted)" }}
-                >
+            <div className="px-6 py-5 border-b z-10" style={{ borderColor: "var(--color-border)", background: "var(--color-surface-base)" }}>
+                <h3 className="text-[13px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)]">
                     Müşteri Bilgileri
                 </h3>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {/* ── Profile Card ── */}
                 <div
-                    className="p-4 mb-4"
+                    className="p-5 rounded-2xl shadow-sm"
                     style={{
-                        background: "var(--color-surface-2)",
+                        background: "var(--color-surface-base)",
                         border: "1px solid var(--color-border)",
                     }}
                 >
                     {/* Avatar + Phone */}
-                    <div className="flex items-center gap-3 mb-4">
+                    <div className="flex items-center gap-4 mb-5">
                         <div
-                            className="w-10 h-10 flex items-center justify-center"
+                            className="w-14 h-14 flex items-center justify-center rounded-full"
                             style={{
-                                background: "var(--color-surface-3)",
-                                border: "1px solid var(--color-border)",
+                                background: "var(--color-surface-2)",
                             }}
                         >
-                            <User size={18} style={{ color: "var(--color-text-secondary)" }} />
+                            <User size={24} style={{ color: "var(--color-text-secondary)" }} />
                         </div>
                         <div>
                             <span
-                                className="text-sm font-semibold block"
+                                className="text-[16px] font-bold block"
                                 style={{
-                                    color: "var(--color-text-primary)",
-                                    fontFamily: "var(--font-mono)",
+                                    color: "var(--color-text-primary)"
                                 }}
                             >
                                 {conversation?.customerPhone || "—"}
                             </span>
                             <span
-                                className="text-[10px] uppercase tracking-wider"
+                                className="text-[11px] font-medium uppercase tracking-wider block mt-0.5"
                                 style={{ color: "var(--color-text-muted)" }}
                             >
                                 WhatsApp
                             </span>
                             <span
-                                className="text-[11px] block mt-1"
+                                className="text-[13px] font-medium block mt-1"
                                 style={{ color: "var(--color-text-secondary)" }}
                             >
-                                İsim: {effectiveName}
+                                {effectiveName}
                             </span>
                         </div>
                     </div>
 
                     {/* Quick stats */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-3">
                         <InfoChip
-                            icon={<Phone size={12} />}
+                            icon={<Phone size={14} />}
                             label="Telefon"
                             value={conversation?.customerPhone?.slice(-4) || "—"}
                         />
                         <InfoChip
-                            icon={<Clock size={12} />}
+                            icon={<Clock size={14} />}
                             label="Durum"
                             value={conversation?.status === "handoff" ? "İnsan" : "AI"}
                         />
@@ -147,7 +136,7 @@ export default function CustomerPanel({
 
                 {/* ── Notes ── */}
                 <Section
-                    icon={<StickyNote size={14} />}
+                    icon={<StickyNote size={16} />}
                     title="Müşteri Notları"
                 >
                     {canEditNotes ? (
@@ -156,28 +145,29 @@ export default function CustomerPanel({
                                 value={notesDraft}
                                 onChange={(e) => setNotesDraft(e.target.value)}
                                 placeholder="Müşteri tercihleri, hassasiyetler, özel notlar..."
-                                className="w-full min-h-[120px] p-2 text-xs resize-y outline-none"
+                                className="w-full min-h-[120px] p-4 text-[13px] resize-y outline-none rounded-2xl transition-colors"
                                 style={{
-                                    background: "var(--color-surface-2)",
+                                    background: "var(--color-surface-base)",
                                     border: "1px solid var(--color-border)",
-                                    color: "var(--color-text-secondary)",
+                                    color: "var(--color-text-primary)",
                                 }}
+                                onFocus={(e) => e.target.style.borderColor = "var(--color-border-hover)"}
+                                onBlur={(e) => e.target.style.borderColor = "var(--color-border)"}
                             />
-                            <div className="flex justify-end mt-2">
+                            <div className="flex justify-end mt-3">
                                 <button
                                     onClick={handleSaveNotes}
                                     disabled={!notesChanged || savingNotes}
-                                    className="px-3 py-1.5 text-[11px] font-semibold transition-colors"
+                                    className="px-4 py-2 text-[12px] font-bold rounded-xl transition-all"
                                     style={{
                                         background:
                                             !notesChanged || savingNotes
-                                                ? "var(--color-surface-3)"
+                                                ? "var(--color-surface-2)"
                                                 : "var(--color-brand)",
                                         color:
                                             !notesChanged || savingNotes
                                                 ? "var(--color-text-muted)"
-                                                : "var(--color-surface-base)",
-                                        border: "1px solid var(--color-border)",
+                                                : "var(--color-surface-1)",
                                         cursor:
                                             !notesChanged || savingNotes
                                                 ? "not-allowed"
@@ -190,24 +180,24 @@ export default function CustomerPanel({
                         </>
                     ) : (
                         <p
-                            className="text-xs leading-relaxed"
+                            className="text-[13px] leading-relaxed"
                             style={{ color: "var(--color-text-muted)" }}
                         >
-                            Not düzenlemek için tenant-a bağlı bir konuşma seçin.
+                            Not düzenlemek için bir konuşma seçin.
                         </p>
                     )}
                 </Section>
 
                 {/* ── Last Services ── */}
                 {profile?.lastServices && profile.lastServices.length > 0 && (
-                    <Section icon={<Scissors size={14} />} title="Son Hizmetler">
-                        <div className="flex flex-wrap gap-1.5">
+                    <Section icon={<Scissors size={16} />} title="Son Hizmetler">
+                        <div className="flex flex-wrap gap-2">
                             {profile.lastServices.map((service, i) => (
                                 <span
                                     key={i}
-                                    className="text-[11px] px-2 py-1"
+                                    className="text-[12px] font-medium px-3 py-1.5 rounded-full"
                                     style={{
-                                        background: "var(--color-surface-3)",
+                                        background: "var(--color-surface-base)",
                                         border: "1px solid var(--color-border)",
                                         color: "var(--color-text-secondary)",
                                     }}
@@ -221,28 +211,30 @@ export default function CustomerPanel({
 
                 {/* ── Conversation Summary ── */}
                 {conversation?.rollingSummary && (
-                    <Section icon={<Calendar size={14} />} title="Konuşma Özeti">
-                        <p
-                            className="text-xs leading-relaxed"
-                            style={{ color: "var(--color-text-secondary)" }}
-                        >
-                            {conversation.rollingSummary}
-                        </p>
+                    <Section icon={<Calendar size={16} />} title="Konuşma Özeti">
+                        <div className="p-4 rounded-xl" style={{ background: "var(--color-surface-base)", border: "1px solid var(--color-border)" }}>
+                            <p
+                                className="text-[13px] leading-relaxed"
+                                style={{ color: "var(--color-text-secondary)" }}
+                            >
+                                {conversation.rollingSummary}
+                            </p>
+                        </div>
                     </Section>
                 )}
 
                 {/* ── No profile state ── */}
                 {!profile && conversation && (
                     <div
-                        className="text-center py-6"
+                        className="text-center py-8"
                         style={{ color: "var(--color-text-muted)" }}
                     >
                         <User
-                            size={24}
-                            className="mx-auto mb-2"
-                            style={{ opacity: 0.3 }}
+                            size={32}
+                            className="mx-auto mb-3"
+                            style={{ opacity: 0.2 }}
                         />
-                        <p className="text-xs">
+                        <p className="text-[13px] font-medium">
                             Müşteri profili henüz oluşturulmamış
                         </p>
                     </div>
@@ -265,24 +257,23 @@ function InfoChip({
 }) {
     return (
         <div
-            className="flex flex-col gap-1 p-2"
+            className="flex flex-col gap-1.5 p-3 rounded-xl transition-colors"
             style={{
-                background: "var(--color-surface-3)",
+                background: "var(--color-surface-base)",
                 border: "1px solid var(--color-border)",
             }}
         >
             <div
-                className="flex items-center gap-1.5"
+                className="flex items-center gap-2"
                 style={{ color: "var(--color-text-muted)" }}
             >
                 {icon}
-                <span className="text-[10px] uppercase tracking-wider">{label}</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>
             </div>
             <span
-                className="text-sm font-semibold"
+                className="text-[14px] font-bold"
                 style={{
                     color: "var(--color-text-primary)",
-                    fontFamily: "var(--font-mono)",
                 }}
             >
                 {value}
@@ -301,13 +292,13 @@ function Section({
     children: React.ReactNode;
 }) {
     return (
-        <div className="mb-4">
+        <div className="mb-6">
             <div
-                className="flex items-center gap-2 mb-2"
+                className="flex items-center gap-2 mb-3 px-1"
                 style={{ color: "var(--color-text-muted)" }}
             >
                 {icon}
-                <span className="text-[10px] font-bold uppercase tracking-widest">
+                <span className="text-[11px] font-bold uppercase tracking-widest">
                     {title}
                 </span>
             </div>

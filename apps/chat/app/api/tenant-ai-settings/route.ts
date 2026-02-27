@@ -55,13 +55,23 @@ export async function GET() {
     );
   }
 
-  const { data: tenantData, error: tenantError } = await supabase
-    .from("tenants")
-    .select(
-      "integration_keys,waba_phone_number_id,waba_access_token,waba_business_account_id,waba_verify_token,waba_app_secret"
-    )
-    .eq("id", context.tenantId)
-    .single();
+  const [tenantResult, globalResult] = await Promise.all([
+    supabase
+      .from("tenants")
+      .select(
+        "integration_keys,waba_phone_number_id,waba_access_token,waba_business_account_id,waba_verify_token,waba_app_secret"
+      )
+      .eq("id", context.tenantId)
+      .single(),
+    supabase
+      .from("global_settings")
+      .select("ai_system_prompt_text")
+      .eq("id", "default")
+      .single()
+  ]);
+
+  const { data: tenantData, error: tenantError } = tenantResult;
+  const globalPrompt = globalResult.data?.ai_system_prompt_text || null;
 
   if (tenantError || !tenantData) {
     return NextResponse.json(
@@ -77,6 +87,7 @@ export async function GET() {
       tenantId: context.tenantId,
       canEdit: context.canEdit,
       tenant,
+      globalPrompt,
     })
   );
 }
@@ -142,13 +153,20 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  const { data: tenantData, error: tenantError } = await supabase
-    .from("tenants")
-    .select("integration_keys")
-    .eq("id", context.tenantId)
-    .single();
+  const [tenantResult, globalResult] = await Promise.all([
+    supabase
+      .from("tenants")
+      .select("integration_keys")
+      .eq("id", context.tenantId)
+      .single(),
+    supabase
+      .from("global_settings")
+      .select("ai_system_prompt_text")
+      .eq("id", "default")
+      .single()
+  ]);
 
-  if (tenantError) {
+  if (tenantResult.error) {
     return NextResponse.json(
       { error: "Tenant ayarları alınamadı" },
       { status: 500 }
@@ -156,8 +174,10 @@ export async function PUT(request: NextRequest) {
   }
 
   const currentIntegrationKeys = asObject(
-    (tenantData as { integration_keys?: unknown } | null)?.integration_keys
+    (tenantResult.data as { integration_keys?: unknown } | null)?.integration_keys
   );
+
+  const globalPrompt = globalResult.data?.ai_system_prompt_text || null;
 
   const integrationKeys = {
     ...currentIntegrationKeys,
@@ -201,6 +221,7 @@ export async function PUT(request: NextRequest) {
       tenantId: context.tenantId,
       canEdit: context.canEdit,
       tenant: updated,
+      globalPrompt,
     })
   );
 }
@@ -258,8 +279,12 @@ function buildResponse(args: {
   tenantId: string;
   canEdit: boolean;
   tenant: TenantSettingsRow;
+  globalPrompt?: string | null;
 }): TenantAiResponse {
-  const resolved = resolveAiSettingsFromIntegrationKeys(args.tenant.integration_keys);
+  const resolved = resolveAiSettingsFromIntegrationKeys(
+    args.tenant.integration_keys,
+    args.globalPrompt
+  );
   const wabaPhoneNumberId = normalizeNullable(args.tenant.waba_phone_number_id) || "";
   const wabaAccessToken = normalizeNullable(args.tenant.waba_access_token) || "";
   const wabaBusinessAccountId =

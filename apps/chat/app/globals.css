@@ -1,47 +1,48 @@
 @import "tailwindcss";
 
-/* ===== DESIGN SYSTEM — Müsait Chat "Command Center" ===== */
+/* ===== DESIGN SYSTEM — Minimal Soft UI ===== */
 
 @theme inline {
   /* Brand */
-  --color-brand: #7CF855;
+  --color-brand: #7CF854;
   --color-brand-dim: #5ABF3A;
-  --color-brand-glow: rgba(124, 248, 85, 0.15);
-  --color-brand-glow-strong: rgba(124, 248, 85, 0.3);
+  --color-brand-light: #E8FDE4;
+  --color-brand-glow: rgba(124, 248, 84, 0.15);
+  --color-brand-glow-strong: rgba(124, 248, 84, 0.3);
 
   /* Surfaces */
-  --color-surface-base: #0A0A0A;
-  --color-surface-1: #111111;
-  --color-surface-2: #1A1A1A;
-  --color-surface-3: #222222;
-  --color-surface-hover: #2A2A2A;
-  --color-surface-active: #1C2C16;
+  --color-surface-base: #FAFAFA;
+  --color-surface-1: #FFFFFF;
+  --color-surface-2: #F0F2F5;
+  --color-surface-3: #E4E6EB;
+  --color-surface-hover: #F0F2F5;
+  --color-surface-active: #E8FDE4;
 
   /* Text */
-  --color-text-primary: #F0F0F0;
-  --color-text-secondary: #888888;
-  --color-text-muted: #555555;
-  --color-text-brand: #7CF855;
+  --color-text-primary: #1C1E21;
+  --color-text-secondary: #65676B;
+  --color-text-muted: #8E8F94;
+  --color-text-brand: #5ABF3A;
 
   /* Status */
-  --color-status-ai: #7CF855;
-  --color-status-attention: #FF4D4D;
+  --color-status-ai: #00A400;
+  --color-status-attention: #FF5A5F;
   --color-status-handoff: #4DA6FF;
 
   /* Borders */
-  --color-border: #2A2A2A;
-  --color-border-hover: #3A3A3A;
-  --color-border-brand: rgba(124, 248, 85, 0.3);
+  --color-border: #E4E6EB;
+  --color-border-hover: #D1D5DB;
+  --color-border-brand: rgba(124, 248, 84, 0.3);
 
   /* Bubble colors */
-  --color-bubble-customer: #1E1E1E;
-  --color-bubble-agent: #142210;
-  --color-bubble-human: #121C2A;
+  --color-bubble-customer: #FFFFFF;
+  --color-bubble-agent: #1C1E21;
+  --color-bubble-human: #000000;
 
   /* Fonts */
-  --font-display: "Outfit", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
-  --font-sans: "Outfit", sans-serif;
+  --font-display: "Poppins", sans-serif;
+  --font-mono: monospace;
+  --font-sans: "Poppins", sans-serif;
 }
 
 /* ===== BASE ===== */
@@ -53,13 +54,13 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
   background: var(--color-surface-base);
   color: var(--color-text-primary);
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;

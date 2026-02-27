@@ -40,7 +40,8 @@ export interface TenantAiSettings {
 }
 
 export function resolveTenantAiSettings(
-  integrationKeys?: Record<string, unknown> | null
+  integrationKeys?: Record<string, unknown> | null,
+  globalPrompt?: string | null
 ): TenantAiSettings {
   const keys = asRecord(integrationKeys);
 
@@ -65,7 +66,7 @@ export function resolveTenantAiSettings(
     preset.allowFallbacks ??
     LLM_CONFIG.providerAllowFallbacks;
 
-  const systemPromptText = asString(keys.ai_system_prompt_text);
+  const systemPromptText = asString(keys.ai_system_prompt_text) || globalPrompt || null;
   const legacyExtraSystemPrompt = asString(keys.ai_extra_system_prompt);
 
   const modeRaw = asString(keys.ai_outbound_number_mode)?.toLowerCase();

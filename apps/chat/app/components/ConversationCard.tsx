@@ -46,15 +46,11 @@ export default function ConversationCard({
     return (
         <button
             onClick={onClick}
-            className="w-full text-left px-3 py-3 transition-all duration-150 group"
+            className="w-full text-left px-6 py-3 transition-colors duration-200 group relative flex items-center gap-3.5"
             style={{
                 background: isSelected
-                    ? "var(--color-surface-active)"
+                    ? "var(--color-surface-2)"
                     : "transparent",
-                borderLeft: isSelected
-                    ? "2px solid var(--color-brand)"
-                    : "2px solid transparent",
-                ...(isSelected ? { boxShadow: "inset 0 0 20px rgba(124, 248, 85, 0.04)" } : {}),
             }}
             onMouseEnter={(e) => {
                 if (!isSelected) {
@@ -67,64 +63,63 @@ export default function ConversationCard({
                 }
             }}
         >
-            <div className="flex items-start gap-3">
-                {/* Avatar / Phone icon */}
+            {isSelected && (
                 <div
-                    className="w-9 h-9 flex items-center justify-center flex-shrink-0 mt-0.5"
-                    style={{
-                        background: "var(--color-surface-3)",
-                        border: "1px solid var(--color-border)",
-                    }}
-                >
-                    <Phone size={14} style={{ color: "var(--color-text-secondary)" }} />
-                </div>
+                    className="absolute left-0 top-3 bottom-3 w-1 rounded-r-md"
+                    style={{ background: "var(--color-brand)" }}
+                />
+            )}
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span
-                                className="text-sm font-semibold truncate"
-                                style={{
-                                    color: isSelected
-                                        ? "var(--color-brand)"
-                                        : "var(--color-text-primary)",
-                                    fontFamily: "var(--font-mono)",
-                                    fontSize: 13,
-                                }}
-                            >
-                                {formatPhoneDisplay(conversation.customerPhone)}
-                            </span>
-                            <div className={getStatusDotClass(conversation)} />
-                        </div>
+            {/* Avatar / Phone icon */}
+            <div
+                className="w-12 h-12 flex items-center justify-center flex-shrink-0 rounded-full"
+                style={{
+                    background: "var(--color-surface-2)",
+                }}
+            >
+                <Phone size={20} style={{ color: "var(--color-text-secondary)" }} />
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2 min-w-0">
                         <span
-                            className="text-[10px] flex-shrink-0"
+                            className="text-[15px] font-bold truncate"
                             style={{
-                                color: "var(--color-text-muted)",
-                                fontFamily: "var(--font-mono)",
+                                color: "var(--color-text-primary)",
                             }}
                         >
-                            {formatRelativeTime(conversation.lastMessageAt)}
+                            {formatPhoneDisplay(conversation.customerPhone)}
                         </span>
+                        <div className={getStatusDotClass(conversation)} />
                     </div>
-
-                    {/* Summary preview */}
-                    <p
-                        className="text-xs mt-1 line-clamp-2 leading-relaxed"
-                        style={{ color: "var(--color-text-secondary)" }}
+                    <span
+                        className="text-xs font-medium flex-shrink-0"
+                        style={{
+                            color: "var(--color-text-secondary)",
+                        }}
                     >
-                        {conversation.rollingSummary || "Yeni konuşma başladı..."}
-                    </p>
+                        {formatRelativeTime(conversation.lastMessageAt)}
+                    </span>
+                </div>
 
-                    {/* Status badge */}
-                    <div className="mt-1.5">
-                        <span
-                            className={`badge badge--${conversation.status === "handoff" ? "handoff" : conversation.retryState.count > 0 ? "attention" : "ai"}`}
-                            style={{ fontSize: 9, padding: "1px 6px" }}
-                        >
-                            {getStatusLabel(conversation)}
-                        </span>
-                    </div>
+                {/* Summary preview */}
+                <p
+                    className="text-[14px] truncate"
+                    style={{ color: "var(--color-text-secondary)" }}
+                >
+                    {conversation.rollingSummary || "Yeni konuşma başladı..."}
+                </p>
+
+                {/* Status badge */}
+                <div className="mt-1.5 hidden group-hover:flex">
+                    <span
+                        className={`badge badge--${conversation.status === "handoff" ? "handoff" : conversation.retryState.count > 0 ? "attention" : "ai"} rounded-full`}
+                        style={{ fontSize: 10, padding: "2px 8px" }}
+                    >
+                        {getStatusLabel(conversation)}
+                    </span>
                 </div>
             </div>
         </button>

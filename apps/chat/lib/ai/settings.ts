@@ -78,7 +78,8 @@ export interface ResolvedAiSettings {
 }
 
 export function resolveAiSettingsFromIntegrationKeys(
-  integrationKeys: unknown
+  integrationKeys: unknown,
+  globalSystemPrompt?: string | null
 ): ResolvedAiSettings {
   const keys = asObject(integrationKeys);
 
@@ -103,14 +104,14 @@ export function resolveAiSettingsFromIntegrationKeys(
   const promptText =
     promptOverride ||
     (legacyExtraPrompt
-      ? `${DEFAULT_AI_SYSTEM_PROMPT}\n\n## Tenant Ek Talimatlar\n${legacyExtraPrompt}`
-      : DEFAULT_AI_SYSTEM_PROMPT);
+      ? `${globalSystemPrompt || DEFAULT_AI_SYSTEM_PROMPT}\n\n## Tenant Ek Talimatlar\n${legacyExtraPrompt}`
+      : (globalSystemPrompt || DEFAULT_AI_SYSTEM_PROMPT));
 
   const outboundModeRaw = asString(keys.ai_outbound_number_mode)?.toLowerCase();
   const outboundNumberMode: OutboundNumberMode =
     outboundModeRaw === "inbound" ||
-    outboundModeRaw === "musait" ||
-    outboundModeRaw === "tenant"
+      outboundModeRaw === "musait" ||
+      outboundModeRaw === "tenant"
       ? (outboundModeRaw as OutboundNumberMode)
       : DEFAULT_OUTBOUND_NUMBER_MODE;
 
