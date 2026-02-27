@@ -54,11 +54,14 @@ export default function ConversationList({
 
     const tenantConversations = useQuery(
         api.conversations.listByTenant,
-        !isRoutingMode && tenantId ? { tenantId } : "skip"
+        // Non-admin users filter by their tenant server-side
+        !isRoutingMode && tenantId && !isAdmin ? { tenantId } : "skip"
     );
     const allConversations = useQuery(
         api.conversations.listAll,
-        !isRoutingMode && tenantId === null && isAdmin ? {} : "skip"
+        // Admins always load all conversations — tenant filtering is done client-side
+        // so null-tenantId (routing/limbo) conversations are never hidden
+        !isRoutingMode && isAdmin ? {} : "skip"
     );
     const unboundConversations = useQuery(
         api.conversations.listUnbound,
@@ -66,7 +69,7 @@ export default function ConversationList({
     );
     const conversations = isRoutingMode
         ? unboundConversations
-        : (tenantId ? tenantConversations : (isAdmin ? allConversations : undefined));
+        : (isAdmin ? allConversations : (tenantId ? tenantConversations : undefined));
 
     // Loading error detection: if admin query is pending for more than 10s, show error
     useEffect(() => {
@@ -106,6 +109,13 @@ export default function ConversationList({
         if (!conversations) return [];
 
         let result = [...conversations];
+
+        // Admin with specific tenant selected: show that tenant's conversations
+        // but ALWAYS include null-tenantId (routing/limbo) conversations so they
+        // are never hidden from the admin regardless of selected tenant.
+        if (isAdmin && tenantId) {
+            result = result.filter(c => c.tenantId === tenantId || c.tenantId === null);
+        }
 
         // Deduplicate by customerPhone - keep most recent per phone number
         const phoneMap = new Map<string, typeof result[0]>();

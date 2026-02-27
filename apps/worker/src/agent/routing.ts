@@ -74,6 +74,11 @@ export async function routeMessage(
       msg.role === "agent" && msg.content === ROUTING_PROMPTS.welcomeMessage
   );
 
+  // After /bitir, rollingSummary is cleared to "". Treat this as a fresh session
+  // regardless of old messages in the conversation — old welcome messages from
+  // previous sessions should not block the warm-start / welcome flow.
+  const isFreshSession = !conversation.rollingSummary;
+
   const activeTenants = await getActiveTenants(convex);
   if (!activeTenants || activeTenants.length === 0) {
     await replyAndPersist(convex, {
@@ -85,7 +90,8 @@ export async function routeMessage(
   }
 
   // First touch: try "last tenant" shortcut before welcome message.
-  if (!hasWelcomeMessage) {
+  // Also fires when session was freshly reset (/bitir) even if old welcome exists.
+  if (!hasWelcomeMessage || isFreshSession) {
     const rememberedTenant = await getRememberedTenant(
       convex,
       job.customerPhone,
