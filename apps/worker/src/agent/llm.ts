@@ -2,9 +2,7 @@ import type { ConvexHttpClient } from "convex/browser";
 import type { AgentJob, LLMMessage, AgentToolName } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
 import { LLM_CONFIG, SUPABASE_CONFIG } from "../config.js";
-import { buildSystemPrompt } from "./prompts.js";
 import { executeToolCall, getToolDefinitions } from "./tools/index.js";
-import { isLikelyRealName } from "./customer-name.js";
 import {
   resolveTenantAiSettings,
   resolveSystemPromptPlaceholders,
@@ -96,126 +94,85 @@ async function buildContext(
   conversation: Conversation
 ): Promise<{ messages: LLMMessage[]; tenantAiSettings: TenantAiSettings }> {
   const messages: LLMMessage[] = [];
-  let knownCustomerName: string | null = job.customerName || null;
+  
+  // Fetch tenant AI settings (system prompt comes from here)
   const globalPrompt = await fetchGlobalSettings();
   let tenantAiSettings = resolveTenantAiSettings(null, globalPrompt);
-  let tenantCtx: {
-    name: string | null;
-    slug: string | null;
-    integrationKeys: Record<string, unknown>;
-  } | null = null;
-
-  // Debug: Log global prompt
-  console.log(`🔧 [DEBUG] Global prompt loaded: ${globalPrompt ? 'YES (' + globalPrompt.slice(0, 50) + '...)' : 'NO'}`);
 
   if (conversation.tenantId) {
-    tenantCtx = await fetchTenantContext(conversation.tenantId);
+    const tenantCtx = await fetchTenantContext(conversation.tenantId);
     tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys, globalPrompt);
     
-    // Debug: Log tenant-specific prompt
+    // Debug: Log prompt source
     const tenantPrompt = tenantCtx?.integrationKeys?.ai_system_prompt_text;
     console.log(`🔧 [DEBUG] Tenant ID: ${conversation.tenantId}`);
-    console.log(`🔧 [DEBUG] Tenant prompt (from integration_keys): ${tenantPrompt ? 'YES (' + String(tenantPrompt).slice(0, 50) + '...)' : 'NO'}`);
-    console.log(`🔧 [DEBUG] Final systemPromptText: ${tenantAiSettings.systemPromptText ? 'YES (' + tenantAiSettings.systemPromptText.slice(0, 50) + '...)' : 'USING DEFAULT'}`);
+    console.log(`🔧 [DEBUG] Tenant prompt (from dashboard): ${tenantPrompt ? 'YES (' + String(tenantPrompt).slice(0, 80) + '...)' : 'NO - using global/default'}`);
   }
 
-  // System prompt
-  const rawPrompt =
-    tenantAiSettings.systemPromptText || buildSystemPrompt(conversation);
-  const systemPrompt = resolveSystemPromptPlaceholders(rawPrompt, {
-    tenantId: conversation.tenantId,
-  });
-  
-  // Debug: Log final system prompt being used
-  console.log(`🔧 [DEBUG] Final system prompt (first 100 chars): ${systemPrompt.slice(0, 100)}...`);
-  
-  messages.push({ role: "system", content: systemPrompt });
-
-  if (conversation.tenantId && tenantCtx) {
-    const serviceLink = buildServiceLink(
-      tenantCtx.slug,
-      job.inboundDisplayNumber
-    );
-
-    messages.push({
-      role: "system",
-      content:
-        `[İşletme]: ${tenantCtx.name || "Bilinmeyen İşletme"}\n` +
-        `[Hizmet Linki]: ${serviceLink}\n` +
-        `Kural: Müşteriyle ilk greeting cevabında bu linki kısa şekilde paylaşabilirsin.`,
+  // 1. System prompt from dashboard
+  if (tenantAiSettings.systemPromptText) {
+    const systemPrompt = resolveSystemPromptPlaceholders(tenantAiSettings.systemPromptText, {
+      tenantId: conversation.tenantId,
     });
-
-    if (
-      !tenantAiSettings.systemPromptText &&
-      tenantAiSettings.legacyExtraSystemPrompt
-    ) {
-      messages.push({
-        role: "system",
-        content:
-          "[Tenant Ek Sistem Promptu]\n" +
-          tenantAiSettings.legacyExtraSystemPrompt.slice(0, 3000),
-      });
-    }
+    messages.push({ role: "system", content: systemPrompt });
+    console.log(`🔧 [DEBUG] System prompt loaded from dashboard (${systemPrompt.length} chars)`);
+  } else {
+    // No system prompt set - use minimal fallback
+    messages.push({ 
+      role: "system", 
+      content: "Sen yardımcı bir asistansın. Türkçe yanıt ver." 
+    });
+    console.log(`🔧 [DEBUG] No system prompt set - using minimal fallback`);
   }
 
-  // Customer profile context (if available)
+  // 2. Customer profile (preferences, notes, preferred staff) - if exists
   if (conversation.tenantId) {
     const profile = await convex.query(api.customerProfiles.getByPhone, {
       tenantId: conversation.tenantId,
       customerPhone: job.customerPhone,
     });
 
-    const profileName =
-      typeof profile?.preferences?.customerName === "string"
-        ? profile.preferences.customerName
-        : null;
+    if (profile) {
+      const contextParts: string[] = [];
+      
+      // AI notes about customer
+      if (profile.personNotes && profile.personNotes.trim()) {
+        contextParts.push(`Müşteri Notları: ${profile.personNotes}`);
+      }
+      
+      // Preferred staff
+      if (profile.lastStaff && profile.lastStaff.length > 0) {
+        contextParts.push(`Tercih Edilen Çalışanlar: ${profile.lastStaff.join(", ")}`);
+      }
+      
+      // Last used services
+      if (profile.lastServices && profile.lastServices.length > 0) {
+        contextParts.push(`Son Alınan Hizmetler: ${profile.lastServices.join(", ")}`);
+      }
 
-    if (!knownCustomerName && profileName) {
-      knownCustomerName = profileName;
+      // Customer name from preferences
+      const customerName = profile.preferences?.customerName;
+      if (customerName && typeof customerName === "string") {
+        contextParts.push(`Müşteri Adı: ${customerName}`);
+      }
+
+      if (contextParts.length > 0) {
+        messages.push({
+          role: "system",
+          content: `[Müşteri Profili]\n${contextParts.join("\n")}`,
+        });
+        console.log(`🔧 [DEBUG] Customer profile loaded: ${contextParts.length} fields`);
+      }
     }
-
-    if (profile && (profile.personNotes || profile.preferences)) {
-      messages.push({
-        role: "system",
-        content:
-          `[Müşteri Notları]: ${profile.personNotes || "-"}\n` +
-          `[Tercihler]: ${JSON.stringify(profile.preferences || {})}`,
-      });
-    }
   }
 
-  if (!knownCustomerName && job.contactName && isLikelyRealName(job.contactName)) {
-    knownCustomerName = job.contactName;
-  }
-
-  if (knownCustomerName) {
-    messages.push({
-      role: "system",
-      content:
-        `Bilinen müşteri adı: ${knownCustomerName}\n` +
-        "Kural: Müşteri adını sadece selamlaşma ve randevu onay/özet mesajlarında doğal şekilde kullan.",
-    });
-  } else {
-    messages.push({
-      role: "system",
-      content:
-        "Müşteri adı kesin değil. İlk mesajlarda zorla isim sorma; randevuyu finalize etmeye yakın noktada nazikçe adını sor.",
-    });
-  }
-
-  // Rolling summary (if exists)
-  if (conversation.rollingSummary) {
-    messages.push({
-      role: "system",
-      content: `[Konuşma Özeti]: ${conversation.rollingSummary}`,
-    });
-  }
-
-  // Recent messages (context window)
+  // 3. Conversation history (recent messages)
   const recentMessages = await convex.query(api.messages.getContextWindow, {
     conversationId: conversation._id,
     limit: 20,
   });
+
+  console.log(`🔧 [DEBUG] Loading ${recentMessages.length} messages from conversation history`);
 
   for (const msg of recentMessages) {
     if (msg.role === "customer") {
@@ -223,12 +180,12 @@ async function buildContext(
     } else if (msg.role === "agent") {
       messages.push({ role: "assistant", content: msg.content });
     } else if (msg.role === "human") {
-      messages.push({
-        role: "assistant",
-        content: `[İnsan Operatör]: ${msg.content}`,
-      });
+      // Human operator messages shown as assistant
+      messages.push({ role: "assistant", content: msg.content });
     }
   }
+
+  console.log(`🔧 [DEBUG] Total messages to LLM: ${messages.length}`);
 
   return { messages, tenantAiSettings };
 }

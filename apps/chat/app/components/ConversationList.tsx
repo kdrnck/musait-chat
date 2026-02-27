@@ -58,6 +58,15 @@ export default function ConversationList({
     );
     const conversations = tenantId ? tenantConversations : (isAdmin ? allConversations : undefined);
 
+    // Debug: Log conversations data
+    useEffect(() => {
+        console.log("[DEBUG] tenantId:", tenantId);
+        console.log("[DEBUG] conversations:", conversations);
+        if (conversations && conversations.length > 0) {
+            console.log("[DEBUG] First conversation:", JSON.stringify(conversations[0], null, 2));
+        }
+    }, [tenantId, conversations]);
+
     // Fetch customer names from Supabase
     const [customerNames, setCustomerNames] = useState<Record<string, string | null>>({});
     
