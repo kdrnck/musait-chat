@@ -13,7 +13,8 @@ export type AgentToolName =
   | "ask_human"
   | "handOff"
   | "end_session"
-  | "bind_tenant";
+  | "bind_tenant"
+  | "take_notes_for_user";
 
 /** Base tool call request from LLM */
 export interface ToolCallRequest {

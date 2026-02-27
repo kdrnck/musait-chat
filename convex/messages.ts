@@ -27,17 +27,29 @@ export const getContextWindow = query({
   args: {
     conversationId: v.id("conversations"),
     limit: v.optional(v.number()),
+    sessionStartedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 20; // Last 20 messages for context
-    return await ctx.db
+    
+    // If sessionStartedAt is provided, only get messages after that timestamp
+    // This ensures agent only sees current session messages, not old history
+    let messages = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId)
       )
       .order("desc")
-      .take(limit)
+      .take(limit * 2) // Fetch more to filter
       .then((msgs) => msgs.reverse());
+    
+    // Filter by session boundary if provided
+    if (args.sessionStartedAt) {
+      messages = messages.filter(msg => msg.createdAt >= args.sessionStartedAt!);
+    }
+    
+    // Return only the limit count
+    return messages.slice(-limit);
   },
 });
 

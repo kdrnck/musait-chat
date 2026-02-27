@@ -25,6 +25,9 @@ export default defineSchema({
     agentDisabledUntil: v.union(v.number(), v.null()),
     // 🔓 Admin mode flag (secret code: 1773)
     adminMode: v.optional(v.boolean()),
+    // Session started at timestamp - used to filter messages for agent context
+    // When session resets (/bitir), this is set to current time so agent only sees new messages
+    sessionStartedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_customer_phone", ["customerPhone", "status"])

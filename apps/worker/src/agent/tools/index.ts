@@ -9,6 +9,7 @@ import { suggestLeastBusyStaff } from "./suggest-staff.js";
 import { bindTenant } from "./bind-tenant.js";
 import { listServices, listStaff, getBusinessInfo } from "./list-business-data.js";
 import { listCustomerAppointments } from "./list-customer-appointments.js";
+import { takeNotesForUser } from "./take-notes.js";
 
 interface ToolContext {
   tenantId: string | null;
@@ -38,6 +39,7 @@ export async function executeToolCall(
       "create_appointment",
       "cancel_appointment",
       "suggest_least_busy_staff",
+      "take_notes_for_user",
     ]);
 
     if (tenantRequiredTools.has(toolCall.name) && !ctx.tenantId) {
@@ -87,6 +89,13 @@ export async function executeToolCall(
       case "bind_tenant":
         result = await bindTenant(convex, toolCall.arguments as { tenant_id: string }, {
           conversationId: ctx.conversationId,
+        });
+        break;
+      case "take_notes_for_user":
+        result = await takeNotesForUser(convex, toolCall.arguments, {
+          tenantId: ctx.tenantId!,
+          conversationId: ctx.conversationId,
+          customerPhone: ctx.customerPhone,
         });
         break;
       default:
@@ -374,6 +383,24 @@ export function getToolDefinitions() {
             },
           },
           required: [],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "take_notes_for_user",
+        description:
+          "Müşteri hakkında önemli bilgileri not olarak kaydeder. Bir sonraki oturumda bu notlar agent'a sunulur. Personel tercihi, hizmet tercihi, özel istekler gibi bilgiler için kullan.",
+        parameters: {
+          type: "object",
+          properties: {
+            note: {
+              type: "string",
+              description: "Kaydedilecek not içeriği (Türkçe)",
+            },
+          },
+          required: ["note"],
         },
       },
     },

@@ -102,3 +102,38 @@ export const appendNotes = mutation({
     });
   },
 });
+
+/** Update person notes (replace entire content) */
+export const updatePersonNotes = mutation({
+  args: {
+    tenantId: v.string(),
+    customerPhone: v.string(),
+    personNotes: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const profile = await ctx.db
+      .query("customerProfiles")
+      .withIndex("by_tenant_phone", (q) =>
+        q.eq("tenantId", args.tenantId).eq("customerPhone", args.customerPhone)
+      )
+      .first();
+
+    if (profile) {
+      await ctx.db.patch(profile._id, {
+        personNotes: args.personNotes,
+        updatedAt: Date.now(),
+      });
+    } else {
+      // Create new profile if doesn't exist
+      await ctx.db.insert("customerProfiles", {
+        tenantId: args.tenantId,
+        customerPhone: args.customerPhone,
+        personNotes: args.personNotes,
+        lastServices: [],
+        lastStaff: [],
+        preferences: {},
+        updatedAt: Date.now(),
+      });
+    }
+  },
+});

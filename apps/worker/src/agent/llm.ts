@@ -233,12 +233,14 @@ ${profileParts.join("\n")}
   }
 
   // ========== STEP 4: MESSAGE HISTORY ==========
+  // Only fetch messages from current session (after sessionStartedAt if set)
   const recentMessages = await convex.query(api.messages.getContextWindow, {
     conversationId: conversation._id,
     limit: 20,
+    sessionStartedAt: conversation.sessionStartedAt || undefined,
   });
 
-  console.log(`📋 Message History: ${recentMessages.length} messages`);
+  console.log(`📋 Message History: ${recentMessages.length} messages (session boundary: ${conversation.sessionStartedAt ? new Date(conversation.sessionStartedAt).toISOString() : 'none'})`);
 
   // Format message history
   if (recentMessages.length > 0) {

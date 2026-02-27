@@ -323,6 +323,8 @@ export const resetSession = mutation({
       adminMode: false,
       retryState: { count: 0, lastAttempt: null },
       rollingSummary: "",
+      // Mark session boundary - agent will only see messages after this timestamp
+      sessionStartedAt: Date.now(),
     });
   },
 });
