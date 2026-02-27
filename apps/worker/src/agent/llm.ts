@@ -301,7 +301,9 @@ async function callOpenRouter(
     }
   );
 
-  // Attempt 2: 503/provider error → retry with allow_fallbacks=true, no provider order
+  // Attempt 2: 503/provider error → retry with tool-capable providers only
+  // Never use allow_fallbacks: true without a provider list — random providers
+  // (e.g. Novita) may not support tool calling and return 400.
   if (!response.ok) {
     const errorBody = await response.text();
     const is503OrProvider = response.status === 503 || response.status === 400 ||
@@ -310,10 +312,13 @@ async function callOpenRouter(
       errorBody.includes("无可用渠道");
 
     if (is503OrProvider) {
-      console.warn(`⚠️ Provider error (${response.status}), retrying with full fallback...`);
+      console.warn(`⚠️ Provider error (${response.status}), retrying with tool-capable fallback providers...`);
       const fallbackPayload = {
         ...payload,
-        provider: { allow_fallbacks: true },
+        provider: {
+          order: ["groq", "deepinfra", "together"],
+          allow_fallbacks: true,
+        },
       };
       response = await fetch(
         "https://openrouter.ai/api/v1/chat/completions",
