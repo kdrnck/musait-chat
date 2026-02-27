@@ -9,15 +9,14 @@ export default async function AdminPage() {
         data: { user },
     } = await supabase.auth.getUser();
 
+    // Not logged in at all — go to dedicated admin login
     if (!user) {
-        redirect("/login");
+        redirect("/admin/login");
     }
 
-    // Since kdrnck1@gmail.com is master, we can hardcode email check or allow any logged-in user to see /admin if they are 'master'.
-    // For now, allow the known master accounts or check a role if it exists.
-    if (user.email !== "kdrnck1@gmail.com" && user.email !== "musait@musait.app") {
-        // Just a basic safety check, redirect them back to the normal chat app.
-        redirect("/");
+    // Logged in but not a master — go to admin login (not regular login)
+    if (user.app_metadata?.role !== "master") {
+        redirect("/admin/login");
     }
 
     // Fetch ALL tenants from Supabase

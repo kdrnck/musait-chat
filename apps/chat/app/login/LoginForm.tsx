@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
@@ -11,6 +11,12 @@ export default function LoginForm() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
+
+    // Clear any stale/invalid session on login page load
+    useEffect(() => {
+        const supabase = createClient();
+        supabase.auth.signOut().catch(() => { /* Ignore errors - session may already be invalid */ });
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();

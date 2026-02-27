@@ -47,7 +47,9 @@ export function createJobHandler(convex: ConvexHttpClient) {
 
       const normalizedMessage = job.messageContent.trim().toLocaleLowerCase("tr-TR");
       if (normalizedMessage === "/bitir") {
-        await convex.mutation(api.conversations.archiveAndReset, {
+        // Reset session without archiving — agent state cleared (tenantId null, fresh routing)
+        // but conversation stays visible in admin panel with all messages intact.
+        await convex.mutation(api.conversations.resetSession, {
           id: conversation._id,
         });
 
@@ -227,13 +229,24 @@ export function createJobHandler(convex: ConvexHttpClient) {
       }
 
       // 6. Save agent response as message
-      await convex.mutation(api.messages.create, {
+      const agentMessageId = await convex.mutation(api.messages.create, {
         conversationId: job.conversationId as any,
         role: "agent",
         content: agentResponse,
         status: "done",
-        ...(agentDebugInfo ? { debugInfo: agentDebugInfo } : {}),
-      } as any);
+      });
+
+      // 6a. Attach debug metrics separately (non-fatal if schema not yet deployed)
+      if (agentDebugInfo) {
+        try {
+          await convex.mutation(api.messages.updateDebugInfo, {
+            id: agentMessageId as any,
+            debugInfo: agentDebugInfo,
+          });
+        } catch (debugErr) {
+          console.warn(`⚠️ Could not save debugInfo (schema may need deployment):`, (debugErr as Error).message);
+        }
+      }
 
       // 7. Send WhatsApp reply
       await sendWhatsAppMessage(job.customerPhone, agentResponse, {
@@ -251,6 +264,11 @@ export function createJobHandler(convex: ConvexHttpClient) {
     } catch (err) {
       console.error(`❌ Job ${job.id} failed:`, err);
 
+      // Extract error information for debugging
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorType = err instanceof Error ? err.name : 'UnknownError';
+      const errorStack = err instanceof Error ? err.stack : undefined;
+
       // Mark as failed if max retries exceeded
       const maxRetries = 3;
       if (job.retryCount >= maxRetries - 1) {
@@ -258,6 +276,22 @@ export function createJobHandler(convex: ConvexHttpClient) {
           id: job.id as any,
           status: "failed",
         });
+
+        // Store error details in debugInfo for admin panel visibility
+        try {
+          await convex.mutation(api.messages.updateDebugInfo, {
+            id: job.id as any,
+            debugInfo: {
+              responseTimeMs: 0,
+              model: 'error',
+              errorMessage,
+              errorType,
+              errorStack: errorStack?.slice(0, 2000), // Limit stack trace size
+            },
+          });
+        } catch (debugErr) {
+          console.warn('⚠️ Failed to store error debugInfo:', debugErr);
+        }
       }
 
       throw err; // Re-throw for queue retry logic

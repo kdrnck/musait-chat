@@ -97,6 +97,9 @@ export const create = mutation({
       completionTokens: v.optional(v.number()),
       totalTokens: v.optional(v.number()),
       thinkingContent: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      errorType: v.optional(v.string()),
+      errorStack: v.optional(v.string()),
     })),
   },
   handler: async (ctx, args) => {
@@ -151,5 +154,26 @@ export const markRetry = mutation({
       retryCount: message.retryCount + 1,
       status: args.newStatus,
     });
+  },
+});
+
+/** Update debug info (for storing error details) */
+export const updateDebugInfo = mutation({
+  args: {
+    id: v.id("messages"),
+    debugInfo: v.object({
+      responseTimeMs: v.number(),
+      model: v.string(),
+      promptTokens: v.optional(v.number()),
+      completionTokens: v.optional(v.number()),
+      totalTokens: v.optional(v.number()),
+      thinkingContent: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      errorType: v.optional(v.string()),
+      errorStack: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { debugInfo: args.debugInfo });
   },
 });

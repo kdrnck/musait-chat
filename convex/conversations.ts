@@ -307,6 +307,26 @@ export const archiveAndReset = mutation({
   },
 });
 
+/**
+ * Reset session without archiving (for /bitir command).
+ * Clears tenant binding and resets agent state so the next message
+ * starts a fresh routing flow - but keeps the conversation visible
+ * in the admin panel with all its messages intact.
+ */
+export const resetSession = mutation({
+  args: { id: v.id("conversations") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      tenantId: null,
+      status: "active",
+      agentDisabledUntil: null,
+      adminMode: false,
+      retryState: { count: 0, lastAttempt: null },
+      rollingSummary: "",
+    });
+  },
+});
+
 /** Update last message timestamp */
 export const touchLastMessage = mutation({
   args: { id: v.id("conversations") },

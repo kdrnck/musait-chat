@@ -63,6 +63,10 @@ export default defineSchema({
       completionTokens: v.optional(v.number()),
       totalTokens: v.optional(v.number()),
       thinkingContent: v.optional(v.string()),
+      // Error details for debugging (tool call errors, LLM errors, etc.)
+      errorMessage: v.optional(v.string()),
+      errorType: v.optional(v.string()),
+      errorStack: v.optional(v.string()),
     })),
   })
     .index("by_conversation", ["conversationId", "createdAt"])

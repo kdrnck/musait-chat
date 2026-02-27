@@ -12,12 +12,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const isMaster = user.app_metadata?.role === "master";
   const tenantId =
     (user.app_metadata?.tenant_id as string) ||
     (user.user_metadata?.tenant_id as string) ||
     null;
 
-  if (!tenantId) {
+  if (!isMaster && !tenantId) {
     return NextResponse.json(
       { error: "Tenant bulunamadı" },
       { status: 400 }
@@ -32,11 +33,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Fetch customer names from Supabase
-  const { data: customers, error } = await supabase
-    .from("customers")
-    .select("phone, name")
-    .eq("tenant_id", tenantId)
-    .in("phone", phones);
+  // Master admin queries globally (no tenant_id filter), tenant users filter by their tenant
+  let query = supabase.from("customers").select("phone, name").in("phone", phones);
+  if (!isMaster && tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+  const { data: customers, error } = await query;
 
   if (error) {
     console.error("Error fetching customer names:", error);
