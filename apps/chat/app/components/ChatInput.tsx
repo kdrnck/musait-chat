@@ -11,12 +11,12 @@ export default function ChatInput({
     status,
 }: {
     conversationId: Id<"conversations">;
-    status: "active" | "handoff";
+    status: "active" | "handoff" | "archived";
 }) {
     const [text, setText] = useState("");
     const [sending, setSending] = useState(false);
     
-    const sendMessage = useMutation(api.messages.send);
+    const sendMessage = useMutation(api.messages.create);
     const updateStatus = useMutation(api.conversations.updateStatus);
 
     const handleSend = async (e: React.FormEvent) => {
@@ -29,6 +29,7 @@ export default function ChatInput({
                 conversationId,
                 content: text.trim(),
                 role: "human",
+                status: "pending",
             });
             setText("");
         } catch (err) {

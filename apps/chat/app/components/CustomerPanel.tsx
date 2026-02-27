@@ -12,7 +12,7 @@ export default function CustomerPanel({
     conversationId: Id<"conversations">;
     onClose?: () => void;
 }) {
-    const conversation = useQuery(api.conversations.get, { id: conversationId });
+    const conversation = useQuery(api.conversations.getById, { id: conversationId });
 
     if (!conversation) return null;
 

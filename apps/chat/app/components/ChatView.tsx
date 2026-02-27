@@ -24,12 +24,12 @@ export default function ChatView({
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const conversation = useQuery(
-        api.conversations.get,
+        api.conversations.getById,
         conversationId ? { id: conversationId } : "skip"
     );
 
     const messages = useQuery(
-        api.messages.list,
+        api.messages.listByConversation,
         conversationId ? { conversationId } : "skip"
     );
 

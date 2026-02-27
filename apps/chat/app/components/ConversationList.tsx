@@ -48,12 +48,15 @@ export default function ConversationList({
         router.refresh();
     };
 
-    // If tenantId is null and isAdmin is true, we might want to list ALL conversations
-    // Check if the API supports it.
-    const conversations = useQuery(
+    const tenantConversations = useQuery(
         api.conversations.listByTenant,
-        tenantId ? { tenantId } : (isAdmin ? {} : "skip")
+        tenantId ? { tenantId } : "skip"
     );
+    const allConversations = useQuery(
+        api.conversations.listAll,
+        !tenantId && isAdmin ? {} : "skip"
+    );
+    const conversations = tenantId ? tenantConversations : (isAdmin ? allConversations : undefined);
 
     const filtered = useMemo(() => {
         if (!conversations) return [];
@@ -71,8 +74,7 @@ export default function ConversationList({
             result = result.filter(
                 (c) =>
                     c.customerPhone.toLowerCase().includes(q) ||
-                    (c.rollingSummary || "").toLowerCase().includes(q) ||
-                    (c.tenantName || "").toLowerCase().includes(q)
+                    (c.rollingSummary || "").toLowerCase().includes(q)
             );
         }
 

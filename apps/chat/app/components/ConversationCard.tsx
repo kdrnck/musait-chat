@@ -72,7 +72,7 @@ export default function ConversationCard({
                         {conversation.customerPhone}
                     </h3>
                     <span className={`text-[10px] font-bold ${isSelected ? "text-[var(--color-brand)]" : "text-[#444444]"}`}>
-                        {formatTime(conversation.updatedAt)}
+                        {formatTime(conversation.lastMessageAt ?? conversation.createdAt)}
                     </span>
                 </div>
                 
