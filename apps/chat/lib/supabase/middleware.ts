@@ -81,13 +81,29 @@ export async function updateSession(request: NextRequest) {
             return redirectResponse
         }
 
-        if (
-            !user &&
-            !isAuthPath
-        ) {
+        if (!user && !isAuthPath) {
             const url = request.nextUrl.clone()
             url.pathname = '/login'
             return NextResponse.redirect(url)
+        }
+
+        if (user) {
+            const isAdmin = user.app_metadata?.role === 'master'
+            const pathname = request.nextUrl.pathname
+
+            // Admin user on '/' → redirect immediately to /admin (no loading state)
+            if (isAdmin && pathname === '/') {
+                const url = request.nextUrl.clone()
+                url.pathname = '/admin'
+                return NextResponse.redirect(url)
+            }
+
+            // Non-admin user trying to access /admin → redirect to '/'
+            if (!isAdmin && pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
+                const url = request.nextUrl.clone()
+                url.pathname = '/'
+                return NextResponse.redirect(url)
+            }
         }
 
         return supabaseResponse

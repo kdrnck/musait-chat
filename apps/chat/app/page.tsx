@@ -13,6 +13,11 @@ export default async function Home() {
     redirect("/login");
   }
 
+  // Admin users always go to /admin
+  if (user.app_metadata?.role === "master") {
+    redirect("/admin");
+  }
+
   // tenant_id is stored in app_metadata (set by Supabase admin on business account creation)
   // NOT in user_metadata — app_metadata is server-controlled and more reliable
   const tenantId =

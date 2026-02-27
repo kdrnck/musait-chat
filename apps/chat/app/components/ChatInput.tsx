@@ -23,7 +23,6 @@ export default function ChatInput({
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!text.trim() || sending) return;
-
         setSending(true);
         try {
             await sendMessage({
@@ -50,76 +49,83 @@ export default function ChatInput({
     const isHandoff = status === "handoff";
 
     return (
-        <div className="px-4 pb-6 pt-4 bg-[var(--color-bg-base)] border-t border-[var(--color-border)] z-20">
-            <div className="max-w-4xl mx-auto flex flex-col gap-3">
+        <div className="px-4 pb-4 pt-3 bg-[var(--color-surface-pure)] border-t border-[var(--color-border)]">
+            <div className="max-w-3xl mx-auto flex flex-col gap-2.5">
 
-                {/* Status Bar / Actions */}
-                <div className="flex items-center justify-between px-1">
-                    <div className="flex items-center gap-2">
-                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${isHandoff
-                                ? 'bg-[var(--color-brand-light)] text-[var(--color-brand-dark)]'
-                                : 'bg-[var(--color-surface-pure)] border border-[var(--color-border)] text-[var(--color-text-secondary)]'
-                            }`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${isHandoff ? 'bg-[var(--color-brand-dark)] animate-pulse' : 'bg-[var(--color-border-hover)]'}`} />
-                            <span className="text-[11px] font-semibold tracking-wide">
-                                {isHandoff ? "İnsan Yöneticide" : "Yapay Zeka Yönetiyor"}
-                            </span>
-                        </div>
+                {/* Status + Handoff toggle row */}
+                <div className="flex items-center justify-between">
+                    {/* Status indicator */}
+                    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold ${
+                        isHandoff
+                            ? "bg-[#DBEAFE] border-[#BFDBFE] text-[#1D4ED8]"
+                            : "bg-[var(--color-surface-hover)] border-[var(--color-border)] text-[var(--color-text-muted)]"
+                    }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                            isHandoff ? "bg-[#3B82F6] animate-pulse" : "bg-[var(--color-border-hover)]"
+                        }`} />
+                        {isHandoff ? "İnsan Yönetiminde" : "Yapay Zeka Yönetiyor"}
                     </div>
 
+                    {/* Handoff toggle button */}
                     <button
                         onClick={handleHandoffToggle}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${isHandoff
-                                ? "bg-[var(--color-surface-pure)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]"
-                                : "bg-[var(--color-surface-pure)] border border-[var(--color-border)] hover:border-[var(--color-brand-dark)] text-[var(--color-text-primary)] hover:shadow-sm"
-                            }`}
+                        className={isHandoff
+                            ? "btn-secondary gap-1.5 px-3 py-1.5 text-[12px]"
+                            : "btn-primary gap-1.5 px-3 py-1.5 text-[12px]"
+                        }
                     >
                         {isHandoff ? (
                             <>
-                                <Zap size={14} className="text-[var(--color-text-muted)]" />
+                                <Zap size={13} />
                                 <span>AI'ya Devret</span>
                             </>
                         ) : (
                             <>
-                                <UserPlus size={14} className="text-[var(--color-brand-dark)]" />
+                                <UserPlus size={13} />
                                 <span>Görüşmeyi Devral</span>
                             </>
                         )}
                     </button>
                 </div>
 
-                {/* Input Area */}
+                {/* Input area */}
                 <form
                     onSubmit={handleSend}
-                    className={`relative bg-[var(--color-surface-pure)] border border-[var(--color-border)] focus-within:border-[var(--color-brand)] focus-within:ring-1 focus-within:ring-[var(--color-brand)] rounded-[20px] p-1.5 flex items-center transition-all duration-200 shadow-sm ${!isHandoff ? "bg-[var(--color-surface-hover)] cursor-not-allowed opacity-80" : ""
-                        }`}
+                    className={`flex items-center gap-2 bg-[var(--color-surface-hover)] border rounded-2xl px-3 py-2 transition-all duration-150 ${
+                        isHandoff
+                            ? "border-[var(--color-border)] focus-within:border-[var(--color-brand)] focus-within:ring-2 focus-within:ring-[var(--color-brand-light)] focus-within:bg-white"
+                            : "border-[var(--color-border)] opacity-60"
+                    }`}
                 >
-                    <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center text-[var(--color-text-muted)] ml-1">
-                        {isHandoff ? <Sparkles size={18} className="text-[var(--color-brand-dark)]" /> : <Zap size={18} />}
+                    <div className="flex-shrink-0 w-8 flex items-center justify-center text-[var(--color-text-muted)]">
+                        {isHandoff
+                            ? <Sparkles size={16} className="text-[var(--color-brand-dim)]" />
+                            : <Zap size={16} />
+                        }
                     </div>
 
                     <input
                         type="text"
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder={isHandoff ? "Mesajınızı yazın..." : "Mesaj yazmak için görüşmeyi devralmalısınız"}
+                        placeholder={isHandoff ? "Mesajınızı yazın..." : "Görüşmeyi devralarak mesaj gönderebilirsiniz"}
                         disabled={!isHandoff}
-                        className="flex-1 min-w-0 bg-transparent border-none outline-none py-2 px-1 text-[15px] font-normal text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:ring-0 disabled:text-[var(--color-text-muted)]"
+                        className="flex-1 bg-transparent border-none outline-none py-1.5 text-[14px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:ring-0 disabled:cursor-not-allowed"
                     />
 
                     <button
                         type="submit"
                         disabled={!text.trim() || sending || !isHandoff}
-                        className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ml-1 ${text.trim() && isHandoff
-                                ? "bg-[var(--color-brand-dark)] text-white hover:bg-[var(--color-brand-dim)]"
-                                : "bg-[var(--color-surface-hover)] text-[var(--color-border-hover)]"
-                            }`}
+                        className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-150 ${
+                            text.trim() && isHandoff
+                                ? "bg-[var(--color-text-primary)] text-white hover:bg-[#374151]"
+                                : "bg-[var(--color-border)] text-[var(--color-text-muted)] cursor-not-allowed"
+                        }`}
                     >
-                        {sending ? (
-                            <Loader2 className="animate-spin" size={16} />
-                        ) : (
-                            <Send size={16} className={text.trim() && isHandoff ? "translate-x-0.5 -translate-y-0.5" : ""} />
-                        )}
+                        {sending
+                            ? <Loader2 className="animate-spin" size={15} />
+                            : <Send size={15} className={text.trim() && isHandoff ? "translate-x-0.5 -translate-y-0.5" : ""} />
+                        }
                     </button>
                 </form>
             </div>
