@@ -1,6 +1,6 @@
 import { LLM_CONFIG } from "../config.js";
 
-export type AiModelProfile = "cheap" | "fast" | "premium";
+export type AiModelProfile = "cheap" | "fast" | "premium" | "oss-deepinfra" | "oss-groq";
 export type OutboundNumberMode = "inbound" | "musait" | "tenant";
 
 interface ModelPreset {
@@ -23,6 +23,16 @@ const MODEL_PRESETS: Record<AiModelProfile, ModelPreset> = {
   premium: {
     model: "google/gemini-2.5-flash-preview",
     providerPriority: [],
+    allowFallbacks: true,
+  },
+  "oss-deepinfra": {
+    model: "openai/gpt-oss-120b",
+    providerPriority: ["deepinfra"],
+    allowFallbacks: true,
+  },
+  "oss-groq": {
+    model: "openai/gpt-oss-120b",
+    providerPriority: ["groq"],
     allowFallbacks: true,
   },
 };
@@ -48,7 +58,8 @@ export function resolveTenantAiSettings(
 
   const profileRaw = asString(keys.ai_model_profile)?.toLowerCase();
   const modelProfile: AiModelProfile =
-    profileRaw === "cheap" || profileRaw === "fast" || profileRaw === "premium"
+    profileRaw === "cheap" || profileRaw === "fast" || profileRaw === "premium" ||
+    profileRaw === "oss-deepinfra" || profileRaw === "oss-groq"
       ? (profileRaw as AiModelProfile)
       : DEFAULT_PROFILE;
 

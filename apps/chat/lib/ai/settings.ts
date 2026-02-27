@@ -28,14 +28,14 @@ export const AI_MODEL_PRESETS: Record<AiModelProfile, AiModelPreset> = {
     allowFallbacks: true,
   },
   "oss-deepinfra": {
-    label: "gpt-oss-120b (DeepInfra)",
-    model: "open-inference/int8",
+    label: "gpt-oss-120b fast (DeepInfra)",
+    model: "openai/gpt-oss-120b",
     providerPriority: ["deepinfra"],
     allowFallbacks: true,
   },
   "oss-groq": {
-    label: "gps-oss-120b (Groq)",
-    model: "open-inference/int8",
+    label: "gpt-oss-120b fast (Groq)",
+    model: "openai/gpt-oss-120b",
     providerPriority: ["groq"],
     allowFallbacks: true,
   },

@@ -96,10 +96,16 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
         method: "GET",
         cache: "no-store",
       });
-      const payload = await response.json();
+
+      let payload: any;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new Error("Sunucudan geçersiz yanıt alındı.");
+      }
 
       if (!response.ok) {
-        throw new Error(payload.error || "AI ayarları alınamadı.");
+        throw new Error(payload?.error || "AI ayarları alınamadı.");
       }
 
       setSettings(payload);
@@ -123,9 +129,15 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
         body: JSON.stringify(settings),
       });
 
-      const payload = await response.json();
+      let payload: any;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new Error("Sunucudan geçersiz yanıt alındı.");
+      }
+
       if (!response.ok) {
-        throw new Error(payload.error || "AI ayarları kaydedilemedi.");
+        throw new Error(payload?.error || "AI ayarları kaydedilemedi.");
       }
 
       setSettings(payload);

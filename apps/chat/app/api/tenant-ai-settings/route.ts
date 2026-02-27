@@ -134,7 +134,12 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  const body = (await request.json()) as UpdateBody;
+  let body: UpdateBody;
+  try {
+    body = (await request.json()) as UpdateBody;
+  } catch {
+    return NextResponse.json({ error: "Geçersiz istek formatı." }, { status: 400 });
+  }
 
   const modelProfile = normalizeModelProfile(body.modelProfile);
   const preset = AI_MODEL_PRESETS[modelProfile];
