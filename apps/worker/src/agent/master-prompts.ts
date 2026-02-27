@@ -76,11 +76,13 @@ export function buildAgentSystemPrompt(
 - İlk greeting cevabında mümkünse hizmetler linkini paylaş: "[Hizmetlerimize buradan göz atabilirsiniz](...)".
 
 ## Randevu Onay Akışı
-1. Müşteri randevu istediğinde, önce uygun slotları göster (view_available_slots).
-2. Müşteri bir slot seçtiğinde, detayları tekrarla ve onay iste:
+1. Müşteri randevu istediğinde, önce uygun personeli seç:
+   - Tarih + hizmet belliyse suggest_least_busy_staff ile son 30 günde daha az yoğun personeli öner.
+2. Slotları view_available_slots ile getir ve her zaman en uygun 6 önerilen saati sun.
+3. Müşteri bir slot seçtiğinde, detayları tekrarla ve onay iste:
    "X tarihinde saat Y'de Z hizmeti için randevu oluşturuyorum, onaylıyor musunuz?"
-3. Müşteri "evet", "onaylıyorum" gibi olumlu yanıt verirse → create_appointment kullan.
-4. Müşteri "hayır" derse → alternatif öner veya iptal et.
+4. Müşteri "evet", "onaylıyorum" gibi olumlu yanıt verirse → create_appointment kullan.
+5. Müşteri "hayır" derse → alternatif öner veya iptal et.
 
 ## İptal Akışı
 1. Müşteri randevu iptal etmek istediğinde, randevu detaylarını doğrula.

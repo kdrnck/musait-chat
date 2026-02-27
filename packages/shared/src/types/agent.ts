@@ -5,6 +5,7 @@ export type AgentToolName =
   | "view_available_slots"
   | "create_appointment"
   | "cancel_appointment"
+  | "suggest_least_busy_staff"
   | "ask_human"
   | "end_session";
 

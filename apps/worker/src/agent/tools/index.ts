@@ -5,6 +5,7 @@ import { createAppointment } from "./create-appointment.js";
 import { cancelAppointment } from "./cancel-appointment.js";
 import { askHuman } from "./ask-human.js";
 import { endSession } from "./end-session.js";
+import { suggestLeastBusyStaff } from "./suggest-staff.js";
 
 interface ToolContext {
   tenantId: string;
@@ -41,6 +42,9 @@ export async function executeToolCall(
         break;
       case "end_session":
         result = await endSession(convex, toolCall.arguments, ctx);
+        break;
+      case "suggest_least_busy_staff":
+        result = await suggestLeastBusyStaff(toolCall.arguments, ctx);
         break;
       default:
         return {
@@ -147,6 +151,28 @@ export function getToolDefinitions() {
             },
           },
           required: ["appointment_id"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "suggest_least_busy_staff",
+        description:
+          "Hizmet ve tarih için, son 30 günde en az randevu almış uygun personeli önerir.",
+        parameters: {
+          type: "object",
+          properties: {
+            date: {
+              type: "string",
+              description: "Tarih (YYYY-MM-DD formatında)",
+            },
+            service_id: {
+              type: "string",
+              description: "Hizmet ID",
+            },
+          },
+          required: ["date", "service_id"],
         },
       },
     },

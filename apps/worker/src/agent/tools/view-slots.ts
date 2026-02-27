@@ -51,11 +51,12 @@ export async function viewAvailableSlots(
 
   if (!response.ok) {
     // Fallback: manual slot calculation if RPC doesn't exist
-    return await manualSlotQuery(ctx.tenantId, date, serviceId, staffId);
+    const fallbackResult = await manualSlotQuery(ctx.tenantId, date, serviceId, staffId);
+    return attachRecommendedSlots(fallbackResult);
   }
 
-  const slots = await response.json();
-  return { date, slots };
+  const slots = (await response.json()) as unknown;
+  return attachRecommendedSlots({ date, slots });
 }
 
 /**
@@ -67,7 +68,7 @@ async function manualSlotQuery(
   date: string,
   serviceId?: string,
   staffId?: string
-): Promise<unknown> {
+): Promise<Record<string, unknown>> {
   const headers = {
     "Content-Type": "application/json",
     apikey: SUPABASE_CONFIG.serviceKey,
@@ -102,6 +103,19 @@ async function manualSlotQuery(
 
   const apptRes = await fetch(apptUrl.toString(), { headers });
   const appointments = await apptRes.json();
+  
+  // Get staff time blocks for this date
+  const blockUrl = new URL(`${SUPABASE_CONFIG.url}/rest/v1/staff_time_blocks`);
+  blockUrl.searchParams.set("tenant_id", `eq.${tenantId}`);
+  blockUrl.searchParams.set(
+    "or",
+    `(and(start_at.lte.${endOfDay},end_at.gte.${startOfDay}))`
+  );
+  if (staffId) blockUrl.searchParams.set("staff_id", `eq.${staffId}`);
+  blockUrl.searchParams.set("select", "staff_id,start_at,end_at");
+
+  const blockRes = await fetch(blockUrl.toString(), { headers });
+  const blocks = await blockRes.json();
 
   // Get services if filtering
   let serviceDuration = 30; // default 30 min
@@ -120,10 +134,12 @@ async function manualSlotQuery(
     staffId: string;
     time: string;
   }> = [];
+  const staffWorkingWindows = new Map<string, { start: number; end: number }>();
 
   for (const wh of workingHours) {
     const start = parseTime(wh.start_time);
     const end = parseTime(wh.end_time);
+    staffWorkingWindows.set(wh.staff_id, { start, end });
 
     for (let t = start; t + serviceDuration <= end; t += 15) {
       const timeStr = formatTime(t);
@@ -138,6 +154,14 @@ async function manualSlotQuery(
       );
 
       if (!hasConflict) {
+        const blockedByTimeBlock = blocks.some(
+          (block: any) =>
+            block.staff_id === wh.staff_id &&
+            new Date(block.start_at) < new Date(`${date}T${formatTime(t + serviceDuration)}:00+03:00`) &&
+            new Date(block.end_at) > new Date(slotStart)
+        );
+        if (blockedByTimeBlock) continue;
+
         available.push({
           staffId: wh.staff_id,
           time: timeStr,
@@ -146,11 +170,173 @@ async function manualSlotQuery(
     }
   }
 
+  const recommendedSlots = calculateSandwichSuggestions(
+    available,
+    appointments,
+    blocks,
+    staffWorkingWindows,
+    serviceDuration
+  );
+
   return {
     date,
     serviceDurationMinutes: serviceDuration,
     availableSlots: available,
+    recommendedSlots,
   };
+}
+
+function attachRecommendedSlots(payload: Record<string, unknown>): Record<string, unknown> {
+  const recommendedSlots = getTopRecommendedSlots(payload);
+  return {
+    ...payload,
+    recommendedSlots,
+  };
+}
+
+function getTopRecommendedSlots(payload: Record<string, unknown>): Array<{ staffId?: string; time: string }> {
+  const candidates = extractSlotCandidates(payload);
+  const seen = new Set<string>();
+  const unique: Array<{ staffId?: string; time: string }> = [];
+
+  for (const c of candidates) {
+    const key = `${c.staffId || ""}|${c.time}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(c);
+    if (unique.length >= 6) break;
+  }
+
+  return unique;
+}
+
+function calculateSandwichSuggestions(
+  available: Array<{ staffId: string; time: string }>,
+  appointments: Array<any>,
+  blocks: Array<any>,
+  staffWorkingWindows: Map<string, { start: number; end: number }>,
+  durationMinutes: number
+): Array<{ staffId: string; time: string }> {
+  if (available.length === 0) return [];
+
+  const intervalsByStaff = new Map<string, Array<{ start: number; end: number }>>();
+  for (const appt of appointments) {
+    if (!appt?.staff_id || !appt?.start_time || !appt?.end_time) continue;
+    const start = extractTurkeyMinutes(appt.start_time);
+    const end = extractTurkeyMinutes(appt.end_time);
+    if (!intervalsByStaff.has(appt.staff_id)) intervalsByStaff.set(appt.staff_id, []);
+    intervalsByStaff.get(appt.staff_id)!.push({ start, end });
+  }
+  for (const block of blocks) {
+    if (!block?.staff_id || !block?.start_at || !block?.end_at) continue;
+    const start = extractTurkeyMinutes(block.start_at);
+    const end = extractTurkeyMinutes(block.end_at);
+    if (!intervalsByStaff.has(block.staff_id)) intervalsByStaff.set(block.staff_id, []);
+    intervalsByStaff.get(block.staff_id)!.push({ start, end });
+  }
+
+  const scored = available.map((slot) => {
+    const slotStart = parseTime(slot.time);
+    const slotEnd = slotStart + durationMinutes;
+    const intervals = intervalsByStaff.get(slot.staffId) || [];
+    const window = staffWorkingWindows.get(slot.staffId);
+    let score = 0;
+
+    for (const int of intervals) {
+      if (slotEnd === int.start) score += 10;
+      if (slotStart === int.end) score += 10;
+      if (Math.abs(slotEnd - int.start) <= 30) score += 5;
+      if (Math.abs(slotStart - int.end) <= 30) score += 5;
+    }
+
+    if (window) {
+      if (slotStart === window.start) score -= 2;
+      if (slotEnd >= window.end - 30) score -= 2;
+    }
+
+    return { ...slot, score };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.time.localeCompare(b.time);
+  });
+
+  const positive = scored.filter((s) => s.score > 0).slice(0, 6);
+  if (positive.length > 0) return positive.map(({ staffId, time }) => ({ staffId, time }));
+
+  return scored.slice(0, 6).map(({ staffId, time }) => ({ staffId, time }));
+}
+
+function extractTurkeyMinutes(iso: string): number {
+  const date = new Date(iso);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Istanbul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const hour = Number(parts.find((p) => p.type === "hour")?.value || "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value || "0");
+  return hour * 60 + minute;
+}
+
+function extractSlotCandidates(payload: Record<string, unknown>): Array<{ staffId?: string; time: string }> {
+  const direct = payload.recommendedSlots;
+  if (Array.isArray(direct)) {
+    const normalized = normalizeSlotArray(direct);
+    if (normalized.length > 0) return normalized;
+  }
+
+  const suggested = payload.suggestedSlots;
+  if (Array.isArray(suggested)) {
+    const normalized = normalizeSlotArray(suggested);
+    if (normalized.length > 0) return normalized;
+  }
+
+  const slots = payload.slots;
+  if (Array.isArray(slots)) {
+    const normalized = normalizeSlotArray(slots);
+    if (normalized.length > 0) return normalized;
+  }
+
+  const available = payload.availableSlots;
+  if (Array.isArray(available)) {
+    const normalized = normalizeSlotArray(available);
+    if (normalized.length > 0) return normalized;
+  }
+
+  return [];
+}
+
+function normalizeSlotArray(items: unknown[]): Array<{ staffId?: string; time: string }> {
+  const normalized: Array<{ staffId?: string; time: string }> = [];
+
+  for (const item of items) {
+    if (typeof item === "string" && /^\d{2}:\d{2}$/.test(item)) {
+      normalized.push({ time: item });
+      continue;
+    }
+
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const time =
+      (typeof row.time === "string" && row.time) ||
+      (typeof row.slot_time === "string" && row.slot_time) ||
+      (typeof row.start_time === "string" && row.start_time.slice(11, 16)) ||
+      "";
+
+    if (!/^\d{2}:\d{2}$/.test(time)) continue;
+    const staffId =
+      (typeof row.staffId === "string" && row.staffId) ||
+      (typeof row.staff_id === "string" && row.staff_id) ||
+      undefined;
+
+    normalized.push({ staffId, time });
+  }
+
+  return normalized.sort((a, b) => a.time.localeCompare(b.time));
 }
 
 function parseTime(time: string): number {
