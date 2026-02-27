@@ -37,7 +37,7 @@ interface TenantSettingsRow {
 
 type ChatSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
 
   const {
@@ -48,7 +48,17 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const context = await resolveTenantContext(supabase, user);
+  // Master admin: allow explicit tenantId query param
+  const isMaster = user.app_metadata?.role === "master";
+  const paramTenantId = request.nextUrl.searchParams.get("tenantId");
+
+  let context: { tenantId: string | null; canEdit: boolean };
+  if (isMaster && paramTenantId) {
+    context = { tenantId: paramTenantId, canEdit: true };
+  } else {
+    context = await resolveTenantContext(supabase, user);
+  }
+
   if (!context.tenantId) {
     return NextResponse.json(
       { error: "Tenant bulunamadı" },
@@ -119,7 +129,22 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const context = await resolveTenantContext(supabase, user);
+  // Master admin: allow explicit tenantId in request body
+  const isMasterPut = user.app_metadata?.role === "master";
+  let rawBody: UpdateBody & { tenantId?: string };
+  try {
+    rawBody = (await request.json()) as UpdateBody & { tenantId?: string };
+  } catch {
+    return NextResponse.json({ error: "Geçersiz istek formatı." }, { status: 400 });
+  }
+
+  let context: { tenantId: string | null; canEdit: boolean };
+  if (isMasterPut && rawBody.tenantId) {
+    context = { tenantId: rawBody.tenantId, canEdit: true };
+  } else {
+    context = await resolveTenantContext(supabase, user);
+  }
+
   if (!context.tenantId) {
     return NextResponse.json(
       { error: "Tenant bulunamadı" },
@@ -134,12 +159,7 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  let body: UpdateBody;
-  try {
-    body = (await request.json()) as UpdateBody;
-  } catch {
-    return NextResponse.json({ error: "Geçersiz istek formatı." }, { status: 400 });
-  }
+  const body: UpdateBody = rawBody;
 
   const modelProfile = normalizeModelProfile(body.modelProfile);
   const preset = AI_MODEL_PRESETS[modelProfile];

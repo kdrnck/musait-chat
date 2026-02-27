@@ -10,6 +10,7 @@ import { bindTenant } from "./bind-tenant.js";
 import { listServices, listStaff, getBusinessInfo } from "./list-business-data.js";
 import { listCustomerAppointments } from "./list-customer-appointments.js";
 import { takeNotesForUser } from "./take-notes.js";
+import { updateCustomerName } from "./update-customer-name.js";
 
 interface ToolContext {
   tenantId: string | null;
@@ -93,6 +94,13 @@ export async function executeToolCall(
         break;
       case "take_notes_for_user":
         result = await takeNotesForUser(convex, toolCall.arguments, {
+          tenantId: ctx.tenantId!,
+          conversationId: ctx.conversationId,
+          customerPhone: ctx.customerPhone,
+        });
+        break;
+      case "update_customer_name":
+        result = await updateCustomerName(convex, toolCall.arguments, {
           tenantId: ctx.tenantId!,
           conversationId: ctx.conversationId,
           customerPhone: ctx.customerPhone,
@@ -401,6 +409,28 @@ export function getToolDefinitions() {
             },
           },
           required: ["note"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "update_customer_name",
+        description:
+          "Müşterinin kayıtlı adını ve/veya soyadını günceller. Müşteri adının yanlış olduğunu söylediğinde, adını/soyadını bildirmek istediğinde ya da daha önce kaydedilmemiş ad bilgisi eklemek istediğinde kullan. Her iki alan da opsiyoneldir; sadece değiştirilmek istenen kısmı gönder.",
+        parameters: {
+          type: "object",
+          properties: {
+            first_name: {
+              type: "string",
+              description: "Müşterinin yeni adı (opsiyonel, sadece ad değişiyorsa gönder)",
+            },
+            last_name: {
+              type: "string",
+              description: "Müşterinin yeni soyadı (opsiyonel, sadece soyad değişiyorsa gönder)",
+            },
+          },
+          required: [],
         },
       },
     },

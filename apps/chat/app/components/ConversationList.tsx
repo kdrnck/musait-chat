@@ -60,7 +60,12 @@ export default function ConversationList({
     );
     const allConversations = useQuery(
         api.conversations.listAll,
-        !isRoutingMode && isAdmin ? {} : "skip"
+        !isRoutingMode && isAdmin && !tenantId ? {} : "skip"
+    );
+    // Admin viewing a specific tenant → include archived (full history)
+    const adminTenantConversations = useQuery(
+        api.conversations.listByTenantAdmin,
+        !isRoutingMode && isAdmin && tenantId ? { tenantId } : "skip"
     );
     const unboundConversations = useQuery(
         api.conversations.listUnbound,
@@ -68,7 +73,10 @@ export default function ConversationList({
     );
     const conversations = isRoutingMode
         ? unboundConversations
-        : (isAdmin ? allConversations : (tenantId ? tenantConversations : undefined));
+        : (isAdmin
+            ? (tenantId ? adminTenantConversations : allConversations)
+            : (tenantId ? tenantConversations : undefined)
+        );
 
     useEffect(() => {
         if (conversations === undefined && (isAdmin || tenantId)) {
@@ -104,9 +112,8 @@ export default function ConversationList({
         if (!conversations) return [];
         let result = [...conversations];
 
-        if (isAdmin && tenantId) {
-            result = result.filter(c => c.tenantId === tenantId || c.tenantId === null);
-        }
+        // When admin has a specific tenant selected, conversations already come filtered
+        // from the server query — no extra client-side tenant filter needed.
 
         const phoneMap = new Map<string, typeof result[0]>();
         for (const conv of result) {

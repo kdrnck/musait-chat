@@ -1,24 +1,3 @@
-export const UNBOUND_ROUTING_PROMPT = (tenantList: string) =>
-  `Bu konuşma henüz bir işletmeye bağlı değil.
-
-Görevin: Müşterinin mesajına göre aşağıdaki aktif işletmelerden en uygununu seç ve bind_tenant aracını kullan. Bağlama başarılı olursa müşteriyi kısaca selamla ve nasıl yardımcı olabileceğini sor.
-
-Aktif işletmeler:
-${tenantList}
-
-Hiçbiri uygun değilse müşteriden hangi işletmeyi istediğini sor.`;
-
-export const ROUTING_PROMPTS = {
-  welcomeMessage:
-    "Merhaba, lütfen randevu almak istediğiniz işletmeyi söyler misiniz? Mevcut işletme listesini görmek için bu bağlantıya tıkla: https://musait.app/isletme-listesi",
-  noActiveTenantMessage: "Şu anda aktif işletme bulunmamaktadır.",
-  tenantRetryMessage:
-    "İşletmeyi anlayamadım. Lütfen işletme adını tekrar yazın veya listeyi inceleyin: https://musait.app/isletme-listesi",
-  noServiceMessage: "Şu an listelenecek hizmet bulunmuyor.",
-  tenantSelectedMessage: (tenantName: string, servicesList: string) =>
-    `${tenantName} işletmesi için randevu oluşturuyorsunuz. Lütfen aşağıdan hizmet seçin:\n${servicesList}`,
-} as const;
-
 export const LLM_PROMPTS = {
   tenantSelectorSystem:
     "Kullanıcının mesajına göre en uygun işletmeyi seç. Sadece JSON döndür: {\"tenantId\":\"...\"} veya eşleşme yoksa {\"tenantId\":null}.",

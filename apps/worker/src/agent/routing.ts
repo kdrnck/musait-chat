@@ -3,7 +3,7 @@ import type { AgentJob } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { LLM_CONFIG } from "../config.js";
-import { LLM_PROMPTS, ROUTING_PROMPTS } from "./master-prompts.js";
+import { LLM_PROMPTS } from "./master-prompts.js";
 
 interface Conversation {
   _id: any;
@@ -59,104 +59,47 @@ export async function routeMessage(
   }
 
   // 2) Unbound conversation path (master number flow)
+  // Agent handles greetings and tenant binding via bind_tenant tool.
+  // Only warm-start shortcut fires here when the customer has a known preferred tenant.
   if (!isMasterNumber) {
     return { handled: false, tenantId: null };
   }
 
-  const messageText = job.messageContent.trim();
-  const previousMessages = await convex.query(api.messages.listByConversation, {
-    conversationId: conversation._id,
-    limit: 10,
-  });
-
-  const hasWelcomeMessage = previousMessages.some(
-    (msg: any) =>
-      msg.role === "agent" && msg.content === ROUTING_PROMPTS.welcomeMessage
-  );
-
-  // After /bitir, rollingSummary is cleared to "". Treat this as a fresh session
-  // regardless of old messages in the conversation — old welcome messages from
-  // previous sessions should not block the warm-start / welcome flow.
-  const isFreshSession = !conversation.rollingSummary;
-
   const activeTenants = await getActiveTenants(convex);
-  if (!activeTenants || activeTenants.length === 0) {
-    await replyAndPersist(convex, {
-      job,
-      conversationId: conversation._id,
-      content: ROUTING_PROMPTS.noActiveTenantMessage,
+
+  // Warm-start: if customer has a preferred tenant from a previous session, bind
+  // immediately and confirm. Agent will take over for subsequent messages.
+  const rememberedTenant = activeTenants.length > 0
+    ? await getRememberedTenant(convex, job.customerPhone, activeTenants)
+    : null;
+
+  if (rememberedTenant) {
+    await convex.mutation(api.conversations.bindToTenant, {
+      id: conversation._id,
+      tenantId: rememberedTenant.tenantId,
     });
-    return { handled: true, tenantId: null };
-  }
 
-  // First touch: try "last tenant" shortcut before welcome message.
-  // Also fires when session was freshly reset (/bitir) even if old welcome exists.
-  if (!hasWelcomeMessage || isFreshSession) {
-    const rememberedTenant = await getRememberedTenant(
-      convex,
-      job.customerPhone,
-      activeTenants
-    );
-
-    if (rememberedTenant) {
-      await convex.mutation(api.conversations.bindToTenant, {
-        id: conversation._id,
-        tenantId: rememberedTenant.tenantId,
-      });
-
-      const warmStartMessage =
-        `Tekrar hoş geldiniz. Son tercihinize göre *${rememberedTenant.tenantName}* ile devam ediyorum.\n` +
-        "İşletme değiştirmek isterseniz \"işletme değiştir\" yazabilirsiniz.";
-
-      await replyAndPersist(convex, {
-        job,
-        conversationId: conversation._id,
-        content: warmStartMessage,
-      });
-
-      await convex.mutation(api.customerMemories.upsertPreferredTenant, {
-        customerPhone: job.customerPhone,
-        preferredTenantId: rememberedTenant.tenantId,
-      });
-
-      return { handled: true, tenantId: rememberedTenant.tenantId };
-    }
+    const warmStartMessage =
+      `Tekrar hoş geldiniz. Son tercihinize göre *${rememberedTenant.tenantName}* ile devam ediyorum.\n` +
+      "İşletme değiştirmek isterseniz \"işletme değiştir\" yazabilirsiniz.";
 
     await replyAndPersist(convex, {
       job,
       conversationId: conversation._id,
-      content: ROUTING_PROMPTS.welcomeMessage,
+      content: warmStartMessage,
     });
-    return { handled: true, tenantId: null };
+
+    await convex.mutation(api.customerMemories.upsertPreferredTenant, {
+      customerPhone: job.customerPhone,
+      preferredTenantId: rememberedTenant.tenantId,
+    });
+
+    return { handled: true, tenantId: rememberedTenant.tenantId };
   }
 
-  const matchedTenant = await selectTenantWithLlm(messageText, activeTenants);
-  if (!matchedTenant) {
-    await replyAndPersist(convex, {
-      job,
-      conversationId: conversation._id,
-      content: ROUTING_PROMPTS.tenantRetryMessage,
-    });
-    return { handled: true, tenantId: null };
-  }
-
-  await convex.mutation(api.conversations.bindToTenant, {
-    id: conversation._id,
-    tenantId: matchedTenant.tenantId,
-  });
-
-  await replyAndPersist(convex, {
-    job,
-    conversationId: conversation._id,
-    content: `*${matchedTenant.tenantName}* işletmesine bağlandınız. Size nasıl yardımcı olabilirim?`,
-  });
-
-  await convex.mutation(api.customerMemories.upsertPreferredTenant, {
-    customerPhone: job.customerPhone,
-    preferredTenantId: matchedTenant.tenantId,
-  });
-
-  return { handled: true, tenantId: matchedTenant.tenantId };
+  // No remembered tenant — hand off to agent which will greet the customer,
+  // collect business preference, and call bind_tenant tool.
+  return { handled: false, tenantId: null };
 }
 
 async function performTenantSwitch(

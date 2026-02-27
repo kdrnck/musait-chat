@@ -5,7 +5,9 @@ import ChatLayout from "../components/ChatLayout";
 import GlobalAiSettingsPanel from "./components/GlobalAiSettingsPanel";
 import ModelTestPanel from "./components/ModelTestPanel";
 import TenantSystemPromptPanel from "./components/TenantSystemPromptPanel";
-import { Settings, Shield, Activity, Terminal, Network, Globe, LogOut } from "lucide-react";
+import RouterAgentMasterPromptPanel from "./components/RouterAgentMasterPromptPanel";
+import AdminTenantSettingsModal from "./components/AdminTenantSettingsModal";
+import { Settings, Shield, Activity, Terminal, Network, Globe, LogOut, SlidersHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -15,7 +17,7 @@ interface Tenant {
     logo_url: string | null;
 }
 
-type AdminTab = "chat" | "global" | "routing" | "settings";
+type AdminTab = "chat" | "global" | "routing" | "settings" | "router-prompt";
 
 export default function AdminDashboard({
     userEmail,
@@ -26,6 +28,7 @@ export default function AdminDashboard({
 }) {
     const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<AdminTab>("chat");
+    const [showTenantSettings, setShowTenantSettings] = useState(false);
     const router = useRouter();
 
     const handleLogout = async () => {
@@ -53,6 +56,12 @@ export default function AdminDashboard({
             label: "Yönlendirme",
             icon: <Network size={18} />,
             description: "İşletmeye atanmayan sohbetler",
+        },
+        {
+            key: "router-prompt",
+            label: "Router Prompt",
+            icon: <Terminal size={18} />,
+            description: "Limbo sohbetler için agent prompt",
         },
         {
             key: "settings",
@@ -126,7 +135,28 @@ export default function AdminDashboard({
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
 
                 {/* ── Chat/Global/Routing Tabs ── */}
-                {(activeTab === "chat" || activeTab === "global" || activeTab === "routing") ? (
+                {activeTab === "router-prompt" ? (
+                    /* ── Router Agent Prompt Tab ── */
+                    <div className="h-full overflow-y-auto px-6 md:px-10 py-8">
+                        <div className="max-w-3xl mx-auto space-y-8">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-10 h-10 rounded-xl bg-[var(--color-status-attention)] bg-opacity-10 border border-[var(--color-border)] flex items-center justify-center">
+                                    <Network size={18} className="text-[var(--color-status-attention)]" />
+                                </div>
+                                <div>
+                                    <h2 className="text-[20px] font-bold text-[var(--color-text-primary)] tracking-tight">
+                                        RouterAgent Master Prompt
+                                    </h2>
+                                    <p className="text-[13px] text-[var(--color-text-muted)]">
+                                        Henüz işletme seçmemiş müşterileri karşılayan agent konfigürasyonu
+                                    </p>
+                                </div>
+                            </div>
+                            <RouterAgentMasterPromptPanel />
+                        </div>
+                    </div>
+
+                ) : (activeTab === "chat" || activeTab === "global" || activeTab === "routing") ? (
                     <div className="h-full flex flex-col">
                         {/* Slim tab header */}
                         <div className="h-[52px] flex-shrink-0 flex items-center px-5 bg-[var(--color-surface-pure)] border-b border-[var(--color-border)] gap-4">
@@ -153,6 +183,18 @@ export default function AdminDashboard({
                                         : "Tüm işletmelerden canlı akış"}
                                 </p>
                             </div>
+
+                            {/* Gear icon: visible when a specific tenant is selected */}
+                            {activeTab === "chat" && selectedTenantId && (
+                                <button
+                                    onClick={() => setShowTenantSettings(true)}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] hover:bg-[var(--color-surface-active)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all text-[12px] font-semibold"
+                                    title="İşletme AI Ayarları"
+                                >
+                                    <SlidersHorizontal size={15} />
+                                    <span className="hidden sm:inline">AI Ayarları</span>
+                                </button>
+                            )}
                         </div>
 
                         <div className="flex-1 relative overflow-hidden">
@@ -237,6 +279,23 @@ export default function AdminDashboard({
                                 <TenantSystemPromptPanel tenants={tenants} />
                             </section>
 
+                            <section className="panel-card p-6">
+                                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[var(--color-border)]">
+                                    <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-center">
+                                        <Network size={16} className="text-[var(--color-status-attention)]" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
+                                            RouterAgent Master Prompt
+                                        </h3>
+                                        <p className="text-[12px] text-[var(--color-text-muted)]">
+                                            İşletme seçilmemiş sohbetlerde devreye giren agent prompt
+                                        </p>
+                                    </div>
+                                </div>
+                                <RouterAgentMasterPromptPanel />
+                            </section>
+
                             <section className="panel-card p-6 mb-10">
                                 <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[var(--color-border)]">
                                     <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-center">
@@ -257,6 +316,15 @@ export default function AdminDashboard({
                     </div>
                 )}
             </main>
+
+            {/* ── Admin Tenant Settings Modal ── */}
+            {showTenantSettings && selectedTenantId && (
+                <AdminTenantSettingsModal
+                    tenantId={selectedTenantId}
+                    tenantName={tenants.find((t) => t.id === selectedTenantId)?.name ?? selectedTenantId}
+                    onClose={() => setShowTenantSettings(false)}
+                />
+            )}
         </div>
     );
 }

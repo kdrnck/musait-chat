@@ -120,10 +120,12 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
         setError(null);
         setSuccess(null);
         try {
-            const response = await fetch("/api/tenant-ai-settings", {
-                method: "GET",
-                cache: "no-store",
-            });
+            const response = await fetch(
+                tenantId
+                    ? `/api/tenant-ai-settings?tenantId=${encodeURIComponent(tenantId)}`
+                    : "/api/tenant-ai-settings",
+                { method: "GET", cache: "no-store" }
+            );
             let payload: any;
             try { payload = await response.json(); } catch {
                 throw new Error("Sunucudan geçersiz yanıt alındı.");

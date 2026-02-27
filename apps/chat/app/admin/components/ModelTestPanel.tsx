@@ -213,12 +213,12 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                                 }}
                             />
                             <div className="absolute right-3.5 bottom-3.5 pointer-events-none">
-                                <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${input.trim() ? 'bg-[var(--color-brand-dark)] shadow-[0_0_8px_var(--color-brand-glow)]' : 'bg-[var(--color-border-hover)]'}`} />
+                                <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${(input ?? '').trim() ? 'bg-[var(--color-brand-dark)] shadow-[0_0_8px_var(--color-brand-glow)]' : 'bg-[var(--color-border-hover)]'}`} />
                             </div>
                         </div>
                         <button
                             type="submit"
-                            disabled={isLoading || !input.trim()}
+                            disabled={isLoading || !(input ?? '').trim()}
                             className="h-[48px] w-[48px] bg-[var(--color-brand-dark)] hover:bg-[var(--color-brand-pressed)] text-white rounded-2xl flex items-center justify-center transition-all disabled:opacity-50 shadow-sm flex-shrink-0"
                         >
                             <Send size={18} className="translate-x-0.5 -translate-y-0.5" />

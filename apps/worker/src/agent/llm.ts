@@ -7,7 +7,7 @@ import {
   resolveTenantAiSettings,
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
-import { ADMIN_MODE, UNBOUND_ROUTING_PROMPT } from "./master-prompts.js";
+import { ADMIN_MODE } from "./master-prompts.js";
 
 interface Conversation {
   _id: any;
@@ -128,7 +128,8 @@ async function buildContext(
   const messages: LLMMessage[] = [];
   
   // ========== STEP 1: FETCH SETTINGS ==========
-  const globalPrompt = await fetchGlobalSettings();
+  const globalSettingsResult = await fetchGlobalSettings();
+  const globalPrompt = globalSettingsResult?.globalPromptText ?? null;
   let tenantAiSettings = resolveTenantAiSettings(null, globalPrompt);
   let dashboardPrompt: string | null = null;
 
@@ -160,7 +161,7 @@ async function buildContext(
   // It comes from: Admin Mode > Unbound routing > Dashboard (tenant) > Global Settings > Minimal Fallback
 
   // 🔓 ADMIN MODE - Override everything if active
-  let systemPromptContent: string;
+  let systemPromptContent: string | null = null;
   let promptSource: string;
 
   if (conversation.adminMode) {
@@ -168,27 +169,38 @@ async function buildContext(
     promptSource = 'ADMIN_MODE';
     console.log(`🔓 ADMIN MODE ACTIVE - Using admin system prompt`);
   } else if (!conversation.tenantId) {
-    // 🔀 UNBOUND — fetch tenant list and use routing prompt
+    // 🔀 UNBOUND — use RouterAgent prompt from DB only. Append live tenant list as data.
     const activeTenants = await fetchActiveTenants(convex);
     const tenantList = activeTenants.length > 0
       ? activeTenants.map((t) => `- ${t.tenantName} (tenant_id: ${t.tenantId})`).join("\n")
       : "Şu anda aktif işletme yok.";
-    systemPromptContent = UNBOUND_ROUTING_PROMPT(tenantList);
-    promptSource = 'ROUTING';
-    console.log(`🔀 UNBOUND - Using routing prompt (${activeTenants.length} tenants)`);
-  } else {
-    systemPromptContent = dashboardPrompt || globalPrompt || "Sen yardımcı bir asistansın. Kullanıcının isteklerine Türkçe yanıt ver.";
-    promptSource = dashboardPrompt ? 'DASHBOARD' : globalPrompt ? 'GLOBAL' : 'FALLBACK';
-  }
-  
-  const systemPromptFormatted = `<system_prompt>
-${systemPromptContent}
-</system_prompt>`;
 
-  messages.push({ role: "system", content: systemPromptFormatted });
-  
-  console.log(`✅ SYSTEM PROMPT ADDED (source: ${promptSource})`);
-  console.log(`   Length: ${systemPromptContent.length} chars`);
+    const routerAgentPrompt = globalSettingsResult?.routerAgentPromptText;
+
+    if (routerAgentPrompt) {
+      // Panel-configured router prompt — append live tenant list
+      systemPromptContent = `${routerAgentPrompt}\n\n## Aktif İşletmeler\n${tenantList}`;
+      promptSource = 'ROUTER_AGENT_DB';
+    } else {
+      // No panel prompt — inject tenant list as data only, no hardcoded instructions
+      systemPromptContent = `## Aktif İşletmeler\n${tenantList}`;
+      promptSource = 'TENANT_LIST_ONLY';
+    }
+    console.log(`🔀 UNBOUND - Using ${promptSource} prompt (${activeTenants.length} tenants)`);
+  } else {
+    // Bound — use ONLY panel/global prompt. If neither exists, no system message.
+    systemPromptContent = dashboardPrompt || globalPrompt || null;
+    promptSource = dashboardPrompt ? 'DASHBOARD' : globalPrompt ? 'GLOBAL' : 'NONE';
+  }
+
+  if (systemPromptContent) {
+    const systemPromptFormatted = `<system_prompt>\n${systemPromptContent}\n</system_prompt>`;
+    messages.push({ role: "system", content: systemPromptFormatted });
+    console.log(`✅ SYSTEM PROMPT ADDED (source: ${promptSource})`);
+    console.log(`   Length: ${systemPromptContent.length} chars`);
+  } else {
+    console.log(`⚠️ NO SYSTEM PROMPT (source: ${promptSource}) - panel prompt not configured, tools only`);
+  }
 
   // ========== STEP 3: CUSTOMER PROFILE (if exists) ==========
   if (conversation.tenantId) {
@@ -345,41 +357,48 @@ async function callOpenRouter(
     }
   );
 
-  // Attempt 2: 503/provider error → retry with tool-capable providers only
-  // Never use allow_fallbacks: true without a provider list — random providers
-  // (e.g. Novita) may not support tool calling and return 400.
+  // Attempt 2: provider error → retry with an explicit, tool-capable provider list.
+  // IMPORTANT: allow_fallbacks must be FALSE here so OpenRouter cannot spill over to
+  // unlisted providers (e.g. Novita) that don't carry the requested model variant.
   if (!response.ok) {
     const errorBody = await response.text();
-    const is503OrProvider = response.status === 503 || response.status === 400 ||
+    const is503OrProvider =
+      response.status === 503 ||
+      response.status === 400 ||
+      response.status === 404 ||
       errorBody.includes("Provider returned error") ||
       errorBody.includes("503") ||
-      errorBody.includes("无可用渠道");
+      errorBody.includes("404") ||
+      errorBody.includes("无可用渠道") ||
+      errorBody.includes("does not exist");
 
     if (is503OrProvider) {
-      console.warn(`⚠️ Provider error (${response.status}), retrying with tool-capable fallback providers...`);
+      console.warn(
+        `⚠️ Provider error (${response.status}), retrying with explicit tool-capable providers (no spillover)...`
+      );
       const fallbackPayload = {
         ...payload,
         provider: {
-          order: ["groq", "deepinfra", "together"],
-          allow_fallbacks: true,
+          // Strict ordered list — deepinfra and groq reliably host DeepSeek tool-calling.
+          // allow_fallbacks: false prevents OpenRouter from picking random providers like Novita.
+          order: ["deepinfra", "groq", "together"],
+          allow_fallbacks: false,
         },
       };
-      response = await fetch(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LLM_CONFIG.apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://musait.app",
-            "X-Title": "Musait Chat Agent",
-          },
-          body: JSON.stringify(fallbackPayload),
-        }
-      );
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LLM_CONFIG.apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://musait.app",
+          "X-Title": "Musait Chat Agent",
+        },
+        body: JSON.stringify(fallbackPayload),
+      });
     }
 
     if (!response.ok) {
+      // errorBody already consumed above; read the new response body here
       const errorText = await response.text();
       throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
     }
@@ -465,10 +484,10 @@ async function fetchActiveTenants(
   }
 }
 
-async function fetchGlobalSettings(): Promise<string | null> {
+async function fetchGlobalSettings(): Promise<{ globalPromptText: string | null; routerAgentPromptText: string | null } | null> {
   const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/global_settings`);
   url.searchParams.set("id", "eq.default");
-  url.searchParams.set("select", "ai_system_prompt_text");
+  url.searchParams.set("select", "ai_system_prompt_text,router_agent_master_prompt_text");
   url.searchParams.set("limit", "1");
 
   try {
@@ -480,8 +499,16 @@ async function fetchGlobalSettings(): Promise<string | null> {
     });
     if (!response.ok) return null;
 
-    const rows = (await response.json()) as Array<{ ai_system_prompt_text?: string | null }>;
-    return rows[0]?.ai_system_prompt_text || null;
+    const rows = (await response.json()) as Array<{
+      ai_system_prompt_text?: string | null;
+      router_agent_master_prompt_text?: string | null;
+    }>;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      globalPromptText: row.ai_system_prompt_text || null,
+      routerAgentPromptText: row.router_agent_master_prompt_text || null,
+    };
   } catch (err) {
     console.error("Failed to fetch global settings:", err);
     return null;
