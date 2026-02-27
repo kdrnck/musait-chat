@@ -57,6 +57,13 @@ export async function runAgentLoop(
   const loopStartTime = Date.now();
   let lastResponse: OpenRouterResponse | null = null;
 
+  // Accumulators for debug info across all iterations
+  let accPromptTokens = 0;
+  let accCompletionTokens = 0;
+  let accTotalTokens = 0;
+  const thinkingParts: string[] = [];
+  const toolTraceLines: string[] = [];
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
     const response = await callOpenRouter(messages, {
@@ -66,6 +73,16 @@ export async function runAgentLoop(
       isSuperThink: isSuperUltraThink,
     });
     lastResponse = response;
+
+    // Accumulate token counts across all iterations
+    accPromptTokens += response.usage?.prompt_tokens ?? 0;
+    accCompletionTokens += response.usage?.completion_tokens ?? 0;
+    accTotalTokens += response.usage?.total_tokens ?? 0;
+
+    // Capture reasoning/thinking content
+    if (response.thinking) {
+      thinkingParts.push(i > 0 ? `[İterasyon ${i + 1}]\n${response.thinking}` : response.thinking);
+    }
 
     // 3. Check for tool calls
     if (response.tool_calls && response.tool_calls.length > 0) {
@@ -87,10 +104,17 @@ export async function runAgentLoop(
           customerName: job.customerName,
         });
 
+        // Record in trace
+        const resultStr = JSON.stringify(result.result ?? result.error);
+        toolTraceLines.push(
+          `→ ${toolCall.name}(${JSON.stringify(toolCall.arguments)})\n` +
+          `  ${result.error ? `❌ HATA: ${result.error}` : `✅ ${resultStr.slice(0, 300)}${resultStr.length > 300 ? "..." : ""}`}`
+        );
+
         // Add tool result to context
         messages.push({
           role: "tool",
-          content: JSON.stringify(result.result ?? result.error),
+          content: resultStr,
           tool_call_id: toolCall.id,
           name: toolCall.name,
         });
@@ -105,9 +129,11 @@ export async function runAgentLoop(
     const debugInfo: AgentDebugInfo = {
       responseTimeMs,
       model: lastResponse?.model || tenantAiSettings.model,
-      promptTokens: lastResponse?.usage?.prompt_tokens,
-      completionTokens: lastResponse?.usage?.completion_tokens,
-      totalTokens: lastResponse?.usage?.total_tokens,
+      promptTokens: accPromptTokens || undefined,
+      completionTokens: accCompletionTokens || undefined,
+      totalTokens: accTotalTokens || undefined,
+      thinkingContent: thinkingParts.length > 0 ? thinkingParts.join("\n\n---\n\n") : undefined,
+      toolCallTrace: toolTraceLines.length > 0 ? toolTraceLines.join("\n\n") : undefined,
     };
     return {
       response: response.content || "Üzgünüm, şu anda yanıt veremiyorum.",
@@ -275,6 +301,7 @@ ${profileParts.join("\n")}
 
 interface OpenRouterResponse {
   content: string | null;
+  thinking?: string | null;  // reasoning/thinking tokens from DeepSeek / other models
   tool_calls?: Array<{
     id: string;
     name: AgentToolName;
@@ -294,6 +321,10 @@ export interface AgentDebugInfo {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  /** Internal monologue / reasoning tokens (DeepSeek thinking, etc.) */
+  thinkingContent?: string;
+  /** Full tool call trace: each iteration's tool calls + results formatted as text */
+  toolCallTrace?: string;
 }
 
 export interface AgentLoopResult {
@@ -411,8 +442,16 @@ async function callOpenRouter(
     throw new Error("No response from OpenRouter");
   }
 
+  // Extract reasoning/thinking content (DeepSeek returns it in .reasoning or .thinking)
+  const thinkingRaw: string | null =
+    choice.message?.reasoning ||
+    choice.message?.thinking ||
+    choice.message?.reasoning_content ||
+    null;
+
   return {
     content: choice.message?.content || null,
+    thinking: thinkingRaw || undefined,
     tool_calls: choice.message?.tool_calls?.map((tc: any) => {
       let args: Record<string, unknown> = {};
       try {

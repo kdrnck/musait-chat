@@ -66,9 +66,76 @@ function generateShortCode(length = SHORT_CODE_LENGTH): string {
   return crypto.randomBytes(length).toString("base64url").slice(0, length);
 }
 
+/** Canonical email domain for phone-based placeholder emails. */
+const CANONICAL_PHONE_DOMAIN = "phone.musait.app";
+
+/** Legacy email domains from older versions of the project. */
+const LEGACY_PHONE_DOMAINS = [
+  "phone.randewoo.local",
+  "phone.randewoo.app",
+];
+
 function buildPlaceholderEmail(phoneE164: string): string {
   const digits = phoneE164.replace(/\D/g, "");
-  return `${digits}@phone.musait.app`;
+  return `${digits}@${CANONICAL_PHONE_DOMAIN}`;
+}
+
+/** Check if an email uses a legacy domain that needs migration. */
+function isLegacyPlaceholderEmail(email: string): boolean {
+  const lower = email.toLowerCase();
+  return LEGACY_PHONE_DOMAINS.some((d) => lower.endsWith(`@${d}`));
+}
+
+/** Rewrite a legacy email to the canonical domain. Returns null if not legacy. */
+function migrateLegacyEmail(email: string): string | null {
+  const lower = email.toLowerCase();
+  for (const domain of LEGACY_PHONE_DOMAINS) {
+    if (lower.endsWith(`@${domain}`)) {
+      const localPart = email.slice(0, email.lastIndexOf("@"));
+      return `${localPart}@${CANONICAL_PHONE_DOMAIN}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Migrate a user's email from a legacy domain to the canonical one.
+ * Updates both auth.users and profiles in a single pass.
+ * Skips silently on errors so the main flow is not blocked.
+ */
+async function migrateUserEmailIfNeeded(
+  supabase: SupabaseClient,
+  userId: string,
+  currentEmail: string
+): Promise<string> {
+  const newEmail = migrateLegacyEmail(currentEmail);
+  if (!newEmail) return currentEmail;
+
+  console.log(`[otp] Migrating legacy email for user ${userId}: ${currentEmail} → ${newEmail}`);
+
+  try {
+    const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
+      email: newEmail,
+    });
+    if (authError) {
+      console.error("[otp] Failed to update auth email:", authError);
+      // Return old email so generateLink can still find the user
+      return currentEmail;
+    }
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ email: newEmail })
+      .eq("id", userId);
+    if (profileError) {
+      console.error("[otp] Failed to update profile email:", profileError);
+    }
+
+    return newEmail;
+  } catch (err) {
+    console.error("[otp] Email migration threw:", err);
+    return currentEmail;
+  }
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -332,7 +399,11 @@ async function resolveOrCreateUser(
   }
 
   if (profile) {
-    if (profile.email) return { id: profile.id, email: profile.email };
+    if (profile.email) {
+      // Migrate legacy email domain if needed
+      const email = await migrateUserEmailIfNeeded(supabase, profile.id, profile.email);
+      return { id: profile.id, email };
+    }
 
     const { data: authUserData, error: authLookupError } = await supabase.auth.admin.getUserById(
       profile.id
@@ -343,7 +414,9 @@ async function resolveOrCreateUser(
     }
 
     const authEmail = authUserData.user?.email || placeholderEmail;
-    return { id: profile.id, email: authEmail };
+    // Migrate legacy email domain if needed
+    const email = await migrateUserEmailIfNeeded(supabase, profile.id, authEmail);
+    return { id: profile.id, email };
   }
 
   const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({

@@ -187,6 +187,38 @@ function ThinkingBlock({ content }: { content: string }) {
     );
 }
 
+/* ── Tool Call Trace Block ── */
+function ToolTraceBlock({ content }: { content: string }) {
+    const [expanded, setExpanded] = useState(false);
+    const lineCount = content.split("\n").length;
+
+    return (
+        <div className="flex justify-end mt-1.5">
+            <div className="max-w-[480px] w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                <button
+                    onClick={() => setExpanded(!expanded)}
+                    className="w-full flex items-center gap-2 text-left"
+                >
+                    <Wrench size={13} className="text-amber-600 flex-shrink-0" />
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-amber-700 flex-1">
+                        Tool Call Trace
+                    </span>
+                    <span className="text-[10px] text-amber-500 mr-1">{lineCount} satır</span>
+                    {expanded ? <ChevronUp size={12} className="text-amber-500" /> : <ChevronDown size={12} className="text-amber-500" />}
+                </button>
+
+                {expanded && (
+                    <div className="mt-2.5 pt-2.5 border-t border-amber-200">
+                        <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-amber-900 max-h-[320px] overflow-y-auto">
+                            {content}
+                        </pre>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 /* ── Error Block ── */
 function ErrorBlock({ debugInfo, debugMode }: { debugInfo: any; debugMode: boolean }) {
     return (
@@ -342,6 +374,9 @@ export default function MessageBubble({
                         <DebugMetricsBlock debugInfo={debugInfo} />
                         {debugInfo.thinkingContent && (
                             <ThinkingBlock content={debugInfo.thinkingContent} />
+                        )}
+                        {debugInfo.toolCallTrace && (
+                            <ToolTraceBlock content={debugInfo.toolCallTrace} />
                         )}
                     </>
                 )}
