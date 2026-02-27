@@ -1,4 +1,4 @@
-export type AiModelProfile = "cheap" | "fast" | "premium";
+export type AiModelProfile = "cheap" | "fast" | "premium" | "oss-deepinfra" | "oss-groq";
 export type OutboundNumberMode = "inbound" | "musait" | "tenant";
 
 export interface AiModelPreset {
@@ -25,6 +25,18 @@ export const AI_MODEL_PRESETS: Record<AiModelProfile, AiModelPreset> = {
     label: "Hızlı Premium (Gemini Fast 3 Preview)",
     model: "google/gemini-2.5-flash-preview",
     providerPriority: [],
+    allowFallbacks: true,
+  },
+  "oss-deepinfra": {
+    label: "gpt-oss-120b (DeepInfra)",
+    model: "open-inference/int8",
+    providerPriority: ["deepinfra"],
+    allowFallbacks: true,
+  },
+  "oss-groq": {
+    label: "gps-oss-120b (Groq)",
+    model: "open-inference/int8",
+    providerPriority: ["groq"],
     allowFallbacks: true,
   },
 };
@@ -85,7 +97,7 @@ export function resolveAiSettingsFromIntegrationKeys(
 
   const profileRaw = asString(keys.ai_model_profile)?.toLowerCase();
   const modelProfile: AiModelProfile =
-    profileRaw === "cheap" || profileRaw === "fast" || profileRaw === "premium"
+    profileRaw === "cheap" || profileRaw === "fast" || profileRaw === "premium" || profileRaw === "oss-deepinfra" || profileRaw === "oss-groq"
       ? (profileRaw as AiModelProfile)
       : DEFAULT_AI_MODEL_PROFILE;
 

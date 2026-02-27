@@ -114,6 +114,29 @@ export function createJobHandler(convex: ConvexHttpClient) {
         return;
       }
 
+      // SAFETY: Ensure tenant is set before proceeding to agent
+      // If routing returned handled:false, tenant must be set
+      // Refresh conversation to get updated tenantId if it was bound during routing
+      const refreshedConversation = await convex.query(api.conversations.getById, {
+        id: job.conversationId as any,
+      });
+      
+      if (!refreshedConversation) {
+        console.error(`❌ Conversation ${job.conversationId} disappeared`);
+        return;
+      }
+      
+      conversation = refreshedConversation;
+      
+      if (!conversation.tenantId) {
+        console.error(`❌ Tenant not set for conversation ${job.conversationId} - cannot proceed to agent`);
+        await convex.mutation(api.messages.updateStatus, {
+          id: job.id as any,
+          status: "failed",
+        });
+        return;
+      }
+
       // 4.5 Sync customer identity and handle explicit name updates
       if (conversation.tenantId) {
         try {

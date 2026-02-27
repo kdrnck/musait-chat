@@ -75,6 +75,9 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                                 <option value="deepinfra/meta-llama/llama-3.3-70b-instruct">Llama 3.3 (DeepInfra)</option>
                                 <option value="groq/meta-llama/llama-3.3-70b-versatile">Llama 3.3 (Groq)</option>
                             </optgroup>
+                            <optgroup label="Open OSS" className="bg-[#1a1a1a]">
+                                <option value="open-inference/int8">gpt-oss-120b (DeepInfra)</option>
+                            </optgroup>
                         </select>
                     </div>
 

@@ -313,7 +313,7 @@ function buildResponse(args: {
 }
 
 function normalizeModelProfile(value: unknown): AiModelProfile {
-  if (value === "cheap" || value === "fast" || value === "premium") {
+  if (value === "cheap" || value === "fast" || value === "premium" || value === "oss-deepinfra" || value === "oss-groq") {
     return value;
   }
   return DEFAULT_AI_MODEL_PROFILE;
