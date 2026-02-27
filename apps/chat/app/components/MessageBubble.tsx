@@ -204,7 +204,7 @@ export default function MessageBubble({
                 </div>
 
                 {/* Debug Metrics (admin-only) */}
-                {debugMode && message.role === "agent" && (message as any).debugInfo && (() => {
+                {debugMode && message.role === "agent" && (message as any).debugInfo && !((message as any).debugInfo?.errorMessage) && (() => {
                     const info = (message as any).debugInfo;
                     const tokPerSec = info.completionTokens && info.responseTimeMs
                         ? Math.round(info.completionTokens / (info.responseTimeMs / 1000))
@@ -243,46 +243,52 @@ export default function MessageBubble({
                                     </div>
                                 </details>
                             )}
-                            {/* Error Display for Debug Mode */}
-                            {info.errorMessage && (
-                                <details className="mt-1 w-full max-w-[500px]" open>
-                                    <summary className="text-[10px] font-semibold text-red-600 cursor-pointer select-none flex items-center justify-end gap-1.5 hover:text-red-700 transition-colors">
-                                        <AlertTriangle size={12} />
-                                        <span>⚠️ Hata Detayları</span>
-                                    </summary>
-                                    <div className="mt-2 p-3 rounded-xl text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-red-800 bg-red-50 border border-red-200 text-left max-h-[400px] overflow-y-auto content-scroll space-y-2">
-                                        <div>
-                                            <span className="font-bold text-red-700">Hata Tipi:</span> {info.errorType || 'Unknown'}
-                                        </div>
-                                        <div>
-                                            <span className="font-bold text-red-700">Mesaj:</span> {info.errorMessage}
-                                        </div>
-                                        {info.errorStack && (
-                                            <details className="mt-2">
-                                                <summary className="text-[10px] font-semibold text-red-600 cursor-pointer hover:text-red-700">
-                                                    Stack Trace Göster
-                                                </summary>
-                                                <pre className="mt-1 p-2 bg-red-100 rounded text-[9px] overflow-x-auto whitespace-pre-wrap">
-                                                    {info.errorStack}
-                                                </pre>
-                                            </details>
-                                        )}
-                                    </div>
-                                </details>
-                            )}
+                            {/* no errorMessage inline here — handled separately below */}
                         </div>
                     );
                 })()}
 
-                {/* Error Display for Failed Messages (debug mode) */}
-                {debugMode && message.status === "failed" && !(message as any).debugInfo?.errorMessage && (
-                    <div className="mt-2 w-full flex flex-col items-end">
-                        <div className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-[11px] font-medium text-red-700 flex items-center gap-2">
-                            <AlertTriangle size={14} />
-                            <span>İşlem başarısız oldu. Detaylar için sunucu loglarını kontrol edin.</span>
+                {/* Error block — always visible for failed messages */}
+                {message.status === "failed" && (() => {
+                    const info = (message as any).debugInfo;
+                    const hasError = info?.errorMessage;
+                    return (
+                        <div className="mt-2 w-full">
+                            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-left space-y-1.5">
+                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-red-700 uppercase tracking-wider pb-1.5 border-b border-red-200">
+                                    <AlertTriangle size={12} />
+                                    <span>Agent Hatası</span>
+                                    {info?.errorType && (
+                                        <span className="ml-auto font-mono normal-case font-medium text-[10px] bg-red-100 px-1.5 py-0.5 rounded">
+                                            {info.errorType}
+                                        </span>
+                                    )}
+                                </div>
+                                {hasError ? (
+                                    <>
+                                        <div className="text-[12px] font-mono text-red-800 whitespace-pre-wrap break-words">
+                                            {info.errorMessage}
+                                        </div>
+                                        {info.errorStack && debugMode && (
+                                            <details className="mt-1">
+                                                <summary className="text-[10px] font-semibold text-red-500 cursor-pointer hover:text-red-700">
+                                                    Stack Trace
+                                                </summary>
+                                                <pre className="mt-1 p-2 bg-red-100 rounded text-[9px] overflow-x-auto whitespace-pre-wrap max-h-[200px]">
+                                                    {info.errorStack}
+                                                </pre>
+                                            </details>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="text-[12px] text-red-700">
+                                        Hata detayı kaydedilemedi. Sunucu loglarını kontrol edin.
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
             </div>
         </div>
     );
