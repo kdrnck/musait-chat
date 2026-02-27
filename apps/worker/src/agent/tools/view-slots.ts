@@ -88,7 +88,13 @@ async function manualSlotQuery(
   whUrl.searchParams.set("select", "staff_id,start_time,end_time");
 
   const whRes = await fetch(whUrl.toString(), { headers });
-  const workingHours = await whRes.json();
+  const whJson = whRes.ok ? await whRes.json() : [];
+  const workingHours: Array<{ staff_id: string; start_time: string; end_time: string }> =
+    Array.isArray(whJson) ? whJson : [];
+
+  if (workingHours.length === 0) {
+    return { date, availableSlots: [], recommendedSlots: [], reason: "Çalışma saati tanımlı değil" };
+  }
 
   // Get existing appointments for this date
   const startOfDay = `${date}T00:00:00+03:00`;
@@ -102,7 +108,8 @@ async function manualSlotQuery(
   apptUrl.searchParams.set("select", "staff_id,start_time,end_time");
 
   const apptRes = await fetch(apptUrl.toString(), { headers });
-  const appointments = await apptRes.json();
+  const apptJson = apptRes.ok ? await apptRes.json() : [];
+  const appointments: Array<any> = Array.isArray(apptJson) ? apptJson : [];
   
   // Get staff time blocks for this date
   const blockUrl = new URL(`${SUPABASE_CONFIG.url}/rest/v1/staff_time_blocks`);
@@ -115,7 +122,8 @@ async function manualSlotQuery(
   blockUrl.searchParams.set("select", "staff_id,start_at,end_at");
 
   const blockRes = await fetch(blockUrl.toString(), { headers });
-  const blocks = await blockRes.json();
+  const blockJson = blockRes.ok ? await blockRes.json() : [];
+  const blocks: Array<any> = Array.isArray(blockJson) ? blockJson : [];
 
   // Get services if filtering
   let serviceDuration = 30; // default 30 min
@@ -125,7 +133,8 @@ async function manualSlotQuery(
     svcUrl.searchParams.set("select", "duration_minutes,name");
 
     const svcRes = await fetch(svcUrl.toString(), { headers });
-    const services = await svcRes.json();
+    const svcJson = svcRes.ok ? await svcRes.json() : [];
+    const services = Array.isArray(svcJson) ? svcJson : [];
     if (services[0]) serviceDuration = services[0].duration_minutes || 30;
   }
 

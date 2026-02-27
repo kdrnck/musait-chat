@@ -239,7 +239,8 @@ async function callOpenRouter(
     };
   }
 
-  const response = await fetch(
+  // Attempt 1: with configured provider order
+  let response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
     {
       method: "POST",
@@ -253,9 +254,39 @@ async function callOpenRouter(
     }
   );
 
+  // Attempt 2: 503/provider error → retry with allow_fallbacks=true, no provider order
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    const errorBody = await response.text();
+    const is503OrProvider = response.status === 503 || response.status === 400 ||
+      errorBody.includes("Provider returned error") ||
+      errorBody.includes("503") ||
+      errorBody.includes("无可用渠道");
+
+    if (is503OrProvider) {
+      console.warn(`⚠️ Provider error (${response.status}), retrying with full fallback...`);
+      const fallbackPayload = {
+        ...payload,
+        provider: { allow_fallbacks: true },
+      };
+      response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LLM_CONFIG.apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://musait.app",
+            "X-Title": "Musait Chat Agent",
+          },
+          body: JSON.stringify(fallbackPayload),
+        }
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    }
   }
 
   const data = await response.json();
