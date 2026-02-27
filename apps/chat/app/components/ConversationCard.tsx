@@ -6,14 +6,14 @@ import { User, ShieldCheck, AlertCircle } from "lucide-react";
 function formatTime(timestamp: number): string {
     const date = new Date(timestamp);
     const now = new Date();
-    
+
     if (date.toDateString() === now.toDateString()) {
         return date.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
     }
     return date.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
 }
 
-type ConversationWithExtras = Doc<"conversations"> & { 
+type ConversationWithExtras = Doc<"conversations"> & {
     tenantName?: string;
     lastMessage?: string | null;
     lastMessageRole?: "customer" | "agent" | "human" | null;
@@ -21,8 +21,8 @@ type ConversationWithExtras = Doc<"conversations"> & {
 
 function getPreviewText(conversation: ConversationWithExtras): string {
     if (conversation.lastMessage) {
-        const prefix = conversation.lastMessageRole === "customer" ? "" : 
-                       conversation.lastMessageRole === "agent" ? "🤖 " : "👤 ";
+        const prefix = conversation.lastMessageRole === "customer" ? "" :
+            conversation.lastMessageRole === "agent" ? "🤖 " : "👤 ";
         return prefix + conversation.lastMessage;
     }
     if (conversation.rollingSummary) return conversation.rollingSummary;
@@ -49,36 +49,36 @@ export default function ConversationCard({
         <button
             onClick={onClick}
             className={`
-                w-full flex items-center gap-4 px-4 py-4 rounded-[24px] text-left transition-all duration-300 group relative overflow-hidden
-                ${isSelected 
-                    ? "bg-white/[0.08] shadow-2xl translate-x-1" 
-                    : "hover:bg-white/[0.04] hover:translate-x-1 active:scale-[0.98]"
+                w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-200 group relative
+                ${isSelected
+                    ? "bg-[var(--color-surface-pure)] border border-[var(--color-border)] shadow-sm"
+                    : "hover:bg-[var(--color-surface-hover)] border border-transparent"
                 }
             `}
         >
             {/* Active Indicator Bar */}
             {isSelected && (
-                <div 
-                    className="absolute left-0 inset-y-3 w-1.5 rounded-r-full shadow-lg z-10"
-                    style={{ background: "var(--color-brand)" }}
+                <div
+                    className="absolute left-0 inset-y-2 w-1 rounded-r-full"
+                    style={{ background: "var(--color-brand-dark)" }}
                 />
             )}
 
             {/* Avatar */}
-            <div className="relative flex-shrink-0">
+            <div className="relative flex-shrink-0 ml-1">
                 <div className={`
-                    w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 border
-                    ${isSelected ? "bg-[var(--color-brand)] border-transparent" : "bg-white/[0.03] border-white/5 group-hover:bg-white/[0.06]"}
+                    w-11 h-11 rounded-full flex items-center justify-center transition-colors
+                    ${isSelected ? "bg-[var(--color-brand-light)]" : "bg-[var(--color-surface-pure)] border border-[var(--color-border)]"}
                 `}>
-                    <User size={20} className={isSelected ? "text-[#111111]" : "text-[#555555]"} />
+                    <User size={18} className={isSelected ? "text-[var(--color-brand-dark)]" : "text-[var(--color-text-muted)]"} />
                 </div>
-                
+
                 {/* Status Indicator */}
-                <div className="absolute -bottom-1 -right-1 p-0.5 rounded-lg bg-[#111111]">
+                <div className="absolute -bottom-0.5 -right-0.5 p-0.5 rounded-full bg-[var(--color-sidebar-bg)] group-hover:bg-[var(--color-surface-hover)] transition-colors">
                     {hasAttention ? (
                         <div className="status-dot status-dot--attention" />
                     ) : isHandoff ? (
-                        <div className="status-dot status-dot--handoff" />
+                        <div className="status-dot status-dot--handoff bg-[var(--color-status-handoff)]" />
                     ) : (
                         <div className="status-dot status-dot--ai" />
                     )}
@@ -86,48 +86,36 @@ export default function ConversationCard({
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex-1 min-w-0">
-                        <h3 className={`text-[14px] font-bold truncate transition-colors ${isSelected ? "text-white" : "text-[#AAAAAA] group-hover:text-white"}`}>
-                            {displayName}
-                        </h3>
-                        {customerName && (
-                            <span className={`text-[10px] font-medium ${isSelected ? "text-[#666666]" : "text-[#444444]"}`}>
-                                {conversation.customerPhone}
-                            </span>
-                        )}
-                    </div>
-                    <span className={`text-[10px] font-bold flex-shrink-0 ${isSelected ? "text-[var(--color-brand)]" : "text-[#444444]"}`}>
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <h3 className={`text-[14px] font-semibold truncate ${isSelected ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-primary)]"}`}>
+                        {displayName}
+                    </h3>
+                    <span className={`text-[11px] font-medium flex-shrink-0 ${isSelected ? "text-[var(--color-brand-dark)]" : "text-[var(--color-text-muted)]"}`}>
                         {formatTime(conversation.lastMessageAt ?? conversation.createdAt)}
                     </span>
                 </div>
-                
-                <div className="flex items-center gap-2">
-                    <p className={`text-[12px] font-medium truncate flex-1 ${isSelected ? "text-[#888888]" : "text-[#555555]"}`}>
+
+                <div className="flex items-center justify-between gap-2">
+                    <p className={`text-[13px] truncate ${isSelected ? "text-[var(--color-text-secondary)] font-medium" : "text-[var(--color-text-muted)]"}`}>
                         {getPreviewText(conversation)}
                     </p>
-                    
-                    {hasAttention && (
-                        <AlertCircle size={14} className="text-[var(--color-status-attention)] flex-shrink-0" />
-                    ) || isHandoff && (
-                        <ShieldCheck size={14} className="text-[var(--color-status-handoff)] flex-shrink-0" />
+
+                    {(hasAttention || isHandoff) && (
+                        <div className="flex-shrink-0 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm" style={{ background: hasAttention ? 'var(--color-status-attention)' : 'var(--color-status-handoff)' }}>
+                            {hasAttention ? <AlertCircle size={10} strokeWidth={3} /> : <ShieldCheck size={10} strokeWidth={3} />}
+                        </div>
                     )}
                 </div>
-
+                {/* Tenant Badge (Admin Only View) */}
                 {conversation.tenantName && (
-                    <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded-md bg-white/[0.03] text-[9px] font-black uppercase tracking-widest text-[#444444]">
+                    <div className="mt-1">
+                        <span className="inline-block px-1.5 py-[2px] rounded border border-[var(--color-border)] bg-[var(--color-surface-pure)] text-[9px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider">
                             {conversation.tenantName}
                         </span>
                     </div>
                 )}
             </div>
-
-            {/* Glass shine effect */}
-            {isSelected && (
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.02] to-white/[0.05] pointer-events-none" />
-            )}
         </button>
     );
 }

@@ -14,30 +14,30 @@ function formatTime(timestamp: number): string {
 const roleConfig = {
     customer: {
         align: "left" as const,
-        styleClass: "neu-pressed",
+        styleClass: "bg-[var(--color-surface-pure)] border border-[var(--color-border)]",
         color: "var(--color-text-primary)",
         icon: <User size={12} />,
         label: "Müşteri",
         labelColor: "var(--color-text-secondary)",
-        borderRadius: "16px 24px 24px 16px",
+        borderRadius: "16px 20px 20px 4px",
     },
     agent: {
         align: "right" as const,
-        styleClass: "neu-convex",
+        styleClass: "bg-[var(--color-surface-hover)] border border-[var(--color-border)]",
         color: "var(--color-text-primary)",
         icon: <Bot size={12} />,
         label: "Asistan",
         labelColor: "var(--color-brand-dim)",
-        borderRadius: "24px 16px 16px 24px",
+        borderRadius: "20px 16px 4px 20px",
     },
     human: {
         align: "right" as const,
-        styleClass: "neu-brand",
-        color: "#111111",
+        styleClass: "bg-[var(--color-brand-dark)] text-white shadow-sm",
+        color: "#ffffff",
         icon: <Headset size={12} />,
         label: "Yönetici",
         labelColor: "var(--color-brand-dim)",
-        borderRadius: "24px 16px 16px 24px",
+        borderRadius: "20px 16px 4px 20px",
     },
 };
 
@@ -112,15 +112,13 @@ export default function MessageBubble({
 
             if (debugMode) {
                 displayText = (
-                    <div className="font-mono text-[11px] p-4 rounded-2xl overflow-x-auto my-1 border border-white/5"
-                        style={{ background: "rgba(0,0,0,0.2)" }}>
-                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest mb-3 pb-3 border-b border-white/5"
-                            style={{ color: "var(--color-brand)" }}>
+                    <div className="font-mono text-[11px] p-4 rounded-xl overflow-x-auto my-2 border border-[var(--color-border)] bg-[var(--color-surface-pure)]">
+                        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider mb-2 pb-2 border-b border-[var(--color-border)]"
+                            style={{ color: "var(--color-brand-dark)" }}>
                             <Code2 size={12} />
                             <span>Teknik Detay (Debug)</span>
                         </div>
-                        <pre className="whitespace-pre-wrap text-[11px] leading-relaxed"
-                            style={{ color: "rgba(255,255,255,0.7)" }}>
+                        <pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
                             {JSON.stringify(parsedData, null, 2)}
                         </pre>
                     </div>
@@ -128,12 +126,12 @@ export default function MessageBubble({
             } else {
                 displayText = (
                     <div className="flex items-center gap-3 py-1">
-                        <div className="w-8 h-8 rounded-xl neu-pressed flex items-center justify-center">
-                            <Wrench size={14} className="text-[var(--color-brand-dim)]" />
+                        <div className="w-8 h-8 rounded-full bg-[var(--color-surface-pure)] border border-[var(--color-border)] flex items-center justify-center">
+                            <Wrench size={14} className="text-[var(--color-brand-dark)]" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-[13px] font-bold text-[var(--color-text-primary)] leading-none mb-1">AI İşlemi</span>
-                            <span className="text-[11px] font-medium text-[var(--color-text-muted)]">{getTurkishToolCallName(toolName)}</span>
+                            <span className="text-[13px] font-semibold text-[var(--color-text-primary)] leading-none mb-1">AI İşlemi</span>
+                            <span className="text-[12px] text-[var(--color-text-secondary)]">{getTurkishToolCallName(toolName)}</span>
                         </div>
                     </div>
                 );
@@ -144,15 +142,15 @@ export default function MessageBubble({
     // Tool call (non-debug) — compact minimalist view
     if (isToolCall && !debugMode) {
         return (
-            <div className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-6 animate-fade-in w-full`}>
-                <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl neu-flat">
-                    <div className="w-6 h-6 rounded-lg bg-[var(--color-brand-light)] flex items-center justify-center">
-                        <CheckCircle2 size={14} className="text-[var(--color-brand-dim)]" />
+            <div className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-4 w-full`}>
+                <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[var(--color-surface-pure)] border border-[var(--color-border)]">
+                    <div className="w-5 h-5 rounded-md bg-[var(--color-brand-light)] flex items-center justify-center">
+                        <CheckCircle2 size={12} className="text-[var(--color-brand-dark)]" />
                     </div>
-                    <span className="text-[12px] font-bold text-[var(--color-text-secondary)] tracking-tight">
+                    <span className="text-[12px] font-medium text-[var(--color-text-primary)]">
                         {getTurkishToolCallName(parsedData?.name || parsedData?.tool || "işlem")}
                     </span>
-                    <span className="text-[10px] font-medium text-[var(--color-text-muted)] ml-2">
+                    <span className="text-[10px] text-[var(--color-text-muted)] ml-1">
                         {formatTime(message.createdAt)}
                     </span>
                 </div>
@@ -162,70 +160,93 @@ export default function MessageBubble({
 
     return (
         <div
-            className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-6 animate-fade-in`}
-            style={{ maxWidth: "85%", marginLeft: isRight ? "auto" : 0, marginRight: isRight ? 0 : "auto" }}
+            className={`flex flex-col ${isRight ? "items-end" : "items-start"} mb-5 w-full`}
         >
-            {/* Sender label */}
-            <div className="flex items-center gap-2 mb-2 px-1" style={{ color: config.labelColor }}>
-                <div className="w-5 h-5 rounded-lg flex items-center justify-center bg-current/5">
-                    {config.icon}
-                </div>
-                <span className="text-[10px] font-black tracking-widest uppercase">
-                    {config.label}
-                </span>
-            </div>
-
-            {/* Bubble */}
-            <div
-                className={`px-6 py-4 text-[15px] font-medium leading-[1.6] break-words whitespace-pre-wrap ${config.styleClass}`}
-                style={{
-                    color: config.color,
-                    borderRadius: config.borderRadius,
-                    border: message.role === "customer" ? "1px solid rgba(255,255,255,0.4)" : "1px solid transparent",
-                }}
-            >
-                {displayText}
-            </div>
-
-            {/* Timestamp & Status */}
-            <div className={`flex items-center gap-2 mt-2 px-1 ${isRight ? "flex-row-reverse" : "flex-row"}`}>
-                <span className="text-[10px] font-bold tracking-tight text-[var(--color-text-muted)] uppercase">
-                    {formatTime(message.createdAt)}
-                </span>
-                {message.status === "failed" && (
-                    <span className="px-2 py-0.5 rounded-md bg-red-50 text-[9px] font-black text-red-500 uppercase tracking-widest">
-                        GÖNDERİLEMEDİ
-                    </span>
-                )}
-                {message.status === "processing" && (
-                    <div className="flex items-center gap-1.5 ml-1">
-                        <div className="w-1 h-1 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <div className="w-1 h-1 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <div className="w-1 h-1 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className={`flex flex-col ${isRight ? "items-end" : "items-start"} max-w-[85%] md:max-w-[75%]`}>
+                {/* Sender label */}
+                <div className="flex items-center gap-1.5 mb-1.5 px-1 opacity-80" style={{ color: config.labelColor }}>
+                    <div className="w-4 h-4 rounded-md flex items-center justify-center bg-current/10">
+                        {config.icon}
                     </div>
-                )}
-            </div>
+                    <span className="text-[10px] font-semibold tracking-wide uppercase">
+                        {config.label}
+                    </span>
+                </div>
 
-            {/* Debug Metrics (admin-only) */}
-            {debugMode && message.role === "agent" && (message as any).debugInfo && (
-                <div className="mt-2 px-1 flex items-center gap-2 flex-wrap">
-                    {(message as any).debugInfo.responseTimeMs && (
-                        <span className="text-[9px] font-mono font-bold text-[var(--color-brand-dim)] bg-[var(--color-brand-light)] px-2 py-0.5 rounded-md">
-                            ⏱ {(message as any).debugInfo.responseTimeMs}ms
+                {/* Bubble */}
+                <div
+                    className={`px-4 py-3 text-[14px] leading-relaxed break-words whitespace-pre-wrap shadow-sm ${config.styleClass}`}
+                    style={{
+                        color: config.color,
+                        borderRadius: config.borderRadius,
+                    }}
+                >
+                    {displayText}
+                </div>
+
+                {/* Timestamp & Status */}
+                <div className={`flex items-center gap-2 mt-1 px-1 ${isRight ? "flex-row-reverse" : "flex-row"}`}>
+                    <span className="text-[10px] font-medium text-[var(--color-text-muted)]">
+                        {formatTime(message.createdAt)}
+                    </span>
+                    {message.status === "failed" && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold text-red-600 bg-red-50 uppercase tracking-wider">
+                            GÖNDERİLEMEDİ
                         </span>
                     )}
-                    {(message as any).debugInfo.totalTokens && (
-                        <span className="text-[9px] font-mono font-bold text-[var(--color-text-muted)] bg-black/5 px-2 py-0.5 rounded-md">
-                            🔢 {(message as any).debugInfo.totalTokens}t
-                        </span>
-                    )}
-                    {(message as any).debugInfo.model && (
-                        <span className="text-[9px] font-mono font-bold text-[var(--color-text-muted)] bg-black/5 px-2 py-0.5 rounded-md">
-                            🤖 {(message as any).debugInfo.model.split("/").pop()}
-                        </span>
+                    {message.status === "processing" && (
+                        <div className="flex items-center gap-1 ml-1 bg-[var(--color-surface-hover)] px-2 py-1 rounded-full">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-muted)] animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-muted)] animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-muted)] animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
                     )}
                 </div>
-            )}
+
+                {/* Debug Metrics (admin-only) */}
+                {debugMode && message.role === "agent" && (message as any).debugInfo && (() => {
+                    const info = (message as any).debugInfo;
+                    const tokPerSec = info.completionTokens && info.responseTimeMs
+                        ? Math.round(info.completionTokens / (info.responseTimeMs / 1000))
+                        : null;
+                    return (
+                        <div className="mt-2 w-full flex flex-col items-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                {info.responseTimeMs && (
+                                    <span className="text-[10px] font-mono font-medium text-[var(--color-brand-dim)] bg-[var(--color-brand-light)] border border-[var(--color-brand-glow)] px-1.5 py-0.5 rounded">
+                                        ⏱ {info.responseTimeMs}ms
+                                    </span>
+                                )}
+                                {tokPerSec !== null && (
+                                    <span className="text-[10px] font-mono font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+                                        ⚡ {tokPerSec} t/s
+                                    </span>
+                                )}
+                                {(info.promptTokens || info.completionTokens || info.totalTokens) && (
+                                    <span className="text-[10px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] px-1.5 py-0.5 rounded">
+                                        🔢 {info.promptTokens ?? "?"}↑ {info.completionTokens ?? "?"}↓ {info.totalTokens ? `(${info.totalTokens})` : ""}
+                                    </span>
+                                )}
+                                {info.model && (
+                                    <span className="text-[10px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] px-1.5 py-0.5 rounded">
+                                        🤖 {info.model.split("/").pop()}
+                                    </span>
+                                )}
+                            </div>
+                            {info.thinkingContent && (
+                                <details className="mt-1 w-full max-w-[400px]">
+                                    <summary className="text-[10px] font-semibold text-purple-600 cursor-pointer select-none flex items-center justify-end gap-1 hover:text-purple-700 transition-colors">
+                                        <span>🧠 Düşünce Süreci Göster/Gizle</span>
+                                    </summary>
+                                    <div className="mt-2 p-3 rounded-xl text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-purple-800 bg-purple-50 border border-purple-100 text-left max-h-[300px] overflow-y-auto content-scroll">
+                                        {info.thinkingContent}
+                                    </div>
+                                </details>
+                            )}
+                        </div>
+                    );
+                })()}
+            </div>
         </div>
     );
 }

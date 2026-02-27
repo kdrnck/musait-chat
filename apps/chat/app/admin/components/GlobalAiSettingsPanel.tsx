@@ -69,18 +69,18 @@ export default function GlobalAiSettingsPanel() {
     };
 
     return (
-        <div className="bg-white border border-black/[0.03] rounded-[32px] overflow-hidden shadow-sm animate-fade-in">
+        <div className="bg-[var(--color-surface-pure)] border border-[var(--color-border)] rounded-2xl overflow-hidden shadow-sm animate-fade-in">
             {/* Header */}
-            <div className="flex items-center justify-between px-8 py-6 border-b border-black/[0.03] bg-gradient-to-br from-white to-[var(--color-surface-base)]">
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-center text-[var(--color-text-primary)]">
-                        <Shield size={20} />
+            <div className="flex items-center justify-between px-6 sm:px-8 py-5 sm:py-6 border-b border-[var(--color-border)] bg-[var(--color-surface-pure)]">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-center text-[var(--color-brand-dark)]">
+                        <Shield size={18} />
                     </div>
                     <div>
-                        <h2 className="text-[14px] font-black uppercase tracking-widest text-[var(--color-text-primary)]">
+                        <h2 className="text-[14px] font-bold tracking-tight text-[var(--color-text-primary)]">
                             Global Master Prompt
                         </h2>
-                        <p className="text-[11px] font-medium text-[var(--color-text-muted)] mt-0.5">
+                        <p className="text-[12px] font-medium text-[var(--color-text-secondary)] mt-0.5">
                             Tüm işletmeler için temel AI yönergeleri
                         </p>
                     </div>
@@ -88,25 +88,26 @@ export default function GlobalAiSettingsPanel() {
                 <button
                     onClick={loadSettings}
                     disabled={loading || saving}
-                    className="p-2.5 rounded-xl hover:bg-black/5 text-[var(--color-text-muted)] transition-colors disabled:opacity-50"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--color-surface-pure)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all disabled:opacity-50"
+                    title="Yenile"
                 >
                     <RefreshCw size={16} className={loading && !saving ? "animate-spin" : ""} />
                 </button>
             </div>
 
-            <div className="p-8 space-y-6">
+            <div className="p-6 sm:p-8 space-y-6 bg-[var(--color-bg-base)]">
                 {loading && !promptText ? (
-                    <div className="flex items-center gap-3 py-10">
-                        <div className="w-5 h-5 border-2 border-t-transparent border-[var(--color-brand)] rounded-full animate-spin" />
-                        <span className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-widest">Master ayarlar yükleniyor...</span>
+                    <div className="flex items-center gap-3 py-10 justify-center">
+                        <div className="w-6 h-6 border-[3px] border-t-transparent border-[var(--color-brand-dark)] rounded-full animate-spin" />
+                        <span className="text-[13px] font-medium text-[var(--color-text-secondary)] tracking-wide">Ayarlar yükleniyor...</span>
                     </div>
                 ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
-                            <label className="text-[12px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide">
-                                Sistem Talimatları (System Instructions)
+                            <label className="text-[12px] font-semibold text-[var(--color-text-primary)] tracking-tight">
+                                Sistem Talimatları
                             </label>
-                            <span className="text-[11px] font-bold text-[var(--color-brand-dim)] bg-[var(--color-brand-light)] px-2.5 py-1 rounded-lg">
+                            <span className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
                                 {promptText.length} Karakter
                             </span>
                         </div>
@@ -114,29 +115,28 @@ export default function GlobalAiSettingsPanel() {
                             value={promptText}
                             onChange={(e) => setPromptText(e.target.value)}
                             disabled={loading || saving}
-                            className="w-full min-h-[400px] px-6 py-6 text-sm font-medium leading-relaxed bg-[var(--color-surface-base)] border border-black/[0.03] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-glow-strong)] focus:bg-white transition-all rounded-[24px] shadow-inner"
+                            className="w-full min-h-[400px] px-5 py-5 text-[14px] font-medium leading-relaxed bg-[var(--color-surface-pure)] border border-[var(--color-border-hover)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-dark)] focus:ring-1 focus:ring-[var(--color-brand-dark)] transition-all rounded-xl shadow-sm placeholder-[var(--color-text-muted)] resize-y"
                             placeholder="Tüm sistem için varsayılan prompt'u buraya yazın..."
                         />
                     </div>
                 )}
 
                 {(error || success) && (
-                    <div className={`p-4 rounded-2xl text-[13px] font-bold animate-fade-in text-center ${
-                        error ? "bg-red-50 text-red-500 border border-red-100" : "bg-[var(--color-brand-light)] text-[var(--color-brand-dim)] border border-[var(--color-brand-glow-strong)]"
-                    }`}>
+                    <div className={`p-4 rounded-xl text-[13px] font-medium animate-fade-in text-center border shadow-sm ${error ? "bg-red-50 border-red-200 text-red-700" : "bg-green-50 border-green-200 text-green-700"
+                        }`}>
                         {error || success}
                     </div>
                 )}
             </div>
 
             {/* Footer */}
-            <div className="px-8 py-6 border-t border-black/[0.03] flex items-center justify-end bg-gradient-to-br from-white to-[var(--color-surface-base)]">
+            <div className="px-6 sm:px-8 py-5 border-t border-[var(--color-border)] bg-[var(--color-surface-pure)] flex items-center justify-end">
                 <button
                     onClick={handleSave}
                     disabled={saving || loading || !promptText}
-                    className="flex items-center gap-2 px-8 py-3.5 bg-[var(--color-brand)] text-[#111111] text-[14px] font-black rounded-2xl shadow-xl shadow-[var(--color-brand-glow)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100"
+                    className="flex items-center gap-2 px-6 py-2.5 bg-[var(--color-brand-dark)] hover:bg-[var(--color-brand-pressed)] text-white text-[13px] font-semibold rounded-xl transition-all disabled:opacity-50 shadow-[0_2px_10px_rgba(20,83,45,0.2)]"
                 >
-                    <Save size={18} />
+                    <Save size={16} />
                     {saving ? "Güncelleniyor..." : "Sisteme Uygula"}
                 </button>
             </div>

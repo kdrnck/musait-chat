@@ -1,0 +1,232 @@
+import { SUPABASE_CONFIG } from "../../config.js";
+
+interface ToolContext {
+  tenantId: string;
+}
+
+interface ServiceRow {
+  id: string;
+  name: string;
+  duration_minutes?: number | null;
+  duration_blocks?: number | null;
+  price?: number | null;
+  is_active?: boolean | null;
+}
+
+interface StaffRow {
+  id: string;
+  name: string;
+  title?: string | null;
+  is_active?: boolean | null;
+}
+
+export async function listServices(
+  args: Record<string, unknown>,
+  ctx: ToolContext
+): Promise<unknown> {
+  const includeInactive = Boolean(args.include_inactive);
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+
+  const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/services`);
+  url.searchParams.set("tenant_id", `eq.${ctx.tenantId}`);
+  if (!includeInactive) {
+    url.searchParams.set("is_active", "eq.true");
+  }
+  url.searchParams.set(
+    "select",
+    "id,name,duration_minutes,duration_blocks,price,is_active,service_staff(staff:staff(id,name,is_active))"
+  );
+  url.searchParams.set("order", "name.asc");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_CONFIG.serviceKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return { error: "Hizmet listesi alınamadı." };
+  }
+
+  const rows = (await response.json()) as Array<
+    ServiceRow & {
+      service_staff?: Array<{ staff?: StaffRow | null }> | null;
+    }
+  >;
+
+  const normalized = normalizeText(query);
+  const services = rows
+    .map((row) => {
+      const duration =
+        row.duration_minutes ||
+        (typeof row.duration_blocks === "number" ? row.duration_blocks * 15 : 30);
+      const staff = (row.service_staff || [])
+        .map((s) => s.staff)
+        .filter((s): s is StaffRow => Boolean(s && s.id && s.name))
+        .filter((s) => s.is_active !== false)
+        .map((s) => ({ id: s.id, name: s.name }));
+      return {
+        id: row.id,
+        name: row.name,
+        duration_minutes: duration,
+        price: row.price ?? null,
+        is_active: row.is_active !== false,
+        staff,
+      };
+    })
+    .filter((svc) => {
+      if (!normalized) return true;
+      return normalizeText(svc.name).includes(normalized);
+    });
+
+  return {
+    total: services.length,
+    services,
+  };
+}
+
+export async function listStaff(
+  args: Record<string, unknown>,
+  ctx: ToolContext
+): Promise<unknown> {
+  const includeInactive = Boolean(args.include_inactive);
+  const serviceId =
+    typeof args.service_id === "string" ? args.service_id.trim() : "";
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+
+  if (serviceId) {
+    return listStaffByService(serviceId, query, includeInactive, ctx.tenantId);
+  }
+
+  const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/staff`);
+  url.searchParams.set("tenant_id", `eq.${ctx.tenantId}`);
+  if (!includeInactive) {
+    url.searchParams.set("is_active", "eq.true");
+  }
+  url.searchParams.set("select", "id,name,title,is_active");
+  url.searchParams.set("order", "name.asc");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_CONFIG.serviceKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return { error: "Personel listesi alınamadı." };
+  }
+
+  const rows = (await response.json()) as StaffRow[];
+  const normalized = normalizeText(query);
+  const staff = rows
+    .filter((s) => (includeInactive ? true : s.is_active !== false))
+    .filter((s) => (normalized ? normalizeText(s.name).includes(normalized) : true))
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      title: s.title ?? null,
+      is_active: s.is_active !== false,
+    }));
+
+  return {
+    total: staff.length,
+    staff,
+  };
+}
+
+export async function getBusinessInfo(
+  _args: Record<string, unknown>,
+  ctx: ToolContext
+): Promise<unknown> {
+  const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/tenants`);
+  url.searchParams.set("id", `eq.${ctx.tenantId}`);
+  url.searchParams.set("select", "id,name,slug");
+  url.searchParams.set("limit", "1");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_CONFIG.serviceKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return { error: "İşletme bilgisi alınamadı." };
+  }
+
+  const rows = (await response.json()) as Array<{
+    id: string;
+    name: string | null;
+    slug: string | null;
+  }>;
+
+  const tenant = rows[0];
+  if (!tenant) {
+    return { error: "İşletme bulunamadı." };
+  }
+
+  return {
+    tenant: {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+    },
+  };
+}
+
+async function listStaffByService(
+  serviceId: string,
+  query: string,
+  includeInactive: boolean,
+  tenantId: string
+): Promise<unknown> {
+  const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/service_staff`);
+  url.searchParams.set("service_id", `eq.${serviceId}`);
+  url.searchParams.set("select", "staff:staff(id,name,title,is_active,tenant_id)");
+  url.searchParams.set("order", "staff(name).asc");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_CONFIG.serviceKey,
+      Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return { error: "Hizmete uygun personel listesi alınamadı." };
+  }
+
+  const rows = (await response.json()) as Array<{ staff?: StaffRow & { tenant_id?: string } }>;
+  const normalized = normalizeText(query);
+
+  const staff = rows
+    .map((r) => r.staff)
+    .filter((s): s is StaffRow & { tenant_id?: string } => Boolean(s && s.id && s.name))
+    .filter((s) => s.tenant_id === tenantId)
+    .filter((s) => (includeInactive ? true : s.is_active !== false))
+    .filter((s) => (normalized ? normalizeText(s.name).includes(normalized) : true))
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      title: s.title ?? null,
+      is_active: s.is_active !== false,
+    }));
+
+  return {
+    total: staff.length,
+    service_id: serviceId,
+    staff,
+  };
+}
+
+function normalizeText(input: string): string {
+  return input
+    .toLocaleLowerCase("tr-TR")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

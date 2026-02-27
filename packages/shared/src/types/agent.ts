@@ -2,11 +2,16 @@
 
 /** Tools available to the AI agent */
 export type AgentToolName =
+  | "list_services"
+  | "list_staff"
+  | "get_business_info"
+  | "list_customer_appointments"
   | "view_available_slots"
   | "create_appointment"
   | "cancel_appointment"
   | "suggest_least_busy_staff"
   | "ask_human"
+  | "handOff"
   | "end_session"
   | "bind_tenant";
 

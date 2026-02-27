@@ -96,6 +96,7 @@ export const create = mutation({
       promptTokens: v.optional(v.number()),
       completionTokens: v.optional(v.number()),
       totalTokens: v.optional(v.number()),
+      thinkingContent: v.optional(v.string()),
     })),
   },
   handler: async (ctx, args) => {

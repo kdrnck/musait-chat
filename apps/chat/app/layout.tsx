@@ -21,10 +21,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className="light">
+    <html lang="tr" className="light" suppressHydrationWarning>
       <body
         className={`${poppins.variable} antialiased`}
         style={{ fontFamily: "var(--font-poppins), sans-serif" }}
+        suppressHydrationWarning
       >
         <Providers>{children}</Providers>
       </body>
