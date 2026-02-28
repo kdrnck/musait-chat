@@ -14,6 +14,7 @@ export type AgentToolName =
   | "handOff"
   | "end_session"
   | "bind_tenant"
+  | "list_businesses"
   | "take_notes_for_user"
   | "update_customer_name";
 

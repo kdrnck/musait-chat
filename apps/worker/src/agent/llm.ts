@@ -110,6 +110,20 @@ export async function runAgentLoop(
         })
       );
 
+      // Propagate bind_tenant side-effect: update in-memory tenantId so
+      // subsequent iterations in this same loop can use tenant-scoped tools.
+      for (const { toolCall, result } of toolResults) {
+        if (
+          toolCall.name === "bind_tenant" &&
+          !result.error &&
+          (result.result as any)?.success === true &&
+          typeof (toolCall.arguments as any)?.tenant_id === "string"
+        ) {
+          conversation.tenantId = (toolCall.arguments as any).tenant_id as string;
+          console.log(`🔗 bind_tenant: in-memory tenantId refreshed to ${conversation.tenantId}`);
+        }
+      }
+
       // Add results to context in original order
       for (const { toolCall, result } of toolResults) {
         const resultStr = JSON.stringify(result.result ?? result.error);

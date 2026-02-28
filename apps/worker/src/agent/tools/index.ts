@@ -9,6 +9,7 @@ import { suggestLeastBusyStaff } from "./suggest-staff.js";
 import { bindTenant } from "./bind-tenant.js";
 import { listServices, listStaff, getBusinessInfo } from "./list-business-data.js";
 import { listCustomerAppointments } from "./list-customer-appointments.js";
+import { listBusinesses } from "./list-businesses.js";
 import { takeNotesForUser } from "./take-notes.js";
 import { updateCustomerName } from "./update-customer-name.js";
 
@@ -87,9 +88,13 @@ export async function executeToolCall(
       case "suggest_least_busy_staff":
         result = await suggestLeastBusyStaff(toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
         break;
+      case "list_businesses":
+        result = await listBusinesses(convex);
+        break;
       case "bind_tenant":
         result = await bindTenant(convex, toolCall.arguments as { tenant_id: string }, {
           conversationId: ctx.conversationId,
+          customerPhone: ctx.customerPhone,
         });
         break;
       case "take_notes_for_user":
@@ -226,9 +231,22 @@ export function getToolDefinitions() {
     {
       type: "function",
       function: {
+        name: "list_businesses",
+        description:
+          "Müsait işletmeleri ve tenant ID'lerini listeler. İşletme seçimi veya değiştirme öncesinde çağır.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "bind_tenant",
         description:
-          "Konuşmayı bir işletmeye bağlar. Yalnızca konuşma henüz bir işletmeye atanmamışken kullanılır.",
+          "Konuşmayı bir işletmeye bağlar veya mevcut işletmeyi değiştirir. Önce list_businesses ile tenant_id'yi öğren.",
         parameters: {
           type: "object",
           properties: {
