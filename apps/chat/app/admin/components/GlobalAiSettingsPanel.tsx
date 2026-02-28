@@ -78,10 +78,10 @@ export default function GlobalAiSettingsPanel() {
                     </div>
                     <div>
                         <h2 className="text-[14px] font-bold tracking-tight text-[var(--color-text-primary)]">
-                            Global Master Prompt
+                            Booking Agent Master Prompt
                         </h2>
                         <p className="text-[12px] font-medium text-[var(--color-text-secondary)] mt-0.5">
-                            Tüm işletmeler için temel AI yönergeleri
+                            Tüm tenant'lar için temel randevu bot talimatları (placeholder desteği ile)
                         </p>
                     </div>
                 </div>
@@ -96,6 +96,20 @@ export default function GlobalAiSettingsPanel() {
             </div>
 
             <div className="p-6 sm:p-8 space-y-6 bg-[var(--color-bg-base)]">
+                {/* Info banner about placeholders */}
+                <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
+                    <Sparkles size={15} className="flex-shrink-0 mt-0.5 text-blue-600" />
+                    <div className="text-[12px] leading-relaxed text-blue-900">
+                        <p className="font-semibold mb-2">Kullanılabilir Placeholder'lar:</p>
+                        <code className="block font-mono text-[11px] bg-white/50 px-2 py-1 rounded mb-1">
+                            {"{"}{"{"} current_date {"}"}{"}"}, {"{"}{"{"} current_day_name {"}"}{"}"}, {"{"}{"{"} tenant_name {"}"}{"}"}, {"{"}{"{"} tenant_id {"}"}{"}"}
+                        </code>
+                        <code className="block font-mono text-[11px] bg-white/50 px-2 py-1 rounded">
+                            {"{"}{"{"} services_list {"}"}{"}"}, {"{"}{"{"} staff_list {"}"}{"}"}, {"{"}{"{"} business_info {"}"}{"}"}, {"{"}{"{"} customer_profile {"}"}{"}"}
+                        </code>
+                    </div>
+                </div>
+
                 {loading && !promptText ? (
                     <div className="flex items-center gap-3 py-10 justify-center">
                         <div className="w-6 h-6 border-[3px] border-t-transparent border-[var(--color-brand-dark)] rounded-full animate-spin" />
@@ -116,7 +130,7 @@ export default function GlobalAiSettingsPanel() {
                             onChange={(e) => setPromptText(e.target.value)}
                             disabled={loading || saving}
                             className="w-full min-h-[400px] px-5 py-5 text-[14px] font-medium leading-relaxed bg-[var(--color-surface-pure)] border border-[var(--color-border-hover)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-dark)] focus:ring-1 focus:ring-[var(--color-brand-dark)] transition-all rounded-xl shadow-sm placeholder-[var(--color-text-muted)] resize-y"
-                            placeholder="Tüm sistem için varsayılan prompt'u buraya yazın..."
+                            placeholder="SYSTEM PROMPT — MUSAIT APPOINTMENT BOOKING AGENT&#10;=================================================&#10;&#10;# Role&#10;&#10;You are a deterministic appointment-booking agent for &quot;Musait.&quot;&#10;All user-facing messages MUST be in Turkish.&#10;&#10;Today's date: {{current_date}}&#10;Business: {{tenant_name}}&#10;..."
                         />
                     </div>
                 )}

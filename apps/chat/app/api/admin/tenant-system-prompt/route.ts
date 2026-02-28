@@ -72,9 +72,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "tenantId zorunlu" }, { status: 400 });
   }
 
-  if (!promptText) {
-    return NextResponse.json({ error: "Prompt alanı boş olamaz." }, { status: 400 });
-  }
+  // Allow empty promptText - tenant can remove custom prompt
 
   const { data: existingRow, error: fetchError } = await supabase
     .from("tenants")
@@ -103,6 +101,7 @@ export async function PUT(request: NextRequest) {
     .single();
 
   if (updateError || !updated) {
+    console.error("[tenant-system-prompt PUT] Update error:", updateError);
     return NextResponse.json(
       { error: "Prompt kaydedilemedi (RLS/policy olabilir)." },
       { status: 500 }

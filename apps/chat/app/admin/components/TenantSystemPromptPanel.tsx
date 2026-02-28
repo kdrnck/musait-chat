@@ -163,7 +163,7 @@ export default function TenantSystemPromptPanel({
       <div className="px-6 sm:px-8 py-5 border-t border-[var(--color-border)] bg-[var(--color-surface-pure)] flex items-center justify-end">
         <button
           onClick={handleSave}
-          disabled={saving || loading || !tenantId || !promptText.trim()}
+          disabled={saving || loading || !tenantId}
           className="flex items-center gap-2 px-6 py-2.5 bg-[var(--color-brand-dark)] hover:bg-[var(--color-brand-pressed)] text-white text-[13px] font-semibold rounded-xl transition-all disabled:opacity-50 shadow-[0_2px_10px_rgba(20,83,45,0.2)]"
         >
           <Save size={16} />

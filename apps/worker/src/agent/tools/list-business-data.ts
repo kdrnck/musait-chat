@@ -142,7 +142,10 @@ export async function getBusinessInfo(
 ): Promise<unknown> {
   const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/tenants`);
   url.searchParams.set("id", `eq.${ctx.tenantId}`);
-  url.searchParams.set("select", "id,name,slug");
+  url.searchParams.set(
+    "select",
+    "id,name,slug,address,phone,maps_link,description,working_days,working_hours_start,working_hours_end"
+  );
   url.searchParams.set("limit", "1");
 
   const response = await fetch(url.toString(), {
@@ -160,6 +163,13 @@ export async function getBusinessInfo(
     id: string;
     name: string | null;
     slug: string | null;
+    address?: string | null;
+    phone?: string | null;
+    maps_link?: string | null;
+    description?: string | null;
+    working_days?: string | null;
+    working_hours_start?: string | null;
+    working_hours_end?: string | null;
   }>;
 
   const tenant = rows[0];
@@ -172,6 +182,14 @@ export async function getBusinessInfo(
       id: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
+      address: tenant.address || null,
+      phone: tenant.phone || null,
+      maps_link: tenant.maps_link || null,
+      description: tenant.description || null,
+      working_days: tenant.working_days || null,
+      working_hours: tenant.working_hours_start && tenant.working_hours_end
+        ? `${tenant.working_hours_start} - ${tenant.working_hours_end}`
+        : null,
     },
   };
 }

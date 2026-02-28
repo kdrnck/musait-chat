@@ -34,11 +34,13 @@ export default function ConversationCard({
     isSelected,
     onClick,
     customerName,
+    isAdmin,
 }: {
     conversation: ConversationWithExtras;
     isSelected: boolean;
     onClick: () => void;
     customerName?: string | null;
+    isAdmin?: boolean;
 }) {
     const displayName = customerName || conversation.customerPhone;
     const hasAttention = (conversation.retryState?.count ?? 0) > 0;
@@ -50,7 +52,7 @@ export default function ConversationCard({
             className={`
                 w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 relative
                 ${isSelected
-                    ? "bg-[var(--color-text-primary)] shadow-sm"
+                    ? "bg-[var(--color-surface-hover)] border border-[var(--color-brand)] shadow-sm"
                     : "hover:bg-[var(--color-surface-hover)] border border-transparent hover:border-[var(--color-border)]"
                 }
             `}
@@ -60,16 +62,16 @@ export default function ConversationCard({
                 <div className={`
                     w-10 h-10 rounded-full flex items-center justify-center transition-colors
                     ${isSelected
-                        ? "bg-white/15"
+                        ? "bg-[var(--color-brand-light)]"
                         : "bg-[var(--color-surface-hover)] border border-[var(--color-border)]"
                     }
                 `}>
-                    <User size={16} className={isSelected ? "text-white" : "text-[var(--color-text-muted)]"} />
+                    <User size={16} className={isSelected ? "text-[var(--color-brand)]" : "text-[var(--color-text-muted)]"} />
                 </div>
 
                 {/* Status Dot */}
                 <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 ${
-                    isSelected ? "border-[var(--color-text-primary)]" : "border-[var(--color-sidebar-bg)]"
+                    isSelected ? "border-[var(--color-surface-hover)]" : "border-[var(--color-sidebar-bg)]"
                 } ${
                     hasAttention
                         ? "bg-[var(--color-status-attention)]"
@@ -82,16 +84,16 @@ export default function ConversationCard({
             {/* Content */}
             <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <div className="flex items-center justify-between gap-1.5 mb-0.5">
-                    <h3 className={`text-[13px] font-semibold truncate ${isSelected ? "text-white" : "text-[var(--color-text-primary)]"}`}>
+                    <h3 className={`text-[13px] font-semibold truncate ${isSelected ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-primary)]"}`}>
                         {displayName}
                     </h3>
-                    <span className={`text-[10px] font-medium flex-shrink-0 ${isSelected ? "text-white/70" : "text-[var(--color-text-muted)]"}`}>
+                    <span className={`text-[10px] font-medium flex-shrink-0 ${isSelected ? "text-[var(--color-text-secondary)]" : "text-[var(--color-text-muted)]"}`}>
                         {formatTime(conversation.lastMessageAt ?? conversation.createdAt)}
                     </span>
                 </div>
 
                 <div className="flex items-center justify-between gap-1.5">
-                    <p className={`text-[12px] truncate ${isSelected ? "text-white/75" : "text-[var(--color-text-muted)]"}`}>
+                    <p className={`text-[12px] truncate ${isSelected ? "text-[var(--color-text-secondary)]" : "text-[var(--color-text-muted)]"}`}>
                         {getPreviewText(conversation)}
                     </p>
 
@@ -114,7 +116,7 @@ export default function ConversationCard({
                     <div className="mt-1">
                         <span className={`inline-block px-1.5 py-[1px] rounded text-[9px] font-bold uppercase tracking-wider ${
                             isSelected
-                                ? "bg-white/15 text-white/80"
+                                ? "bg-[var(--color-brand-light)] text-[var(--color-brand)]"
                                 : "bg-[var(--color-surface-active)] border border-[var(--color-border)] text-[var(--color-text-muted)]"
                         }`}>
                             {conversation.tenantName}

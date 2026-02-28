@@ -8,6 +8,7 @@ import {
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
 import { ADMIN_MODE } from "./master-prompts.js";
+import { listServices, listStaff, getBusinessInfo } from "./tools/list-business-data.js";
 
 interface Conversation {
   _id: any;
@@ -44,10 +45,8 @@ export async function runAgentLoop(
     return { response: `__ADMIN_MODE_ACTIVATE__` };
   }
 
-  // Determine reasoning mode
-  const useReasoning = conversation.adminMode
-    ? isSuperUltraThink
-    : isComplexMessage(job.messageContent || "");
+  // Determine reasoning mode — only via admin command, never auto-triggered
+  const useReasoning = !!(conversation.adminMode && isSuperUltraThink);
 
   // 1. Build context
   const context = await buildContext(convex, job, conversation);
@@ -66,6 +65,8 @@ export async function runAgentLoop(
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
+    // NOTE: Always send tool definitions — skipping them on follow-up iterations
+    // would break multi-step tool chains (e.g. check_calendar → get_staff → create_appointment)
     const response = await callOpenRouter(messages, {
       useReasoning: i === 0 && useReasoning,
       tenantAiSettings,
@@ -93,25 +94,30 @@ export async function runAgentLoop(
         tool_calls: response.tool_calls,
       });
 
-      // Execute each tool call
-      for (const toolCall of response.tool_calls) {
-        console.log(`🔧 Tool call: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`);
+      // Execute all tool calls in parallel for speed
+      console.log(`🔧 Executing ${response.tool_calls.length} tool call(s) in parallel`);
 
-        const result = await executeToolCall(convex, toolCall, {
-          tenantId: conversation.tenantId,
-          conversationId: conversation._id,
-          customerPhone: job.customerPhone,
-          customerName: job.customerName,
-        });
+      const toolResults = await Promise.all(
+        response.tool_calls.map(async (toolCall) => {
+          console.log(`🔧 Tool call: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`);
+          const result = await executeToolCall(convex, toolCall, {
+            tenantId: conversation.tenantId,
+            conversationId: conversation._id,
+            customerPhone: job.customerPhone,
+            customerName: job.customerName,
+          });
+          return { toolCall, result };
+        })
+      );
 
-        // Record in trace
+      // Add results to context in original order
+      for (const { toolCall, result } of toolResults) {
         const resultStr = JSON.stringify(result.result ?? result.error);
         toolTraceLines.push(
           `→ ${toolCall.name}(${JSON.stringify(toolCall.arguments)})\n` +
           `  ${result.error ? `❌ HATA: ${result.error}` : `✅ ${resultStr.slice(0, 300)}${resultStr.length > 300 ? "..." : ""}`}`
         );
 
-        // Add tool result to context
         messages.push({
           role: "tool",
           content: resultStr,
@@ -144,6 +150,62 @@ export async function runAgentLoop(
   return { response: "Üzgünüm, işleminizi tamamlayamadım. Lütfen tekrar deneyin." };
 }
 
+// --- Helper functions for placeholder resolution ---
+
+/**
+ * Get current date, day name and time in Istanbul timezone
+ */
+function getCurrentDateInfo(): { date: string; dayName: string; time: string } {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "long",
+  });
+
+  const parts = formatter.formatToParts(now);
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  const weekday = parts.find((p) => p.type === "weekday")?.value;
+
+  const timeFormatter = new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const time = timeFormatter.format(now);
+
+  return {
+    date: `${year}-${month}-${day}`,
+    dayName: weekday || "Bilinmiyor",
+    time,
+  };
+}
+
+/**
+ * Resolve placeholders in system prompt.
+ * Supports both {{placeholder}} and {placeholder} formats.
+ */
+function resolvePlaceholders(
+  prompt: string,
+  placeholders: Record<string, string>
+): string {
+  let resolved = prompt;
+  for (const [key, value] of Object.entries(placeholders)) {
+    // Support both {{placeholder}} and {placeholder} formats
+    const doubleBrace = `{{${key}}}`;
+    const singleBrace = `{${key}}`;
+    resolved = resolved.replaceAll(doubleBrace, value);
+    resolved = resolved.replaceAll(singleBrace, value);
+  }
+  return resolved;
+}
+
 // --- Build agent context ---
 
 async function buildContext(
@@ -158,28 +220,78 @@ async function buildContext(
   const globalPrompt = globalSettingsResult?.globalPromptText ?? null;
   let tenantAiSettings = resolveTenantAiSettings(null, globalPrompt);
   let dashboardPrompt: string | null = null;
+  let tenantContext: Awaited<ReturnType<typeof fetchTenantContext>> = null;
 
   console.log(`\n========== BUILD CONTEXT START ==========`);
   console.log(`📋 Tenant ID: ${conversation.tenantId || 'NULL (unbound)'}`);
   console.log(`📋 Customer Phone: ${job.customerPhone}`);
 
   if (conversation.tenantId) {
-    const tenantCtx = await fetchTenantContext(conversation.tenantId);
+    tenantContext = await fetchTenantContext(conversation.tenantId);
 
-    console.log(`📋 Tenant Context Fetched: ${tenantCtx ? 'YES' : 'NO'}`);
-    console.log(`📋 Integration Keys: ${tenantCtx?.integrationKeys ? JSON.stringify(Object.keys(tenantCtx.integrationKeys)) : 'NONE'}`);
+    console.log(`📋 Tenant Context Fetched: ${tenantContext ? 'YES' : 'NO'}`);
+    console.log(`📋 Integration Keys: ${tenantContext?.integrationKeys ? JSON.stringify(Object.keys(tenantContext.integrationKeys)) : 'NONE'}`);
 
-    if (tenantCtx?.integrationKeys) {
-      const rawPrompt = tenantCtx.integrationKeys.ai_system_prompt_text;
+    if (tenantContext?.integrationKeys) {
+      const rawPrompt = tenantContext.integrationKeys.ai_system_prompt_text;
       console.log(`📋 Raw ai_system_prompt_text type: ${typeof rawPrompt}`);
       console.log(`📋 Raw ai_system_prompt_text value (first 150 chars): ${rawPrompt ? String(rawPrompt).slice(0, 150) : 'NULL/UNDEFINED'}`);
     }
 
-    tenantAiSettings = resolveTenantAiSettings(tenantCtx?.integrationKeys, globalPrompt);
+    tenantAiSettings = resolveTenantAiSettings(tenantContext?.integrationKeys, globalPrompt);
     dashboardPrompt = tenantAiSettings.systemPromptText;
 
     console.log(`📋 Resolved System Prompt Length: ${dashboardPrompt?.length || 0}`);
     console.log(`📋 Resolved System Prompt (first 200 chars): ${dashboardPrompt ? dashboardPrompt.slice(0, 200) : 'NULL'}`);
+  }
+
+  // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT ==========
+  let servicesListText = "";
+  let staffListText = "";
+  let businessInfoText = "";
+
+  if (conversation.tenantId) {
+    try {
+      // Fetch services
+      const servicesResult = await listServices({}, { tenantId: conversation.tenantId });
+      if (servicesResult && !("error" in servicesResult)) {
+        const services = (servicesResult as any).services || [];
+        servicesListText = services
+          .map((svc: any) => {
+            const staffNames = svc.staff?.map((s: any) => s.name).join(", ") || "Yok";
+            return `- ${svc.name} (${svc.duration_minutes} dk${svc.price ? `, ${svc.price} TL` : ""})\n  ID: ${svc.id}\n  Çalışanlar: ${staffNames}`;
+          })
+          .join("\n\n");
+      }
+
+      // Fetch staff
+      const staffResult = await listStaff({}, { tenantId: conversation.tenantId });
+      if (staffResult && !("error" in staffResult)) {
+        const staff = (staffResult as any).staff || [];
+        staffListText = staff
+          .map((s: any) => `- ${s.name}${s.title ? ` (${s.title})` : ""}\n  ID: ${s.id}`)
+          .join("\n");
+      }
+
+      // Fetch business info
+      const businessResult = await getBusinessInfo({}, { tenantId: conversation.tenantId });
+      if (businessResult && !("error" in businessResult)) {
+        const tenant = (businessResult as any).tenant;
+        const infoParts: string[] = [
+          `Business Name: ${tenant.name || "N/A"}`,
+          `Business ID: ${tenant.id}`,
+        ];
+        if (tenant.address) infoParts.push(`Address: ${tenant.address}`);
+        if (tenant.phone) infoParts.push(`Phone: ${tenant.phone}`);
+        if (tenant.maps_link) infoParts.push(`Maps Link: ${tenant.maps_link}`);
+        if (tenant.working_days) infoParts.push(`Working Days: ${tenant.working_days}`);
+        if (tenant.working_hours) infoParts.push(`Working Hours: ${tenant.working_hours}`);
+        if (tenant.description) infoParts.push(`Description: ${tenant.description}`);
+        businessInfoText = infoParts.join("\n");
+      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to fetch embedded data:`, err);
+    }
   }
 
   // ========== STEP 2: SYSTEM PROMPT ==========
@@ -214,9 +326,61 @@ async function buildContext(
     }
     console.log(`🔀 UNBOUND - Using ${promptSource} prompt (${activeTenants.length} tenants)`);
   } else {
-    // Bound — use ONLY panel/global prompt. If neither exists, no system message.
-    systemPromptContent = dashboardPrompt || globalPrompt || null;
-    promptSource = dashboardPrompt ? 'DASHBOARD' : globalPrompt ? 'GLOBAL' : 'NONE';
+    // Bound — use ONLY panel/global prompt with placeholder resolution
+    const rawPrompt = dashboardPrompt || globalPrompt || null;
+    
+    if (rawPrompt) {
+      // Get current date info
+      const dateInfo = getCurrentDateInfo();
+      
+      // Prepare customer profile text and name for placeholders
+      let customerProfileText = "";
+      let customerName = "";
+      try {
+        const profile = await convex.query(api.customerProfiles.getByPhone, {
+          tenantId: conversation.tenantId,
+          customerPhone: job.customerPhone,
+        });
+
+        if (profile) {
+          const profileParts: string[] = [];
+          if (profile.personNotes?.trim()) profileParts.push(`AI Notes: ${profile.personNotes.trim()}`);
+          if (profile.lastStaff?.length > 0) profileParts.push(`Preferred Staff: ${profile.lastStaff.join(", ")}`);
+          if (profile.lastServices?.length > 0) profileParts.push(`Recent Services: ${profile.lastServices.join(", ")}`);
+          const name = profile.preferences?.customerName;
+          if (name && typeof name === "string") {
+            customerName = name;
+            profileParts.push(`Customer Name: ${name}`);
+          }
+          customerProfileText = profileParts.join("\n");
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to fetch customer profile for placeholder:`, err);
+      }
+
+      // Resolve placeholders
+      const placeholders: Record<string, string> = {
+        current_date: dateInfo.date,
+        current_day_name: dateInfo.dayName,
+        current_time: dateInfo.time,
+        tenant_name: tenantContext?.name || "İşletme",
+        tenant_id: conversation.tenantId || "",
+        business_name: tenantContext?.name || "İşletme",
+        business_info: businessInfoText || "İşletme bilgisi mevcut değil.",
+        services_list: servicesListText || "Hizmet bilgisi mevcut değil.",
+        staff_list: staffListText || "Personel bilgisi mevcut değil.",
+        customer_first_name: customerName.split(" ")[0] || customerName,
+        customer_name: customerName,
+        customer_profile: customerProfileText || "Müşteri profili mevcut değil.",
+      };
+
+      systemPromptContent = resolvePlaceholders(rawPrompt, placeholders);
+      promptSource = dashboardPrompt ? 'DASHBOARD' : 'GLOBAL';
+      console.log(`✅ Placeholder resolution complete. Resolved ${Object.keys(placeholders).length} placeholders.`);
+    } else {
+      systemPromptContent = null;
+      promptSource = 'NONE';
+    }
   }
 
   if (systemPromptContent) {
@@ -228,49 +392,7 @@ async function buildContext(
     console.log(`⚠️ NO SYSTEM PROMPT (source: ${promptSource}) - panel prompt not configured, tools only`);
   }
 
-  // ========== STEP 3: CUSTOMER PROFILE (if exists) ==========
-  if (conversation.tenantId) {
-    try {
-      const profile = await convex.query(api.customerProfiles.getByPhone, {
-        tenantId: conversation.tenantId,
-        customerPhone: job.customerPhone,
-      });
-
-      if (profile) {
-        const profileParts: string[] = [];
-        
-        if (profile.personNotes?.trim()) {
-          profileParts.push(`<ai_notes>${profile.personNotes.trim()}</ai_notes>`);
-        }
-        
-        if (profile.lastStaff?.length > 0) {
-          profileParts.push(`<preferred_staff>${profile.lastStaff.join(", ")}</preferred_staff>`);
-        }
-        
-        if (profile.lastServices?.length > 0) {
-          profileParts.push(`<recent_services>${profile.lastServices.join(", ")}</recent_services>`);
-        }
-
-        const customerName = profile.preferences?.customerName;
-        if (customerName && typeof customerName === "string") {
-          profileParts.push(`<customer_name>${customerName}</customer_name>`);
-        }
-
-        if (profileParts.length > 0) {
-          const profileContent = `<customer_profile>
-${profileParts.join("\n")}
-</customer_profile>`;
-          
-          messages.push({ role: "system", content: profileContent });
-          console.log(`✅ CUSTOMER PROFILE ADDED (${profileParts.length} fields)`);
-        }
-      }
-    } catch (err) {
-      console.warn(`⚠️ Failed to fetch customer profile:`, err);
-    }
-  }
-
-  // ========== STEP 4: MESSAGE HISTORY ==========
+  // ========== STEP 3: MESSAGE HISTORY ==========
   // Only fetch messages from current session (after sessionStartedAt if set)
   const recentMessages = await convex.query(api.messages.getContextWindow, {
     conversationId: conversation._id,
@@ -571,20 +693,3 @@ function buildServiceLink(slug?: string | null, inboundNumber?: string): string 
   return `https://musait.app/b/${slug}/backToWhatsapp?number=${encodeURIComponent(number)}`;
 }
 
-function isComplexMessage(message: string): boolean {
-  if (!message) return false;
-  const text = message.toLocaleLowerCase("tr-TR");
-  const lengthScore = text.length >= 120;
-  const hasDateToken =
-    /(yarın|bugün|pazartesi|salı|çarşamba|perşembe|cuma|cumartesi|pazar|\d{1,2}[./-]\d{1,2})/i.test(
-      text
-    );
-  const hasTimeToken = /([01]?\d|2[0-3])[:.]?[0-5]?\d/.test(text);
-  const hasMultiIntent =
-    /(ve|ayrıca|hem|sonra|ama|bir de|aynı anda|aynı mesaj)/i.test(text);
-  const hasServiceAndBusiness =
-    /(saç|tırnak|boya|cilt|masaj|hizmet|işletme|kuaför|salon)/i.test(text);
-
-  const score = [lengthScore, hasDateToken, hasTimeToken, hasMultiIntent, hasServiceAndBusiness].filter(Boolean).length;
-  return score >= 3;
-}

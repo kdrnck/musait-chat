@@ -49,7 +49,7 @@ export default function ChatInput({
     const isHandoff = status === "handoff";
 
     return (
-        <div className="px-4 pb-4 pt-3 bg-[var(--color-surface-pure)] border-t border-[var(--color-border)]">
+        <div className="px-4 pb-4 pt-3 bg-[var(--color-surface-elevated)] border-t border-[var(--color-border)]">
             <div className="max-w-3xl mx-auto flex flex-col gap-2.5">
 
                 {/* Status + Handoff toggle row */}
@@ -57,11 +57,11 @@ export default function ChatInput({
                     {/* Status indicator */}
                     <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold ${
                         isHandoff
-                            ? "bg-[#DBEAFE] border-[#BFDBFE] text-[#1D4ED8]"
+                            ? "bg-[rgba(59,130,246,0.12)] border-[rgba(59,130,246,0.25)] text-blue-400"
                             : "bg-[var(--color-surface-hover)] border-[var(--color-border)] text-[var(--color-text-muted)]"
                     }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
-                            isHandoff ? "bg-[#3B82F6] animate-pulse" : "bg-[var(--color-border-hover)]"
+                            isHandoff ? "bg-blue-400 animate-pulse" : "bg-[var(--color-border-hover)]"
                         }`} />
                         {isHandoff ? "İnsan Yönetiminde" : "Yapay Zeka Yönetiyor"}
                     </div>
@@ -93,7 +93,7 @@ export default function ChatInput({
                     onSubmit={handleSend}
                     className={`flex items-center gap-2 bg-[var(--color-surface-hover)] border rounded-2xl px-3 py-2 transition-all duration-150 ${
                         isHandoff
-                            ? "border-[var(--color-border)] focus-within:border-[var(--color-brand)] focus-within:ring-2 focus-within:ring-[var(--color-brand-light)] focus-within:bg-white"
+                            ? "border-[var(--color-border)] focus-within:border-[var(--color-brand)] focus-within:ring-2 focus-within:ring-[rgba(34,197,94,0.15)] focus-within:bg-[var(--color-surface-pure)]"
                             : "border-[var(--color-border)] opacity-60"
                     }`}
                 >
@@ -118,7 +118,7 @@ export default function ChatInput({
                         disabled={!text.trim() || sending || !isHandoff}
                         className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-150 ${
                             text.trim() && isHandoff
-                                ? "bg-[var(--color-text-primary)] text-white hover:bg-[#374151]"
+                                ? "bg-[var(--color-brand)] text-black hover:bg-[#16A34A]"
                                 : "bg-[var(--color-border)] text-[var(--color-text-muted)] cursor-not-allowed"
                         }`}
                     >

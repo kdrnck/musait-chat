@@ -171,11 +171,11 @@ export default function ConversationList({
     ];
 
     return (
-        <div className="flex flex-col h-full bg-[var(--color-sidebar-bg)] border-r border-[var(--color-border)]">
+        <div className="flex flex-col h-full bg-[var(--color-sidebar-bg)] border-r border-[var(--color-sidebar-border)]">
 
             {/* ── Header (non-admin only) ── */}
             {!hideHeader && (
-                <div className="px-4 pt-5 pb-3 flex-shrink-0 border-b border-[var(--color-border)]">
+                <div className="px-4 pt-5 pb-3 flex-shrink-0 border-b border-[var(--color-sidebar-border)]">
                     <div
                         className="flex items-center gap-2.5 mb-4 cursor-pointer group"
                         onClick={() => router.push("/")}
@@ -236,7 +236,7 @@ export default function ConversationList({
                             onClick={() => setFilter(tab.key)}
                             className={`flex-1 flex items-center justify-center gap-1 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${
                                 filter === tab.key
-                                    ? "bg-[var(--color-text-primary)] text-white shadow-sm"
+                                    ? "bg-[var(--color-brand)] text-black shadow-sm"
                                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-active)]"
                             }`}
                         >
@@ -245,7 +245,7 @@ export default function ConversationList({
                             {tab.count > 0 && (
                                 <span className={`min-w-[16px] h-[16px] px-1 rounded text-[9px] font-bold flex items-center justify-center ${
                                     filter === tab.key
-                                        ? "bg-white/20 text-white"
+                                        ? "bg-black/20 text-black"
                                         : "bg-[var(--color-border)] text-[var(--color-text-secondary)]"
                                 }`}>
                                     {tab.count}
@@ -296,6 +296,7 @@ export default function ConversationList({
                                 isSelected={selectedId === c._id}
                                 onClick={() => onSelect(c._id)}
                                 customerName={customerNames[c.customerPhone]}
+                                isAdmin={isAdmin}
                             />
                         ))}
                     </div>
@@ -303,7 +304,7 @@ export default function ConversationList({
             </div>
 
             {/* ── Footer ── */}
-            <div className="flex-shrink-0 p-3 bg-[var(--color-surface-pure)] border-t border-[var(--color-border)] space-y-2">
+            <div className="flex-shrink-0 p-3 bg-[var(--color-sidebar-bg)] border-t border-[var(--color-sidebar-border)] space-y-2">
                 <AiControlPanel tenantId={isRoutingMode ? null : tenantId} />
 
                 {/* User row */}
@@ -326,7 +327,7 @@ export default function ConversationList({
                             onClick={onToggleDebug}
                             className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
                                 debugMode
-                                    ? "bg-amber-50 border-amber-200 text-amber-700"
+                                    ? "bg-[rgba(217,119,6,0.12)] border-amber-800 text-amber-400"
                                     : "bg-[var(--color-surface-pure)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-primary)]"
                             }`}
                             title="Debug Modu"

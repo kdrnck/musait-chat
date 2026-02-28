@@ -6,7 +6,7 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { useRef, useEffect, useState } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
-import { ChevronLeft, Info, Phone, Calendar, User, MoreVertical, Search, Link2, ChevronDown } from "lucide-react";
+import { ChevronLeft, Info, Phone, Calendar, User, MoreVertical, Search, Link2, ChevronDown, Bot } from "lucide-react";
 
 export default function ChatView({
     conversationId,
@@ -55,7 +55,7 @@ export default function ChatView({
         return (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-fade-in bg-[var(--color-chat-bg)] h-full">
                 <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface-pure)] border border-[var(--color-border)] flex items-center justify-center mb-5 shadow-sm">
-                    <img src="/musait-dark.png" alt="m" className="w-8 h-8 opacity-30" />
+                    <img src="/musait-dark.png" alt="m" className="w-8 h-8 opacity-50 invert" />
                 </div>
                 <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)] mb-2 tracking-tight">
                     Bir sohbet seçin
@@ -75,7 +75,7 @@ export default function ChatView({
     return (
         <div className="flex-1 flex flex-col h-full">
             {/* ── Chat Header ── */}
-            <header className="h-[60px] flex-shrink-0 flex items-center justify-between px-4 z-20 bg-[var(--color-surface-pure)] border-b border-[var(--color-border)]">
+            <header className="h-[60px] flex-shrink-0 flex items-center justify-between px-4 z-20 bg-[var(--color-surface-elevated)] border-b border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                     {/* Mobile back */}
                     <button
@@ -133,7 +133,7 @@ export default function ChatView({
                                             <ChevronDown size={11} />
                                         </button>
                                         {showReassign && allTenants && allTenants.length > 0 && (
-                                            <div className="absolute top-full left-0 mt-1 z-50 bg-[var(--color-surface-pure)] border border-[var(--color-border)] rounded-xl shadow-lg overflow-hidden min-w-[200px] animate-fade-in">
+                                            <div className="absolute top-full left-0 mt-1 z-50 bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl shadow-lg overflow-hidden min-w-[200px] animate-fade-in">
                                                 <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] border-b border-[var(--color-border)] bg-[var(--color-surface-hover)]">
                                                     İşletme Değiştir
                                                 </div>
@@ -171,7 +171,7 @@ export default function ChatView({
                     </button>
                     <button
                         onClick={onToggleCustomerPanel}
-                        className={`btn-ghost xl:hidden ${showCustomerPanel ? "bg-[var(--color-brand-light)] text-[var(--color-brand-dark)] hover:bg-[var(--color-brand-light)]" : ""}`}
+                        className={`btn-ghost xl:hidden ${showCustomerPanel ? "bg-[var(--color-brand-light)] text-[var(--color-brand)] hover:bg-[var(--color-brand-light)]" : ""}`}
                         title="Müşteri Detayları"
                     >
                         <Info size={17} />
@@ -186,7 +186,7 @@ export default function ChatView({
             {/* ── Messages Area ── */}
             <div
                 ref={scrollRef}
-                className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4"
+                className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 py-4"
                 style={{ scrollBehavior: "smooth" }}
             >
                 <div className="h-2" />
@@ -203,7 +203,7 @@ export default function ChatView({
                         <p className="text-[13px] text-[var(--color-text-muted)]">Henüz mesaj yok</p>
                     </div>
                 ) : (
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 min-w-0 w-full">
                         {messages.map((m, i) => (
                             <MessageBubble
                                 key={m._id}
@@ -212,6 +212,21 @@ export default function ChatView({
                                 prevRole={i > 0 ? messages[i - 1].role : null}
                             />
                         ))}
+
+                        {/* Typing indicator when AI is processing */}
+                        {messages.some(m => m.status === "processing") && (
+                            <div className="flex justify-center my-3">
+                                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-system-chip)] border border-[var(--color-system-chip-border)]">
+                                    <Bot size={13} className="text-[var(--color-brand)]" />
+                                    <span className="text-[12px] text-[var(--color-text-secondary)]">AI yanıt hazırlıyor</span>
+                                    <div className="flex items-center gap-0.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: "0ms" }} />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: "150ms" }} />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: "300ms" }} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 

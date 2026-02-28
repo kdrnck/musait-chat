@@ -2,7 +2,7 @@
 "use client";
 
 import { Doc } from "../../../../convex/_generated/dataModel";
-import { Bot, User, Headset, Wrench, AlertTriangle, ChevronDown, ChevronUp, Clock, Zap, Hash, Cpu, Brain } from "lucide-react";
+import { Bot, User, Headset, Wrench, AlertTriangle, ChevronDown, ChevronUp, Clock, Zap, Hash, Cpu, Brain, DollarSign, Info } from "lucide-react";
 import { useState } from "react";
 
 function formatTime(timestamp: number): string {
@@ -83,7 +83,7 @@ function ToolCallBlock({ parsedData, timestamp, debugMode }: {
                                     {toolName}
                                 </span>
                             </div>
-                            <p className="text-[13px] font-medium text-[var(--color-text-primary)] mt-0.5">{toolLabel}</p>
+                            <p className="text-[13px] font-medium text-[var(--color-text-primary)] mt-0.5">{toolLabel} <span className="text-emerald-400">✓</span></p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-[11px] text-[var(--color-text-muted)]">{formatTime(timestamp)}</span>
@@ -100,8 +100,8 @@ function ToolCallBlock({ parsedData, timestamp, debugMode }: {
                     </div>
 
                     {debugMode && expanded && (
-                        <div className="mt-3 pt-3 border-t border-[#CBD5E1]">
-                            <pre className="text-[11px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-words leading-relaxed overflow-x-auto">
+                        <div className="mt-3 pt-3 border-t border-[var(--color-system-chip-border)]">
+                            <pre className="text-[11px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-words leading-relaxed overflow-hidden">
                                 {JSON.stringify(parsedData, null, 2)}
                             </pre>
                         </div>
@@ -110,6 +110,24 @@ function ToolCallBlock({ parsedData, timestamp, debugMode }: {
             </div>
         </div>
     );
+}
+
+/* ── Cost Calculation Helper ── */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+    "deepseek/deepseek-chat": { input: 0.14, output: 0.28 },
+    "deepseek/deepseek-reasoner": { input: 0.55, output: 2.19 },
+    "google/gemini-2.0-flash-001": { input: 0.1, output: 0.4 },
+    "google/gemini-2.5-flash-preview": { input: 0.15, output: 0.6 },
+    "anthropic/claude-3.5-sonnet": { input: 3.0, output: 15.0 },
+    "openai/gpt-oss-120b": { input: 0.0, output: 0.0 },
+};
+
+function calculateMessageCost(debugInfo: any): number | null {
+    if (!debugInfo?.model || !debugInfo?.promptTokens) return null;
+    const pricing = MODEL_PRICING[debugInfo.model] ||
+        Object.entries(MODEL_PRICING).find(([k]) => debugInfo.model?.includes(k.split("/")[1]))?.[1];
+    if (!pricing) return null;
+    return ((debugInfo.promptTokens * pricing.input) + ((debugInfo.completionTokens ?? 0) * pricing.output)) / 1_000_000;
 }
 
 /* ── Debug Metrics Block ── */
@@ -122,34 +140,44 @@ function DebugMetricsBlock({ debugInfo }: { debugInfo: any }) {
         <div className="flex justify-end mt-1.5">
             <div className="debug-metrics max-w-[380px]">
                 <div className="flex items-center gap-1.5 mb-2">
-                    <Cpu size={11} className="text-[#0284C7]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#0284C7]">Debug Metrikler</span>
+                    <Cpu size={11} className="text-sky-400" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-sky-400">Debug Metrikler</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                     {debugInfo.responseTimeMs && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[#0369A1] bg-white border border-[#BAE6FD] px-2 py-0.5 rounded-md">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-sky-300 bg-[var(--color-surface-elevated)] border border-[rgba(14,165,233,0.2)] px-2 py-0.5 rounded-md">
                             <Clock size={10} />
                             {debugInfo.responseTimeMs}ms
                         </span>
                     )}
                     {tokPerSec !== null && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 bg-white border border-emerald-200 px-2 py-0.5 rounded-md">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-[var(--color-surface-elevated)] border border-emerald-800 px-2 py-0.5 rounded-md">
                             <Zap size={10} />
                             {tokPerSec} tok/s
                         </span>
                     )}
                     {debugInfo.totalTokens && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-elevated)] border border-[var(--color-border)] px-2 py-0.5 rounded-md">
                             <Hash size={10} />
                             {debugInfo.promptTokens ?? "?"}↑ {debugInfo.completionTokens ?? "?"}↓ ({debugInfo.totalTokens})
                         </span>
                     )}
                     {debugInfo.model && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-surface-elevated)] border border-[var(--color-border)] px-2 py-0.5 rounded-md">
                             <Cpu size={10} />
                             {debugInfo.model.split("/").pop()}
                         </span>
                     )}
+                    {(() => {
+                        const cost = calculateMessageCost(debugInfo);
+                        if (cost === null) return null;
+                        return (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 bg-[var(--color-surface-elevated)] border border-amber-800 px-2 py-0.5 rounded-md">
+                                <DollarSign size={10} />
+                                ${cost.toFixed(4)}
+                            </span>
+                        );
+                    })()}
                 </div>
             </div>
         </div>
@@ -167,17 +195,17 @@ function ThinkingBlock({ content }: { content: string }) {
                     onClick={() => setExpanded(!expanded)}
                     className="w-full flex items-center gap-2 text-left"
                 >
-                    <Brain size={13} className="text-purple-600 flex-shrink-0" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-purple-700 flex-1">
+                    <Brain size={13} className="text-purple-400 flex-shrink-0" />
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-purple-300 flex-1">
                         İç Monolog (Thinking)
                     </span>
-                    <span className="text-[10px] text-purple-500">{expanded ? "Gizle" : "Göster"}</span>
-                    {expanded ? <ChevronUp size={12} className="text-purple-500" /> : <ChevronDown size={12} className="text-purple-500" />}
+                    <span className="text-[10px] text-purple-400">{expanded ? "Gizle" : "Göster"}</span>
+                    {expanded ? <ChevronUp size={12} className="text-purple-400" /> : <ChevronDown size={12} className="text-purple-400" />}
                 </button>
 
                 {expanded && (
-                    <div className="mt-2.5 pt-2.5 border-t border-[#DDD6FE]">
-                        <p className="text-[12px] font-mono leading-relaxed whitespace-pre-wrap text-purple-800 max-h-[280px] overflow-y-auto">
+                    <div className="mt-2.5 pt-2.5 border-t border-purple-800">
+                        <p className="text-[12px] font-mono leading-relaxed whitespace-pre-wrap text-purple-200 max-h-[280px] overflow-y-auto">
                             {content}
                         </p>
                     </div>
@@ -194,22 +222,22 @@ function ToolTraceBlock({ content }: { content: string }) {
 
     return (
         <div className="flex justify-end mt-1.5">
-            <div className="max-w-[480px] w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+            <div className="max-w-[480px] w-full rounded-xl border border-amber-800 bg-[rgba(217,119,6,0.08)] px-3 py-2">
                 <button
                     onClick={() => setExpanded(!expanded)}
                     className="w-full flex items-center gap-2 text-left"
                 >
-                    <Wrench size={13} className="text-amber-600 flex-shrink-0" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-amber-700 flex-1">
+                    <Wrench size={13} className="text-amber-400 flex-shrink-0" />
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-amber-300 flex-1">
                         Tool Call Trace
                     </span>
-                    <span className="text-[10px] text-amber-500 mr-1">{lineCount} satır</span>
-                    {expanded ? <ChevronUp size={12} className="text-amber-500" /> : <ChevronDown size={12} className="text-amber-500" />}
+                    <span className="text-[10px] text-amber-400 mr-1">{lineCount} satır</span>
+                    {expanded ? <ChevronUp size={12} className="text-amber-400" /> : <ChevronDown size={12} className="text-amber-400" />}
                 </button>
 
                 {expanded && (
-                    <div className="mt-2.5 pt-2.5 border-t border-amber-200">
-                        <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-amber-900 max-h-[320px] overflow-y-auto">
+                    <div className="mt-2.5 pt-2.5 border-t border-amber-800">
+                        <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-amber-200 max-h-[320px] overflow-y-auto">
                             {content}
                         </pre>
                     </div>
@@ -223,30 +251,115 @@ function ToolTraceBlock({ content }: { content: string }) {
 function ErrorBlock({ debugInfo, debugMode }: { debugInfo: any; debugMode: boolean }) {
     return (
         <div className="mt-2">
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200">
+            <div className="p-3 rounded-xl bg-[rgba(239,68,68,0.08)] border border-red-900">
                 <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle size={13} className="text-red-600 flex-shrink-0" />
-                    <span className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Agent Hatası</span>
+                    <AlertTriangle size={13} className="text-red-400 flex-shrink-0" />
+                    <span className="text-[11px] font-bold text-red-300 uppercase tracking-wider">Agent Hatası</span>
                     {debugInfo?.errorType && (
-                        <span className="ml-auto text-[10px] font-mono bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200">
+                        <span className="ml-auto text-[10px] font-mono bg-red-900/30 text-red-400 px-2 py-0.5 rounded border border-red-800">
                             {debugInfo.errorType}
                         </span>
                     )}
                 </div>
-                <p className="text-[12px] font-mono text-red-800 break-words">
+                <p className="text-[12px] font-mono text-red-300 break-words">
                     {debugInfo?.errorMessage || "Hata detayı kaydedilemedi. Sunucu loglarını kontrol edin."}
                 </p>
                 {debugInfo?.errorStack && debugMode && (
                     <details className="mt-2">
-                        <summary className="text-[10px] font-semibold text-red-500 cursor-pointer hover:text-red-700">
+                        <summary className="text-[10px] font-semibold text-red-400 cursor-pointer hover:text-red-300">
                             Stack Trace
                         </summary>
-                        <pre className="mt-1 p-2 bg-red-100 rounded text-[9px] overflow-x-auto whitespace-pre-wrap max-h-[200px] border border-red-200">
+                        <pre className="mt-1 p-2 bg-red-900/20 rounded text-[9px] overflow-hidden whitespace-pre-wrap max-h-[200px] border border-red-800">
                             {debugInfo.errorStack}
                         </pre>
                     </details>
                 )}
             </div>
+        </div>
+    );
+}
+
+/* ── Message Detail Panel (always available, togglable) ── */
+function MessageDetailPanel({ debugInfo, debugMode }: { debugInfo: any; debugMode: boolean }) {
+    const [open, setOpen] = useState(debugMode);
+    const [thinkingOpen, setThinkingOpen] = useState(debugMode);
+    const [traceOpen, setTraceOpen] = useState(debugMode);
+
+    const hasContent = debugInfo.responseTimeMs || debugInfo.totalTokens || debugInfo.model ||
+        debugInfo.thinkingContent || debugInfo.toolCallTrace;
+
+    if (!hasContent) return null;
+
+    return (
+        <div className="mt-1.5">
+            <button
+                onClick={() => setOpen(!open)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+            >
+                <Info size={11} />
+                {open ? "Detay Gizle" : "Detay Gör"}
+            </button>
+
+            {open && (
+                <div className="debug-detail-panel mt-1.5">
+                    {/* Metrics */}
+                    <DebugMetricsBlock debugInfo={debugInfo} />
+
+                    {/* Thinking */}
+                    {debugInfo.thinkingContent && (
+                        <div className="mt-1.5">
+                            <div className="debug-thinking max-w-[480px] w-full">
+                                <button
+                                    onClick={() => setThinkingOpen(!thinkingOpen)}
+                                    className="w-full flex items-center gap-2 text-left"
+                                >
+                                    <Brain size={13} className="text-purple-400 flex-shrink-0" />
+                                    <span className="text-[11px] font-bold uppercase tracking-widest text-purple-300 flex-1">
+                                        İç Monolog (Thinking)
+                                    </span>
+                                    <span className="text-[10px] text-purple-400">{thinkingOpen ? "Gizle" : "Göster"}</span>
+                                    {thinkingOpen ? <ChevronUp size={12} className="text-purple-400" /> : <ChevronDown size={12} className="text-purple-400" />}
+                                </button>
+
+                                {thinkingOpen && (
+                                    <div className="mt-2.5 pt-2.5 border-t border-purple-800">
+                                        <p className="text-[12px] font-mono leading-relaxed whitespace-pre-wrap text-purple-200 max-h-[280px] overflow-y-auto">
+                                            {debugInfo.thinkingContent}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tool Call Trace */}
+                    {debugInfo.toolCallTrace && (
+                        <div className="mt-1.5">
+                            <div className="max-w-[480px] w-full rounded-xl border border-amber-800 bg-[rgba(217,119,6,0.08)] px-3 py-2">
+                                <button
+                                    onClick={() => setTraceOpen(!traceOpen)}
+                                    className="w-full flex items-center gap-2 text-left"
+                                >
+                                    <Wrench size={13} className="text-amber-400 flex-shrink-0" />
+                                    <span className="text-[11px] font-bold uppercase tracking-widest text-amber-300 flex-1">
+                                        Tool Call Trace
+                                    </span>
+                                    <span className="text-[10px] text-amber-400 mr-1">{debugInfo.toolCallTrace.split("\n").length} satır</span>
+                                    {traceOpen ? <ChevronUp size={12} className="text-amber-400" /> : <ChevronDown size={12} className="text-amber-400" />}
+                                </button>
+
+                                {traceOpen && (
+                                    <div className="mt-2.5 pt-2.5 border-t border-amber-800">
+                                        <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap text-amber-200 max-h-[320px] overflow-y-auto">
+                                            {debugInfo.toolCallTrace}
+                                        </pre>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -355,7 +468,7 @@ export default function MessageBubble({
                         {formatTime(message.createdAt)}
                     </span>
                     {message.status === "failed" && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 uppercase tracking-wider">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold text-red-400 bg-red-900/20 border border-red-800 uppercase tracking-wider">
                             Gönderilemedi
                         </span>
                     )}
@@ -368,17 +481,9 @@ export default function MessageBubble({
                     )}
                 </div>
 
-                {/* Debug blocks — only when debug mode ON */}
-                {debugMode && role === "agent" && debugInfo && !debugInfo.errorMessage && (
-                    <>
-                        <DebugMetricsBlock debugInfo={debugInfo} />
-                        {debugInfo.thinkingContent && (
-                            <ThinkingBlock content={debugInfo.thinkingContent} />
-                        )}
-                        {debugInfo.toolCallTrace && (
-                            <ToolTraceBlock content={debugInfo.toolCallTrace} />
-                        )}
-                    </>
+                {/* Message Detail Panel — always visible for agent messages */}
+                {role === "agent" && debugInfo && (
+                    <MessageDetailPanel debugInfo={debugInfo} debugMode={debugMode} />
                 )}
 
                 {/* Error block — always visible for failed messages */}

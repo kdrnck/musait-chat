@@ -122,6 +122,22 @@ export async function createAppointment(
   if (!apptRes.ok) {
     const errText = await apptRes.text();
     console.error("Appointment creation failed:", errText);
+    
+    // Check if error is due to slot conflict (duplicate booking, overlapping appointments, etc.)
+    const isSlotConflict = 
+      errText.toLowerCase().includes("conflict") ||
+      errText.toLowerCase().includes("overlap") ||
+      errText.toLowerCase().includes("duplicate") ||
+      errText.toLowerCase().includes("already booked") ||
+      apptRes.status === 409; // Conflict HTTP status
+    
+    if (isSlotConflict) {
+      return { 
+        error: "Bu saat artık dolu görünüyor. Lütfen başka bir saat seçin.",
+        code: "slot_taken"
+      };
+    }
+    
     return { error: "Randevu oluşturulamadı. Lütfen tekrar deneyin." };
   }
 

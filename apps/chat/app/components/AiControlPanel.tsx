@@ -1,7 +1,7 @@
 /* eslint-disable */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Settings2, X, Save, RefreshCw, Sparkles, Cpu, Zap, Globe,
     ChevronDown,
@@ -84,6 +84,12 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
     );
 }
 
+interface RegistryModel {
+    id: string;
+    openrouter_id: string;
+    display_name: string;
+}
+
 export default function AiControlPanel({ tenantId }: { tenantId: string | null }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -91,6 +97,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [settings, setSettings] = useState<TenantAiSettings | null>(null);
+    const [registryModels, setRegistryModels] = useState<RegistryModel[]>([]);
 
     const selectedProviderStrategy = useMemo<ProviderStrategyKey>(() => {
         if (!settings) return "groq_first";
@@ -104,9 +111,19 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
 
     const canEdit = Boolean(settings?.canEdit);
 
+    const loadRegistryModels = useCallback(async () => {
+        try {
+            const res = await fetch("/api/models", { cache: "no-store" });
+            if (res.ok) {
+                const data = await res.json();
+                setRegistryModels(data);
+            }
+        } catch { /* ignore */ }
+    }, []);
+
     const openPanel = async () => {
         setOpen(true);
-        await loadSettings();
+        await Promise.all([loadSettings(), loadRegistryModels()]);
     };
 
     const closePanel = () => {
@@ -189,8 +206,8 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                         {/* Modal Header */}
                         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between flex-shrink-0">
                             <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-[var(--color-text-primary)] flex items-center justify-center">
-                                    <Sparkles size={18} className="text-white" />
+                                <div className="w-9 h-9 rounded-xl bg-[var(--color-brand)] flex items-center justify-center">
+                                    <Sparkles size={18} className="text-black" />
                                 </div>
                                 <div>
                                     <h2 className="text-[16px] font-bold text-[var(--color-text-primary)]">AI Yapılandırması</h2>
@@ -211,7 +228,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                 </div>
                             ) : error && !settings ? (
                                 <div className="py-8 text-center">
-                                    <p className="text-[13px] text-red-600">{error}</p>
+                                    <p className="text-[13px] text-red-400">{error}</p>
                                     <button onClick={loadSettings} className="btn-secondary mt-3 mx-auto">
                                         <RefreshCw size={14} />
                                         Tekrar Dene
@@ -233,21 +250,42 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                 <select
                                                     value={settings.modelProfile}
                                                     onChange={(e) => {
-                                                        const preset = AI_MODEL_PRESETS[e.target.value as AiModelProfile];
-                                                        setSettings({
-                                                            ...settings,
-                                                            modelProfile: e.target.value as AiModelProfile,
-                                                            model: preset.model,
-                                                            providerPriority: [...preset.providerPriority],
-                                                            allowFallbacks: preset.allowFallbacks,
-                                                        });
+                                                        const val = e.target.value;
+                                                        if (val.startsWith("registry:")) {
+                                                            const routerId = val.replace("registry:", "");
+                                                            setSettings({
+                                                                ...settings,
+                                                                modelProfile: "fast" as AiModelProfile,
+                                                                model: routerId,
+                                                            });
+                                                        } else {
+                                                            const preset = AI_MODEL_PRESETS[val as AiModelProfile];
+                                                            setSettings({
+                                                                ...settings,
+                                                                modelProfile: val as AiModelProfile,
+                                                                model: preset.model,
+                                                                providerPriority: [...preset.providerPriority],
+                                                                allowFallbacks: preset.allowFallbacks,
+                                                            });
+                                                        }
                                                     }}
                                                     disabled={!canEdit}
                                                     className="form-select"
                                                 >
-                                                    {(Object.keys(AI_MODEL_PRESETS) as AiModelProfile[]).map((p) => (
-                                                        <option key={p} value={p}>{AI_MODEL_PRESETS[p].label}</option>
-                                                    ))}
+                                                    <optgroup label="Profiller">
+                                                        {(Object.keys(AI_MODEL_PRESETS) as AiModelProfile[]).map((p) => (
+                                                            <option key={p} value={p}>{AI_MODEL_PRESETS[p].label}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                    {registryModels.length > 0 && (
+                                                        <optgroup label="Kayıtlı Modeller">
+                                                            {registryModels.map((m) => (
+                                                                <option key={m.id} value={`registry:${m.openrouter_id}`}>
+                                                                    {m.display_name}
+                                                                </option>
+                                                            ))}
+                                                        </optgroup>
+                                                    )}
                                                 </select>
                                             </div>
 
@@ -410,7 +448,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                         {/* Modal Footer */}
                         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between flex-shrink-0 bg-[var(--color-surface-hover)]">
                             <div className="text-[12px]">
-                                {error && <span className="text-red-600 font-medium">{error}</span>}
+                                {error && <span className="text-red-400 font-medium">{error}</span>}
                                 {success && <span className="text-[var(--color-brand-dim)] font-semibold">{success}</span>}
                             </div>
 

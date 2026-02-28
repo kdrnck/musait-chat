@@ -5,9 +5,9 @@ import ChatLayout from "../components/ChatLayout";
 import GlobalAiSettingsPanel from "./components/GlobalAiSettingsPanel";
 import ModelTestPanel from "./components/ModelTestPanel";
 import TenantSystemPromptPanel from "./components/TenantSystemPromptPanel";
-import RouterAgentMasterPromptPanel from "./components/RouterAgentMasterPromptPanel";
+import ModelRegistryPanel from "./components/ModelRegistryPanel";
 import AdminTenantSettingsModal from "./components/AdminTenantSettingsModal";
-import { Settings, Shield, Activity, Terminal, Network, Globe, LogOut, SlidersHorizontal } from "lucide-react";
+import { Shield, Activity, Terminal, Network, Globe, LogOut, SlidersHorizontal, Cpu, MessageSquare, Boxes } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -17,7 +17,7 @@ interface Tenant {
     logo_url: string | null;
 }
 
-type AdminTab = "chat" | "global" | "routing" | "settings" | "router-prompt";
+type AdminSection = "chat" | "global" | "routing" | "global-prompt" | "tenant-prompt" | "models" | "test-lab";
 
 export default function AdminDashboard({
     userEmail,
@@ -27,7 +27,7 @@ export default function AdminDashboard({
     tenants: Tenant[];
 }) {
     const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<AdminTab>("chat");
+    const [activeSection, setActiveSection] = useState<AdminSection>("chat");
     const [showTenantSettings, setShowTenantSettings] = useState(false);
     const router = useRouter();
 
@@ -38,7 +38,7 @@ export default function AdminDashboard({
         router.refresh();
     };
 
-    const navItems: { key: AdminTab; label: string; icon: React.ReactNode; description: string }[] = [
+    const navItems: { key: AdminSection; label: string; icon: React.ReactNode; description: string; isGroup?: boolean }[] = [
         {
             key: "chat",
             label: "Canlı Takip",
@@ -58,16 +58,32 @@ export default function AdminDashboard({
             description: "İşletmeye atanmayan sohbetler",
         },
         {
-            key: "router-prompt",
-            label: "Router Prompt",
-            icon: <Terminal size={18} />,
-            description: "Limbo sohbetler için agent prompt",
+            key: "global-prompt",
+            label: "Global Prompt",
+            icon: <Shield size={18} />,
+            description: "Genel sistem AI yönergeleri",
+            isGroup: true,
         },
         {
-            key: "settings",
-            label: "Sistem Ayarları",
-            icon: <Settings size={18} />,
-            description: "AI ve altyapı konfigürasyonu",
+            key: "tenant-prompt",
+            label: "Tenant Prompt",
+            icon: <MessageSquare size={18} />,
+            description: "İşletme bazlı AI ayarları",
+            isGroup: true,
+        },
+        {
+            key: "models",
+            label: "Modeller",
+            icon: <Cpu size={18} />,
+            description: "AI model kayıt defteri",
+            isGroup: true,
+        },
+        {
+            key: "test-lab",
+            label: "Test Lab",
+            icon: <Terminal size={18} />,
+            description: "Model test ve doğrulama",
+            isGroup: true,
         },
     ];
 
@@ -75,12 +91,12 @@ export default function AdminDashboard({
         <div className="flex h-screen w-full bg-[var(--color-bg-base)] overflow-hidden">
 
             {/* ── Admin Navigation Sidebar ── */}
-            <aside className="w-[240px] flex-shrink-0 flex flex-col bg-[var(--color-surface-pure)] border-r border-[var(--color-border)] z-20">
+            <aside className="w-[240px] flex-shrink-0 flex flex-col bg-[var(--color-sidebar-bg)] border-r border-[var(--color-sidebar-border)] z-20">
 
                 {/* Brand */}
-                <div className="px-5 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-[var(--color-text-primary)] flex items-center justify-center flex-shrink-0">
-                        <Shield size={18} className="text-white" />
+                <div className="px-5 py-5 border-b border-[var(--color-sidebar-border)] flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[var(--color-brand)] flex items-center justify-center flex-shrink-0">
+                        <Shield size={18} className="text-black" />
                     </div>
                     <div>
                         <h1 className="text-[15px] font-bold text-[var(--color-text-primary)] leading-none tracking-tight">
@@ -94,20 +110,30 @@ export default function AdminDashboard({
 
                 {/* Nav Items */}
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                    {navItems.map((item) => (
-                        <button
-                            key={item.key}
-                            onClick={() => setActiveTab(item.key)}
-                            className={`nav-item text-left w-full ${activeTab === item.key ? "active" : ""}`}
-                        >
-                            <span className="flex-shrink-0">{item.icon}</span>
-                            <span className="text-[13px] font-medium leading-tight">{item.label}</span>
-                        </button>
+                    {navItems.map((item, index) => (
+                        <div key={item.key}>
+                            {/* Divider before settings group */}
+                            {item.isGroup && index === navItems.findIndex(i => i.isGroup) && (
+                                <div className="px-3 py-2 mt-2">
+                                    <div className="h-px bg-[var(--color-sidebar-border)]" />
+                                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider mt-3 mb-1">
+                                        Sistem Ayarları
+                                    </p>
+                                </div>
+                            )}
+                            <button
+                                onClick={() => setActiveSection(item.key)}
+                                className={`nav-item text-left w-full ${activeSection === item.key ? "active" : ""}`}
+                            >
+                                <span className="flex-shrink-0">{item.icon}</span>
+                                <span className="text-[13px] font-medium leading-tight">{item.label}</span>
+                            </button>
+                        </div>
                     ))}
                 </nav>
 
                 {/* User Info + Logout */}
-                <div className="p-3 border-t border-[var(--color-border)]">
+                <div className="p-3 border-t border-[var(--color-sidebar-border)]">
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
                         <div className="w-8 h-8 rounded-lg bg-[var(--color-text-primary)] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
                             {userEmail?.charAt(0).toUpperCase()}
@@ -134,58 +160,36 @@ export default function AdminDashboard({
             {/* ── Main Content Area ── */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
 
-                {/* ── Chat/Global/Routing Tabs ── */}
-                {activeTab === "router-prompt" ? (
-                    /* ── Router Agent Prompt Tab ── */
-                    <div className="h-full overflow-y-auto px-6 md:px-10 py-8">
-                        <div className="max-w-3xl mx-auto space-y-8">
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="w-10 h-10 rounded-xl bg-[var(--color-status-attention)] bg-opacity-10 border border-[var(--color-border)] flex items-center justify-center">
-                                    <Network size={18} className="text-[var(--color-status-attention)]" />
-                                </div>
-                                <div>
-                                    <h2 className="text-[20px] font-bold text-[var(--color-text-primary)] tracking-tight">
-                                        RouterAgent Master Prompt
-                                    </h2>
-                                    <p className="text-[13px] text-[var(--color-text-muted)]">
-                                        Henüz işletme seçmemiş müşterileri karşılayan agent konfigürasyonu
-                                    </p>
-                                </div>
-                            </div>
-                            <RouterAgentMasterPromptPanel />
-                        </div>
-                    </div>
-
-                ) : (activeTab === "chat" || activeTab === "global" || activeTab === "routing") ? (
+                {(activeSection === "chat" || activeSection === "global" || activeSection === "routing") ? (
                     <div className="h-full flex flex-col">
                         {/* Slim tab header */}
-                        <div className="h-[52px] flex-shrink-0 flex items-center px-5 bg-[var(--color-surface-pure)] border-b border-[var(--color-border)] gap-4">
+                        <div className="h-[52px] flex-shrink-0 flex items-center px-5 bg-[var(--color-surface-elevated)] border-b border-[var(--color-border)] gap-4">
                             <div className="flex-1 min-w-0">
                                 <h2 className="text-[14px] font-semibold text-[var(--color-text-primary)] leading-none">
-                                    {activeTab === "routing"
+                                    {activeSection === "routing"
                                         ? "Yönlendirme Merkezi"
-                                        : activeTab === "global"
+                                        : activeSection === "global"
                                         ? "Tüm Sohbetler"
                                         : "Komuta Merkezi"}
                                 </h2>
                                 <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5 flex items-center gap-1.5">
                                     <span
                                         className={`inline-block w-1.5 h-1.5 rounded-full ${
-                                            activeTab === "routing"
+                                            activeSection === "routing"
                                                 ? "bg-[var(--color-status-attention)] animate-pulse"
                                                 : "bg-[var(--color-brand)] animate-pulse"
                                         }`}
                                     />
-                                    {activeTab === "routing"
+                                    {activeSection === "routing"
                                         ? "İşletmeye atanmamış sohbetler"
-                                        : activeTab === "global"
+                                        : activeSection === "global"
                                         ? "Tüm müşteriler — bağlı ve bağlısız"
                                         : "Tüm işletmelerden canlı akış"}
                                 </p>
                             </div>
 
                             {/* Gear icon: visible when a specific tenant is selected */}
-                            {activeTab === "chat" && selectedTenantId && (
+                            {activeSection === "chat" && selectedTenantId && (
                                 <button
                                     onClick={() => setShowTenantSettings(true)}
                                     className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] hover:bg-[var(--color-surface-active)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all text-[12px] font-semibold"
@@ -200,16 +204,16 @@ export default function AdminDashboard({
                         <div className="flex-1 relative overflow-hidden">
                             <ChatLayout
                                 tenantId={
-                                    activeTab === "routing"
+                                    activeSection === "routing"
                                         ? "LIMBO"
-                                        : activeTab === "global"
+                                        : activeSection === "global"
                                         ? null
                                         : selectedTenantId
                                 }
                                 tenantName={
-                                    activeTab === "routing"
+                                    activeSection === "routing"
                                         ? "Yönlendirme Bekleyenler"
-                                        : activeTab === "global"
+                                        : activeSection === "global"
                                         ? "Tüm Müşteriler"
                                         : (tenants.find((t) => t.id === selectedTenantId)?.name ?? "Tüm İşletmeler")
                                 }
@@ -220,98 +224,36 @@ export default function AdminDashboard({
                                 isAdmin={true}
                                 allTenants={tenants}
                                 onTenantChange={setSelectedTenantId}
-                                isRoutingMode={activeTab === "routing"}
+                                isRoutingMode={activeSection === "routing"}
                                 hideListHeader={true}
                             />
                         </div>
                     </div>
 
                 ) : (
-                    /* ── Settings Tab ── */
-                    <div className="h-full overflow-y-auto px-6 md:px-10 py-8">
-                        <div className="max-w-4xl mx-auto space-y-10">
-
-                            <div className="flex items-center gap-3 mb-8">
-                                <div className="w-10 h-10 rounded-xl bg-[var(--color-text-primary)] flex items-center justify-center">
-                                    <Settings size={18} className="text-white" />
+                    /* ── Settings Sections — direct content ── */
+                    <div className="h-full flex flex-col overflow-hidden">
+                        <div className="flex-1 overflow-y-auto">
+                            {activeSection === "global-prompt" && (
+                                <div className="max-w-3xl mx-auto px-6 md:px-10 py-8">
+                                    <GlobalAiSettingsPanel />
                                 </div>
-                                <div>
-                                    <h2 className="text-[20px] font-bold text-[var(--color-text-primary)] tracking-tight">
-                                        Sistem Ayarları
-                                    </h2>
-                                    <p className="text-[13px] text-[var(--color-text-muted)]">
-                                        Global AI ve altyapı konfigürasyonu
-                                    </p>
+                            )}
+                            {activeSection === "tenant-prompt" && (
+                                <div className="max-w-3xl mx-auto px-6 md:px-10 py-8">
+                                    <TenantSystemPromptPanel tenants={tenants} />
                                 </div>
-                            </div>
-
-                            <section className="panel-card p-6">
-                                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[var(--color-border)]">
-                                    <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-center">
-                                        <Activity size={16} className="text-[var(--color-brand-dim)]" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
-                                            Global AI Ayarları
-                                        </h3>
-                                        <p className="text-[12px] text-[var(--color-text-muted)]">
-                                            Tüm tenant'lar için varsayılan AI yapılandırması
-                                        </p>
-                                    </div>
+                            )}
+                            {activeSection === "models" && (
+                                <div className="max-w-4xl mx-auto px-6 md:px-10 py-8">
+                                    <ModelRegistryPanel />
                                 </div>
-                                <GlobalAiSettingsPanel />
-                            </section>
-
-                            <section className="panel-card p-6">
-                                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[var(--color-border)]">
-                                    <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-center">
-                                        <Shield size={16} className="text-[var(--color-brand-dim)]" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
-                                            Tenant Sistem Prompt
-                                        </h3>
-                                        <p className="text-[12px] text-[var(--color-text-muted)]">
-                                            İşletme bazlı sistem prompt override
-                                        </p>
-                                    </div>
+                            )}
+                            {activeSection === "test-lab" && (
+                                <div className="h-full p-4">
+                                    <ModelTestPanel debugMode={false} />
                                 </div>
-                                <TenantSystemPromptPanel tenants={tenants} />
-                            </section>
-
-                            <section className="panel-card p-6">
-                                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[var(--color-border)]">
-                                    <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-center">
-                                        <Network size={16} className="text-[var(--color-status-attention)]" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
-                                            RouterAgent Master Prompt
-                                        </h3>
-                                        <p className="text-[12px] text-[var(--color-text-muted)]">
-                                            İşletme seçilmemiş sohbetlerde devreye giren agent prompt
-                                        </p>
-                                    </div>
-                                </div>
-                                <RouterAgentMasterPromptPanel />
-                            </section>
-
-                            <section className="panel-card p-6 mb-10">
-                                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[var(--color-border)]">
-                                    <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-center">
-                                        <Terminal size={16} className="text-[var(--color-brand-dim)]" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
-                                            Model Test Laboratuvarı
-                                        </h3>
-                                        <p className="text-[12px] text-[var(--color-text-muted)]">
-                                            Yeni prompt ve model versiyonlarını simüle edin
-                                        </p>
-                                    </div>
-                                </div>
-                                <ModelTestPanel debugMode={false} />
-                            </section>
+                            )}
                         </div>
                     </div>
                 )}

@@ -2,7 +2,7 @@ import type { QueueConfig } from "@musait/shared";
 
 // Re-export with defaults for worker
 export const DEFAULT_QUEUE_CONFIG: QueueConfig = {
-  concurrency: 1, // MVP: single worker thread
+  concurrency: 3, // 3 parallel workers for throughput
   maxRetries: 3,
   retryBaseDelay: 1000, // 1s base, exponential backoff
   jobTimeout: 30_000, // 30s per job
@@ -21,7 +21,7 @@ export const LLM_CONFIG = {
   apiKey: process.env.OPENROUTER_API_KEY || "",
   model: process.env.LLM_MODEL || "deepseek/deepseek-chat",
   temperature: 0.7,
-  maxTokens: 1024,
+  maxTokens: 2048, // Turkish text needs more tokens; 1024 often truncates
   providerPriority: (process.env.LLM_PROVIDER_PRIORITY || "groq,deepinfra")
     .split(",")
     .map((p) => p.trim())

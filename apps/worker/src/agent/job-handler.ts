@@ -34,6 +34,8 @@ export function createJobHandler(convex: ConvexHttpClient) {
         id: job.id as any,
         status: "processing",
       });
+      // NOTE: WhatsApp Cloud API does not support sending typing indicators.
+      // markMessageAsRead() could be called here if wamid is added to AgentJob.
 
       // 2. Get conversation
       const conversationRaw = await convex.query(api.conversations.getById, {
