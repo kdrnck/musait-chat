@@ -251,7 +251,10 @@ export function createJobHandler(convex: ConvexHttpClient) {
       }
 
       // 7. Send WhatsApp reply
-      await sendWhatsAppMessage(job.customerPhone, agentResponse, {
+      // Append debug footer (only to WhatsApp — not stored in Convex, not visible to LLM)
+      const debugModel = agentDebugInfo?.model || "bilinmiyor";
+      const whatsappPayload = `${agentResponse}\n\n_[model: ${debugModel}]_`;
+      await sendWhatsAppMessage(job.customerPhone, whatsappPayload, {
         phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
         accessToken: job.outboundAccessToken,
       });
