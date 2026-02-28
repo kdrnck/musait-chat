@@ -62,6 +62,7 @@ export async function runAgentLoop(
   let accTotalTokens = 0;
   const thinkingParts: string[] = [];
   const toolTraceLines: string[] = [];
+  const toolCallsExecuted = new Set<string>();
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
@@ -126,6 +127,7 @@ export async function runAgentLoop(
 
       // Add results to context in original order
       for (const { toolCall, result } of toolResults) {
+        toolCallsExecuted.add(toolCall.name);
         const resultStr = JSON.stringify(result.result ?? result.error);
         toolTraceLines.push(
           `→ ${toolCall.name}(${JSON.stringify(toolCall.arguments)})\n` +
@@ -141,6 +143,29 @@ export async function runAgentLoop(
       }
 
       // Continue loop — LLM will process tool results
+      continue;
+    }
+
+    // 4a. Hallucination guard: detect booking-success language without create_appointment call
+    if (
+      !conversation.adminMode &&
+      !toolCallsExecuted.has("create_appointment") &&
+      response.content &&
+      detectBookingSuccessHallucination(response.content)
+    ) {
+      console.warn(`⚠️ HALLUCINATION GUARD: LLM claimed booking success without calling create_appointment`);
+      // Inject a corrective system message and let the LLM try again
+      messages.push({
+        role: "assistant",
+        content: response.content,
+      });
+      messages.push({
+        role: "user",
+        content:
+          "[SYSTEM] HATA: Randevu henüz oluşturulmadı! create_appointment tool'unu çağırmadan randevu oluşturulamazsın. " +
+          "Lütfen create_appointment tool'unu çağırarak randevuyu gerçekten oluştur. " +
+          "Tool çağırmadan randevu oluşturulduğunu iddia etme.",
+      });
       continue;
     }
 
@@ -705,5 +730,24 @@ function buildServiceLink(slug?: string | null, inboundNumber?: string): string 
   if (!slug) return "https://musait.app/isletme-listesi";
   const number = sanitizePhoneForLink(inboundNumber);
   return `https://musait.app/b/${slug}/backToWhatsapp?number=${encodeURIComponent(number)}`;
+}
+
+/**
+ * Detect if the LLM response claims a booking was successfully created.
+ * Used as a hallucination guard — if this returns true but create_appointment
+ * was never called, the LLM is hallucinating.
+ */
+function detectBookingSuccessHallucination(content: string): boolean {
+  const normalized = content.toLocaleLowerCase("tr-TR");
+  const successPatterns = [
+    /randevu(?:nuz)?\s+(?:başarıyla\s+)?oluşturuldu/,
+    /randevu(?:nuz)?\s+(?:başarıyla\s+)?alındı/,
+    /randevu(?:nuz)?\s+(?:başarıyla\s+)?kaydedildi/,
+    /randevu(?:nuz)?\s+onaylanmıştır/,
+    /randevu(?:nuz)?\s+tamamlandı/,
+    /başarıyla\s+oluşturuldu/,
+    /randevu\s+bilgileriniz/,
+  ];
+  return successPatterns.some((pattern) => pattern.test(normalized));
 }
 

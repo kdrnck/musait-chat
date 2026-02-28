@@ -15,6 +15,20 @@ import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { OTP_PROMPTS } from "../agent/master-prompts.js";
 import { resolveOutboundRoute } from "../services/outbound-route.js";
 
+// ── Wamid dedup cache ──────────────────────────────────────────────────────────
+// Meta can deliver the same webhook 2-4 times under load/jitter.
+// We keep a small in-memory Set of recently-seen WhatsApp message IDs (wamid)
+// and skip duplicates. TTL = 5 minutes — more than enough for retries.
+const SEEN_WAMIDS = new Set<string>();
+const WAMID_TTL_MS = 5 * 60 * 1000; // 5 min
+
+function markWamidSeen(wamid: string): boolean {
+  if (SEEN_WAMIDS.has(wamid)) return false; // already seen
+  SEEN_WAMIDS.add(wamid);
+  setTimeout(() => SEEN_WAMIDS.delete(wamid), WAMID_TTL_MS);
+  return true; // first time
+}
+
 /**
  * WhatsApp Webhook Router
  *
@@ -96,6 +110,13 @@ export function createWebhookRouter(
           for (const message of messages) {
             // Only handle text messages for MVP
             if (message.type !== "text" || !message.text?.body) continue;
+
+            // ── Wamid dedup ──────────────────────────────────────────
+            const wamid = message.id;
+            if (wamid && !markWamidSeen(wamid)) {
+              console.log(`⏭️ Duplicate wamid ${wamid}, skipping`);
+              continue;
+            }
 
             const phoneNumberId = metadata.phone_number_id;
             // Normalize to E.164 (add + prefix if missing)

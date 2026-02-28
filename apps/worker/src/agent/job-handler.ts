@@ -29,6 +29,17 @@ export function createJobHandler(convex: ConvexHttpClient) {
     console.log(`🤖 Handling job ${job.id} for ${job.customerPhone}`);
 
     try {
+      // 0. Status guard — skip if already processed (duplicate webhook / recovery race)
+      const currentMsg = await convex.query(api.messages.getById, {
+        id: job.id as any,
+      });
+      if (!currentMsg || currentMsg.status === "done" || currentMsg.status === "failed") {
+        console.log(
+          `⏭️ Job ${job.id} already ${currentMsg?.status ?? "deleted"}, skipping`
+        );
+        return;
+      }
+
       // 1. Mark message as processing
       await convex.mutation(api.messages.updateStatus, {
         id: job.id as any,

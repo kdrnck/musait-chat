@@ -34,6 +34,7 @@ export const api = {
     touchLastMessage: ref("conversations:touchLastMessage"),
   },
   messages: {
+    getById: ref("messages:getById"),
     listByConversation: ref("messages:listByConversation"),
     getContextWindow: ref("messages:getContextWindow"),
     getPendingMessages: ref("messages:getPendingMessages"),

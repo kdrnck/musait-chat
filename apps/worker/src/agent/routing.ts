@@ -79,22 +79,14 @@ export async function routeMessage(
       tenantId: rememberedTenant.tenantId,
     });
 
-    const warmStartMessage =
-      `Tekrar hoş geldiniz. Son tercihinize göre *${rememberedTenant.tenantName}* ile devam ediyorum.\n` +
-      "İşletme değiştirmek isterseniz \"işletme değiştir\" yazabilirsiniz.";
-
-    await replyAndPersist(convex, {
-      job,
-      conversationId: conversation._id,
-      content: warmStartMessage,
-    });
-
     await convex.mutation(api.customerMemories.upsertPreferredTenant, {
       customerPhone: job.customerPhone,
       preferredTenantId: rememberedTenant.tenantId,
     });
 
-    return { handled: true, tenantId: rememberedTenant.tenantId };
+    // Don't send a hardcoded message — let the agent loop generate
+    // a personalised warm-start greeting via the system prompt.
+    return { handled: false, tenantId: rememberedTenant.tenantId };
   }
 
   // No remembered tenant — hand off to agent which will greet the customer,

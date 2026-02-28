@@ -3,6 +3,14 @@ import { mutation, query } from "./_generated/server";
 
 // ===== QUERIES =====
 
+/** Get a single message by ID */
+export const getById = query({
+  args: { id: v.id("messages") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
 /** Get messages for a conversation (ordered by creation time)
  * 
  * Session visibility:

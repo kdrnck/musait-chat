@@ -102,8 +102,9 @@ async function manualSlotQuery(
 
   const apptUrl = new URL(`${SUPABASE_CONFIG.url}/rest/v1/appointments`);
   apptUrl.searchParams.set("tenant_id", `eq.${tenantId}`);
-  apptUrl.searchParams.set("start_time", `gte.${startOfDay}`);
-  apptUrl.searchParams.set("start_time", `lt.${endOfDay}`);
+  // Use 'and' filter to combine both start_time conditions — .set() overwrites
+  // the same key, so we use PostgREST 'and' syntax instead.
+  apptUrl.searchParams.set("and", `(start_time.gte.${startOfDay},start_time.lt.${endOfDay})`);
   apptUrl.searchParams.set("status", "in.(booked,upcoming)");
   apptUrl.searchParams.set("select", "staff_id,start_time,end_time");
 

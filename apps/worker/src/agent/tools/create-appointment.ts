@@ -143,9 +143,15 @@ export async function createAppointment(
 
   const appointment = await apptRes.json();
 
+  // Validate that the appointment was actually created
+  if (!Array.isArray(appointment) || appointment.length === 0 || !appointment[0]?.id) {
+    console.error("Appointment creation returned empty/invalid response:", JSON.stringify(appointment));
+    return { error: "Randevu oluşturulamadı. Sunucu boş yanıt döndü. Lütfen tekrar deneyin." };
+  }
+
   return {
     success: true,
-    appointmentId: appointment[0]?.id,
+    appointmentId: appointment[0].id,
     serviceName: service.name,
     startTime: startDate.toISOString(),
     endTime: endDate.toISOString(),

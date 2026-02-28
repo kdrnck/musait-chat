@@ -14,6 +14,11 @@ export class InMemoryQueue implements AgentQueue {
   private isRunning = false;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private config: QueueConfig;
+  /**
+   * Per-conversation lock: only one job per conversation runs at a time.
+   * Other conversations can still execute in parallel up to `concurrency`.
+   */
+  private conversationLocks = new Set<string>();
 
   constructor(config: QueueConfig) {
     this.config = config;
@@ -85,11 +90,18 @@ export class InMemoryQueue implements AgentQueue {
     if (this.processing.size >= this.config.concurrency) return;
     if (this.jobs.length === 0) return;
 
-    const job = this.jobs.shift();
+    // Find the first job whose conversation is NOT locked
+    const idx = this.jobs.findIndex(
+      (j) => !this.conversationLocks.has(j.conversationId)
+    );
+    if (idx === -1) return; // all pending jobs belong to locked conversations
+
+    const job = this.jobs.splice(idx, 1)[0];
     if (!job) return;
 
     this.processing.add(job.id);
-    console.log(`⚙️ Processing job: ${job.id}`);
+    this.conversationLocks.add(job.conversationId);
+    console.log(`⚙️ Processing job: ${job.id} (conv lock: ${job.conversationId})`);
 
     // Wrap in timeout
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -109,6 +121,7 @@ export class InMemoryQueue implements AgentQueue {
       })
       .finally(() => {
         this.processing.delete(job.id);
+        this.conversationLocks.delete(job.conversationId);
         // Try to process next job
         this.processNext();
       });
