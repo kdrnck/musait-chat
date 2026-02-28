@@ -82,6 +82,36 @@ export async function markMessageAsRead(
 }
 
 /**
+ * Simulate "typing" by marking the message as read and waiting.
+ *
+ * WhatsApp Cloud API does NOT support real typing indicators.
+ * This provides a natural delay: the user sees blue checkmarks (read)
+ * then waits 1.5–2s before the reply arrives — mimicking human behavior.
+ *
+ * @param messageId - The WhatsApp message ID (wamid) to mark as read
+ * @param opts - Optional phoneNumberId and accessToken overrides
+ * @param delayMs - Delay in ms after marking read (default: 1500)
+ */
+export async function simulateTyping(
+  messageId: string,
+  opts?: { phoneNumberId?: string; accessToken?: string },
+  delayMs = 1500
+): Promise<void> {
+  try {
+    await markMessageAsRead(messageId, opts);
+    console.log(`👁️ Marked ${messageId} as read, waiting ${delayMs}ms`);
+  } catch {
+    // Non-fatal — best effort
+  }
+  await delay(delayMs);
+}
+
+/** Async delay helper */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Send a WhatsApp message with quick reply buttons.
  * Useful for confirmation flows.
  */
