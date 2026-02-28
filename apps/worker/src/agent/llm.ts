@@ -254,7 +254,7 @@ async function buildContext(
     try {
       // Fetch services
       const servicesResult = await listServices({}, { tenantId: conversation.tenantId });
-      if (servicesResult && !("error" in servicesResult)) {
+      if (servicesResult && !(servicesResult as Record<string, unknown>).error) {
         const services = (servicesResult as any).services || [];
         servicesListText = services
           .map((svc: any) => {
@@ -266,7 +266,7 @@ async function buildContext(
 
       // Fetch staff
       const staffResult = await listStaff({}, { tenantId: conversation.tenantId });
-      if (staffResult && !("error" in staffResult)) {
+      if (staffResult && !(staffResult as Record<string, unknown>).error) {
         const staff = (staffResult as any).staff || [];
         staffListText = staff
           .map((s: any) => `- ${s.name}${s.title ? ` (${s.title})` : ""}\n  ID: ${s.id}`)
@@ -275,7 +275,7 @@ async function buildContext(
 
       // Fetch business info
       const businessResult = await getBusinessInfo({}, { tenantId: conversation.tenantId });
-      if (businessResult && !("error" in businessResult)) {
+      if (businessResult && !(businessResult as Record<string, unknown>).error) {
         const tenant = (businessResult as any).tenant;
         const infoParts: string[] = [
           `Business Name: ${tenant.name || "N/A"}`,
