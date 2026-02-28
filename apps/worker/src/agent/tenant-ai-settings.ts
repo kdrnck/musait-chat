@@ -11,12 +11,12 @@ interface ModelPreset {
 
 const MODEL_PRESETS: Record<AiModelProfile, ModelPreset> = {
   cheap: {
-    model: "deepseek/deepseek-chat",
+    model: "deepseek/deepseek-chat-v3-0324",
     providerPriority: ["deepinfra", "groq"],
     allowFallbacks: true,
   },
   fast: {
-    model: "deepseek/deepseek-chat",
+    model: "deepseek/deepseek-chat-v3-0324",
     providerPriority: ["groq", "deepinfra"],
     allowFallbacks: true,
   },
@@ -65,7 +65,13 @@ export function resolveTenantAiSettings(
 
   const preset = MODEL_PRESETS[modelProfile];
 
-  const model = asString(keys.ai_model) || preset.model || LLM_CONFIG.model;
+  const rawModel = asString(keys.ai_model);
+  // Normalize legacy model slugs that OpenRouter has retired
+  const MODEL_ALIASES: Record<string, string> = {
+    "deepseek/deepseek-chat": "deepseek/deepseek-chat-v3-0324",
+  };
+  const normalizedModel = rawModel ? (MODEL_ALIASES[rawModel] ?? rawModel) : null;
+  const model = normalizedModel || preset.model || LLM_CONFIG.model;
 
   const providerPriority =
     parseProviderPriority(keys.ai_provider_priority) ||

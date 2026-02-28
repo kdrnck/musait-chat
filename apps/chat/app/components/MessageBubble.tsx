@@ -115,6 +115,7 @@ function ToolCallBlock({ parsedData, timestamp, debugMode }: {
 /* ── Cost Calculation Helper ── */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
     "deepseek/deepseek-chat": { input: 0.14, output: 0.28 },
+    "deepseek/deepseek-chat-v3-0324": { input: 0.14, output: 0.28 },
     "deepseek/deepseek-reasoner": { input: 0.55, output: 2.19 },
     "google/gemini-2.0-flash-001": { input: 0.1, output: 0.4 },
     "google/gemini-2.5-flash-preview": { input: 0.15, output: 0.6 },

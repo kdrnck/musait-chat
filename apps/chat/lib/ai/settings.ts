@@ -11,13 +11,13 @@ export interface AiModelPreset {
 export const AI_MODEL_PRESETS: Record<AiModelProfile, AiModelPreset> = {
   cheap: {
     label: "Ucuz Default (DeepSeek + DeepInfra)",
-    model: "deepseek/deepseek-chat",
+    model: "deepseek/deepseek-chat-v3-0324",
     providerPriority: ["deepinfra", "groq"],
     allowFallbacks: true,
   },
   fast: {
     label: "Hızlı Default (DeepSeek + Groq)",
-    model: "deepseek/deepseek-chat",
+    model: "deepseek/deepseek-chat-v3-0324",
     providerPriority: ["groq", "deepinfra"],
     allowFallbacks: true,
   },
