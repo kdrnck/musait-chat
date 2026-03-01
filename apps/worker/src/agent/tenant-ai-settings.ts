@@ -1,5 +1,19 @@
 import { LLM_CONFIG } from "../config.js";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🧪 TEST MODEL OVERRIDE — set to a model string to force all tenants to use
+//    that model regardless of their settings. Set to null to disable.
+//    Example: "openai/gpt-4o-mini"  |  "google/gemini-2.0-flash-001"
+//    ⚠️  ONLY active outside production. Always set back to null before deploy.
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_MODEL_OVERRIDE: string | null = null;
+if (TEST_MODEL_OVERRIDE && process.env.NODE_ENV === "production") {
+  console.warn(
+    "⚠️  [TEST_MODEL_OVERRIDE] is set in production — this forces all tenants onto a single model. Set it to null immediately."
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type AiModelProfile = "cheap" | "fast" | "premium" | "oss-deepinfra" | "oss-groq";
 export type OutboundNumberMode = "inbound" | "musait" | "tenant";
 
@@ -71,7 +85,9 @@ export function resolveTenantAiSettings(
     "deepseek/deepseek-chat": "deepseek/deepseek-chat-v3-0324",
   };
   const normalizedModel = rawModel ? (MODEL_ALIASES[rawModel] ?? rawModel) : null;
-  const model = normalizedModel || preset.model || LLM_CONFIG.model;
+  // Priority: TEST_MODEL_OVERRIDE > tenant ai_model key > profile preset > global LLM_CONFIG default
+  const model = (TEST_MODEL_OVERRIDE && process.env.NODE_ENV !== "production" ? TEST_MODEL_OVERRIDE : null)
+    || normalizedModel || preset.model || LLM_CONFIG.model;
 
   const providerPriority =
     parseProviderPriority(keys.ai_provider_priority) ||
