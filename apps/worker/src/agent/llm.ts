@@ -499,7 +499,7 @@ async function callOpenRouter(
 ): Promise<OpenRouterResponse> {
   const providerOrder = options.tenantAiSettings.providerPriority;
   const payload: Record<string, unknown> = {
-    model: options.tenantAiSettings.model,
+    model: "google/gemini-2.5-flash", // TEMP: hardcoded for testing, revert after
     messages: messages.map((m) => ({
       role: m.role,
       content: m.content,
