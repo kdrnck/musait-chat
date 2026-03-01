@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-const MASTER_EMAILS = new Set(["kdrnck1@gmail.com", "musait@musait.app"]);
+import { requireMasterAdmin, isErrorResponse } from "@/lib/admin-auth";
 
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -14,19 +12,9 @@ function asString(value: unknown): string {
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!user.email || !MASTER_EMAILS.has(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = await requireMasterAdmin();
+  if (isErrorResponse(auth)) return auth;
+  const { supabase } = auth;
 
   const tenantId = request.nextUrl.searchParams.get("tenantId");
   if (!tenantId) {
@@ -50,19 +38,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!user.email || !MASTER_EMAILS.has(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = await requireMasterAdmin();
+  if (isErrorResponse(auth)) return auth;
+  const { supabase } = auth;
 
   const body = (await request.json()) as { tenantId?: string; promptText?: string };
   const tenantId = (body.tenantId || "").trim();
@@ -71,8 +49,6 @@ export async function PUT(request: NextRequest) {
   if (!tenantId) {
     return NextResponse.json({ error: "tenantId zorunlu" }, { status: 400 });
   }
-
-  // Allow empty promptText - tenant can remove custom prompt
 
   const { data: existingRow, error: fetchError } = await supabase
     .from("tenants")

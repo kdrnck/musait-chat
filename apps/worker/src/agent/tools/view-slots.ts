@@ -1,4 +1,5 @@
 import { SUPABASE_CONFIG } from "../../config.js";
+import { validateToolArgs, VIEW_SLOTS_FIELDS } from "./validate.js";
 
 interface ToolContext {
   tenantId: string;
@@ -21,13 +22,14 @@ export async function viewAvailableSlots(
   args: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<unknown> {
-  const date = args.date as string;
-  const serviceId = args.service_id as string | undefined;
-  const staffId = args.staff_id as string | undefined;
-
-  if (!date) {
-    return { error: "Tarih belirtilmedi" };
+  const validation = validateToolArgs(args, VIEW_SLOTS_FIELDS);
+  if (!validation.valid) {
+    return { error: validation.error };
   }
+
+  const date = validation.data.date as string;
+  const serviceId = validation.data.service_id as string | undefined;
+  const staffId = validation.data.staff_id as string | undefined;
 
   // Call Supabase via service role to get availability
   // This uses the same logic as musait.app's availability calculation
@@ -75,7 +77,11 @@ async function manualSlotQuery(
     Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
   };
 
-  const dayOfWeek = new Date(date).getDay(); // 0=Sunday
+  // Parse date parts directly to avoid UTC midnight → Istanbul timezone day shift.
+  // "YYYY-MM-DD" parsed by new Date() becomes UTC midnight, which is 21:00 previous day in Istanbul.
+  const [year, month, day] = date.split("-").map(Number);
+  const localDate = new Date(year, month - 1, day); // local midnight, timezone-safe
+  const dayOfWeek = localDate.getDay(); // 0=Sunday
 
   // Get working hours for this day
   const whUrl = new URL(

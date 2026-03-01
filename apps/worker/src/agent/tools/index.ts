@@ -379,24 +379,6 @@ export function getToolDefinitions() {
     {
       type: "function",
       function: {
-        name: "handOff",
-        description:
-          "ask_human ile aynı işlevdedir. Prompt içinde handOff adı geçiyorsa bu aracı çağır.",
-        parameters: {
-          type: "object",
-          properties: {
-            reason: {
-              type: "string",
-              description: "Devir sebebi",
-            },
-          },
-          required: [],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
         name: "end_session",
         description:
           "Konuşma oturumunu sonlandırır ve arşivler. Müşteri işini bitirdiğinde kullanılır.",

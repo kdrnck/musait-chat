@@ -78,7 +78,7 @@ async function main() {
   app.use("/otp", createOtpRouter(supabase));
   app.use("/health", createHealthRouter(queue));
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`✅ Worker listening on port ${PORT}`);
     console.log(`📡 Webhook URL: http://localhost:${PORT}/webhook/whatsapp`);
     console.log(`🔐 OTP endpoint: http://localhost:${PORT}/otp/request`);
@@ -88,6 +88,8 @@ async function main() {
   // --- Graceful shutdown ---
   const shutdown = async (signal: string) => {
     console.log(`\n⏳ ${signal} received. Shutting down gracefully...`);
+    // Close Express server first to stop accepting new webhooks
+    server.close();
     stopHandoffDispatcher();
     stopOtpCleanupJob();
     await queue.stop();

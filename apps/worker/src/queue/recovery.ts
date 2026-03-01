@@ -54,7 +54,7 @@ export async function recoverPendingJobs(
         messageContent: msg.content,
         tenantId: conversation.tenantId,
         createdAt: msg.createdAt,
-        retryCount: msg.retryCount,
+        retryCount: msg.retryCount ?? 0,
       });
     }
 

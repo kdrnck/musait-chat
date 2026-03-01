@@ -1,33 +1,11 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-async function checkMasterAdmin(supabase: any) {
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return null;
-
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_master")
-        .eq("id", user.id)
-        .single();
-
-    if (!profile?.is_master && user.email !== "kdrnck1@gmail.com" && user.email !== "musait@musait.app") {
-        return null;
-    }
-
-    return user;
-}
+import { requireMasterAdmin, isErrorResponse } from "@/lib/admin-auth";
 
 export async function GET() {
     try {
-        const supabase = await createClient();
-        const user = await checkMasterAdmin(supabase);
-        if (!user) {
-            return NextResponse.json({ error: "Yetki yok — master admin gerekli" }, { status: 403 });
-        }
+        const auth = await requireMasterAdmin();
+        if (isErrorResponse(auth)) return auth;
+        const { supabase } = auth;
 
         const { data, error } = await supabase
             .from("ai_models")
@@ -48,11 +26,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
-        const user = await checkMasterAdmin(supabase);
-        if (!user) {
-            return NextResponse.json({ error: "Yetki yok" }, { status: 403 });
-        }
+        const auth = await requireMasterAdmin();
+        if (isErrorResponse(auth)) return auth;
+        const { supabase } = auth;
 
         const body = await request.json();
         const { openrouter_id, display_name, pricing_input, pricing_output, provider_hint } = body;
@@ -91,11 +67,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
     try {
-        const supabase = await createClient();
-        const user = await checkMasterAdmin(supabase);
-        if (!user) {
-            return NextResponse.json({ error: "Yetki yok" }, { status: 403 });
-        }
+        const auth = await requireMasterAdmin();
+        if (isErrorResponse(auth)) return auth;
+        const { supabase } = auth;
 
         const body = await request.json();
         const { id, ...updates } = body;
@@ -139,11 +113,9 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
-        const supabase = await createClient();
-        const user = await checkMasterAdmin(supabase);
-        if (!user) {
-            return NextResponse.json({ error: "Yetki yok" }, { status: 403 });
-        }
+        const auth = await requireMasterAdmin();
+        if (isErrorResponse(auth)) return auth;
+        const { supabase } = auth;
 
         const { searchParams } = new URL(request.url);
         const id = searchParams.get("id");

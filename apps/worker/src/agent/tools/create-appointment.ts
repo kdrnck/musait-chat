@@ -4,6 +4,7 @@ import {
   getCustomerByPhone,
   updateCustomerName,
 } from "../../services/customers.js";
+import { validateToolArgs, CREATE_APPOINTMENT_FIELDS } from "./validate.js";
 
 interface ToolContext {
   tenantId: string;
@@ -22,15 +23,16 @@ export async function createAppointment(
   args: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<unknown> {
-  const serviceId = args.service_id as string;
-  const staffId = args.staff_id as string;
-  const startTime = args.start_time as string;
-  const customerName =
-    (args.customer_name as string | undefined)?.trim() || ctx.customerName;
-
-  if (!serviceId || !staffId || !startTime) {
-    return { error: "Hizmet, personel ve başlangıç zamanı gereklidir." };
+  const validation = validateToolArgs(args, CREATE_APPOINTMENT_FIELDS);
+  if (!validation.valid) {
+    return { error: validation.error };
   }
+
+  const serviceId = validation.data.service_id as string;
+  const staffId = validation.data.staff_id as string;
+  const startTime = validation.data.start_time as string;
+  const customerName =
+    (validation.data.customer_name as string | undefined)?.trim() || ctx.customerName;
 
   const headers = {
     "Content-Type": "application/json",

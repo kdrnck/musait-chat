@@ -129,53 +129,6 @@ function asBoolean(value: unknown): boolean | null {
   return null;
 }
 
-/**
- * Replace {{tenant_id}}, {{current_date}}, {{current_time}} and other placeholders in system prompt text.
- * Supports both {{placeholder}} and {placeholder} formats.
- */
-export function resolveSystemPromptPlaceholders(
-  prompt: string,
-  vars: { tenantId?: string | null }
-): string {
-  const now = new Date();
-
-  const dateFormatter = new Intl.DateTimeFormat("tr-TR", {
-    timeZone: "Europe/Istanbul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const dateParts = dateFormatter.formatToParts(now);
-  const year = dateParts.find((p) => p.type === "year")?.value;
-  const month = dateParts.find((p) => p.type === "month")?.value;
-  const day = dateParts.find((p) => p.type === "day")?.value;
-  const currentDate = `${year}-${month}-${day}`;
-
-  const timeFormatter = new Intl.DateTimeFormat("tr-TR", {
-    timeZone: "Europe/Istanbul",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  const currentTime = timeFormatter.format(now);
-
-  const placeholders: Record<string, string> = {
-    tenant_id: vars.tenantId || "belirlenmedi",
-    current_date: currentDate,
-    current_time: currentTime,
-  };
-
-  let resolved = prompt;
-  for (const [key, value] of Object.entries(placeholders)) {
-    const doubleBrace = `{{${key}}}`;
-    const singleBrace = `{${key}}`;
-    resolved = resolved.replaceAll(doubleBrace, value);
-    resolved = resolved.replaceAll(singleBrace, value);
-  }
-  return resolved;
-}
-
 function parseProviderPriority(value: unknown): string[] | null {
   if (Array.isArray(value)) {
     const list = value

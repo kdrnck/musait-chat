@@ -1,30 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-async function getMasterUser() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { supabase, user: null, authorized: false };
-
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_master")
-        .eq("id", user.id)
-        .single();
-
-    const authorized =
-        profile?.is_master === true ||
-        user.email === "kdrnck1@gmail.com" ||
-        user.email === "musait@musait.app";
-
-    return { supabase, user, authorized };
-}
+import { requireMasterAdmin, isErrorResponse } from "@/lib/admin-auth";
 
 export async function GET() {
-    const { supabase, user, authorized } = await getMasterUser();
-
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!authorized) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requireMasterAdmin();
+    if (isErrorResponse(auth)) return auth;
+    const { supabase } = auth;
 
     const { data, error } = await supabase
         .from("global_settings")
@@ -42,13 +22,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-    const { supabase, user, authorized } = await getMasterUser();
-
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!authorized) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requireMasterAdmin();
+    if (isErrorResponse(auth)) return auth;
+    const { supabase } = auth;
 
     const body = await request.json();
-    // Allow empty string to clear the prompt (fall back to hardcoded default)
     const promptText = typeof body.promptText === "string" ? body.promptText.trim() : "";
 
     const { data, error } = await supabase
