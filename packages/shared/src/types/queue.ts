@@ -23,6 +23,8 @@ export interface AgentJob {
   inboundDisplayNumber?: string;
   /** Resolved customer name (if known) for personalization */
   customerName?: string;
+  /** WhatsApp message ID (wamid) for read receipts */
+  wamid?: string;
   /** Tenant ID (null if unbound/master number) */
   tenantId: string | null;
   /** Timestamp when job was created */

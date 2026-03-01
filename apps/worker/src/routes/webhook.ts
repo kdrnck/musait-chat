@@ -156,6 +156,7 @@ export function createWebhookRouter(
                 customerPhone,
                 messageContent,
                 contactName,
+                wamid,
               });
             }
           }
@@ -269,6 +270,7 @@ async function handleAgentMessage(params: {
   customerPhone: string;
   messageContent: string;
   contactName: string;
+  wamid?: string;
 }): Promise<void> {
   const {
     convex,
@@ -279,6 +281,7 @@ async function handleAgentMessage(params: {
     customerPhone,
     messageContent,
     contactName,
+    wamid,
   } =
     params;
 
@@ -349,6 +352,7 @@ async function handleAgentMessage(params: {
     outboundAccessToken: outboundRoute.accessToken,
     contactName,
     messageContent,
+    wamid,
     tenantId: conversation.tenantId,
     createdAt: Date.now(),
     retryCount: 0,

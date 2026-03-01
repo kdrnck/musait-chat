@@ -3,7 +3,7 @@ import type { AgentJob } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
 import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
-import { sendWhatsAppMessage } from "../lib/whatsapp.js";
+import { sendWhatsAppMessage, simulateTyping } from "../lib/whatsapp.js";
 import { SESSION_PROMPTS, ADMIN_MODE } from "./master-prompts.js";
 import { SUPABASE_CONFIG } from "../config.js";
 import {
@@ -45,8 +45,14 @@ export function createJobHandler(convex: ConvexHttpClient) {
         id: job.id as any,
         status: "processing",
       });
-      // NOTE: WhatsApp Cloud API does not support sending typing indicators.
-      // markMessageAsRead() could be called here if wamid is added to AgentJob.
+
+      // 1a. Read receipt + typing simulation
+      if (job.wamid) {
+        await simulateTyping(job.wamid, {
+          phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
+          accessToken: job.outboundAccessToken,
+        });
+      }
 
       // 2. Get conversation
       const conversationRaw = await convex.query(api.conversations.getById, {
