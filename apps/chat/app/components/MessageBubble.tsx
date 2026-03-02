@@ -33,7 +33,11 @@ function getTurkishToolCallName(toolName: string) {
 function parseToolCall(content: string) {
     try {
         const parsed = JSON.parse(content);
-        if (typeof parsed === "object" && parsed !== null) return parsed;
+        if (typeof parsed === "object" && parsed !== null) {
+            // Don't treat interactive messages as tool calls
+            if (parsed._interactive) return null;
+            return parsed;
+        }
     } catch { }
 
     const match = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
@@ -50,11 +54,34 @@ function parseToolCall(content: string) {
             const end = content.lastIndexOf("}");
             if (start !== -1 && end !== -1 && end > start) {
                 const parsed = JSON.parse(content.substring(start, end + 1));
-                if (typeof parsed === "object" && parsed !== null) return parsed;
+                if (typeof parsed === "object" && parsed !== null) {
+                    if (parsed._interactive) return null;
+                    return parsed;
+                }
             }
         } catch { }
     }
 
+    return null;
+}
+
+/* ── Parse interactive message from content ── */
+function parseInteractiveMessage(content: string): {
+    type: "buttons" | "list";
+    body: string;
+    buttons?: Array<{ id: string; title: string }>;
+    button?: string;
+    sections?: Array<{
+        title: string;
+        rows: Array<{ id: string; title: string; description?: string }>;
+    }>;
+} | null {
+    try {
+        const parsed = JSON.parse(content);
+        if (parsed?._interactive && (parsed.type === "buttons" || parsed.type === "list")) {
+            return parsed;
+        }
+    } catch { }
     return null;
 }
 
@@ -365,6 +392,82 @@ function MessageDetailPanel({ debugInfo, debugMode }: { debugInfo: any; debugMod
     );
 }
 
+/* ── Interactive Buttons Block ── */
+function InteractiveButtonsBlock({ data, timestamp }: {
+    data: { body: string; buttons: Array<{ id: string; title: string }> };
+    timestamp: number;
+}) {
+    return (
+        <div className="flex flex-col">
+            <div className="whitespace-pre-wrap break-words">{data.body}</div>
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-[var(--color-border)]">
+                {data.buttons.map((btn) => (
+                    <span
+                        key={btn.id}
+                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-[13px] font-medium bg-[var(--color-surface-active)] text-[var(--color-brand)] border border-[var(--color-brand-dim)]"
+                    >
+                        {btn.title}
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+/* ── Interactive List Block ── */
+function InteractiveListBlock({ data, timestamp }: {
+    data: {
+        body: string;
+        button: string;
+        sections: Array<{
+            title: string;
+            rows: Array<{ id: string; title: string; description?: string }>;
+        }>;
+    };
+    timestamp: number;
+}) {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <div className="flex flex-col">
+            <div className="whitespace-pre-wrap break-words">{data.body}</div>
+            <button
+                onClick={() => setExpanded(!expanded)}
+                className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[13px] font-medium bg-[var(--color-surface-active)] text-[var(--color-brand)] border border-[var(--color-brand-dim)] hover:bg-[var(--color-surface-hover)] transition-colors"
+            >
+                {data.button}
+                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {expanded && (
+                <div className="mt-2 rounded-lg border border-[var(--color-border)] overflow-hidden">
+                    {data.sections.map((section, si) => (
+                        <div key={si}>
+                            <div className="px-3 py-1.5 bg-[var(--color-surface-active)] text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)]">
+                                {section.title}
+                            </div>
+                            {section.rows.map((row, ri) => (
+                                <div
+                                    key={row.id}
+                                    className={`px-3 py-2 ${ri < section.rows.length - 1 ? "border-b border-[var(--color-border)]" : ""}`}
+                                >
+                                    <div className="text-[13px] font-medium text-[var(--color-text-primary)]">
+                                        {row.title}
+                                    </div>
+                                    {row.description && (
+                                        <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                                            {row.description}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* ════════════════════════════════════════
    Main MessageBubble Component
 ═══════════════════════════════════════ */
@@ -384,10 +487,14 @@ export default function MessageBubble({
     // Check if agent message is a tool call
     let isToolCall = false;
     let parsedData: any = null;
+    let interactiveData: ReturnType<typeof parseInteractiveMessage> = null;
 
     if (role === "agent") {
-        parsedData = parseToolCall(message.content);
-        if (parsedData) isToolCall = true;
+        interactiveData = parseInteractiveMessage(message.content);
+        if (!interactiveData) {
+            parsedData = parseToolCall(message.content);
+            if (parsedData) isToolCall = true;
+        }
     }
 
     const debugInfo = (message as any).debugInfo;
@@ -460,7 +567,19 @@ export default function MessageBubble({
                     className={`px-5 py-3.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap shadow-sm ${config.bubbleClass}`}
                     style={{ borderRadius: config.borderRadius }}
                 >
-                    {message.content}
+                    {interactiveData?.type === "buttons" ? (
+                        <InteractiveButtonsBlock
+                            data={interactiveData as any}
+                            timestamp={message.createdAt}
+                        />
+                    ) : interactiveData?.type === "list" ? (
+                        <InteractiveListBlock
+                            data={interactiveData as any}
+                            timestamp={message.createdAt}
+                        />
+                    ) : (
+                        message.content
+                    )}
                 </div>
 
                 {/* Timestamp + status */}

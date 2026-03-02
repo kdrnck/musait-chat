@@ -3,7 +3,8 @@ import type { AgentJob } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
 import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
-import { sendWhatsAppMessage, simulateTyping } from "../lib/whatsapp.js";
+import { sendWhatsAppMessage, sendWhatsAppInteractive, sendWhatsAppListMessage, simulateTyping } from "../lib/whatsapp.js";
+import { parseInteractiveResponse, buildStorageContent } from "../lib/interactive-parser.js";
 import { SESSION_PROMPTS, ADMIN_MODE } from "./master-prompts.js";
 import { SUPABASE_CONFIG } from "../config.js";
 import {
@@ -247,15 +248,19 @@ export function createJobHandler(convex: ConvexHttpClient) {
         return;
       }
 
-      // 6. Save agent response as message
+      // 6. Parse agent response for interactive blocks (<<BUTTONS>>, <<LIST>>)
+      const parsed = parseInteractiveResponse(agentResponse);
+      const storageContent = buildStorageContent(parsed);
+
+      // 6a. Save agent response as message
       const agentMessageId = await convex.mutation(api.messages.create, {
         conversationId: job.conversationId as any,
         role: "agent",
-        content: agentResponse,
+        content: storageContent,
         status: "done",
       });
 
-      // 6a. Attach debug metrics separately (non-fatal if schema not yet deployed)
+      // 6b. Attach debug metrics separately (non-fatal if schema not yet deployed)
       if (agentDebugInfo) {
         try {
           await convex.mutation(api.messages.updateDebugInfo, {
@@ -267,11 +272,42 @@ export function createJobHandler(convex: ConvexHttpClient) {
         }
       }
 
-      // 7. Send WhatsApp reply
-      await sendWhatsAppMessage(job.customerPhone, agentResponse, {
+      // 7. Send WhatsApp reply — route to correct API based on parsed type
+      const waOpts = {
         phoneNumberId: job.outboundPhoneNumberId || job.phoneNumberId,
         accessToken: job.outboundAccessToken,
-      });
+      };
+
+      try {
+        if (parsed.type === "buttons") {
+          console.log(`📤 Sending interactive BUTTONS (${parsed.buttons.length} buttons) to ${job.customerPhone}`);
+          await sendWhatsAppInteractive(
+            job.customerPhone,
+            parsed.body,
+            parsed.buttons,
+            waOpts
+          );
+        } else if (parsed.type === "list") {
+          console.log(`📤 Sending interactive LIST (${parsed.sections.reduce((a, s) => a + s.rows.length, 0)} rows) to ${job.customerPhone}`);
+          await sendWhatsAppListMessage(
+            job.customerPhone,
+            parsed.body,
+            parsed.button,
+            parsed.sections,
+            waOpts
+          );
+        } else {
+          await sendWhatsAppMessage(job.customerPhone, agentResponse, waOpts);
+        }
+      } catch (sendErr) {
+        // If interactive message fails (e.g. character limits), fallback to plain text
+        if (parsed.type !== "text") {
+          console.warn(`⚠️ Interactive message failed, falling back to plain text:`, (sendErr as Error).message);
+          await sendWhatsAppMessage(job.customerPhone, parsed.body, waOpts);
+        } else {
+          throw sendErr;
+        }
+      }
 
       // 8. Mark original message as done
       await convex.mutation(api.messages.updateStatus, {

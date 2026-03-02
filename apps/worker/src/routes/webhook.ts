@@ -108,8 +108,28 @@ export function createWebhookRouter(
           if (!messages || messages.length === 0) continue;
 
           for (const message of messages) {
-            // Only handle text messages for MVP
-            if (message.type !== "text" || !message.text?.body) continue;
+            // Handle text messages and interactive responses (button taps, list selections)
+            let messageContent: string | null = null;
+
+            if (message.type === "text" && message.text?.body) {
+              messageContent = message.text.body;
+            } else if (message.type === "interactive" && message.interactive) {
+              // Button reply: user tapped a reply button
+              if (message.interactive.type === "button_reply" && message.interactive.button_reply) {
+                messageContent = message.interactive.button_reply.id;
+                console.log(`📲 Button reply: id="${message.interactive.button_reply.id}" title="${message.interactive.button_reply.title}"`);
+              }
+              // List reply: user selected from a list
+              else if (message.interactive.type === "list_reply" && message.interactive.list_reply) {
+                messageContent = message.interactive.list_reply.id;
+                console.log(`📲 List reply: id="${message.interactive.list_reply.id}" title="${message.interactive.list_reply.title}"`);
+              }
+            } else if (message.type === "button" && message.button) {
+              // Quick reply button (template buttons)
+              messageContent = message.button.payload || message.button.text;
+            }
+
+            if (!messageContent) continue;
 
             // ── Wamid dedup ──────────────────────────────────────────
             const wamid = message.id;
@@ -121,7 +141,6 @@ export function createWebhookRouter(
             const phoneNumberId = metadata.phone_number_id;
             // Normalize to E.164 (add + prefix if missing)
             const customerPhone = normalizePhoneToE164(message.from);
-            const messageContent = message.text.body;
             const contactName =
               contacts?.[0]?.profile?.name || "Bilinmeyen";
 

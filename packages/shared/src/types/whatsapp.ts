@@ -38,6 +38,15 @@ export interface WhatsAppMessage {
   timestamp: string;
   type: "text" | "image" | "audio" | "video" | "document" | "location" | "interactive" | "button";
   text?: { body: string };
+  interactive?: {
+    type: "button_reply" | "list_reply";
+    button_reply?: { id: string; title: string };
+    list_reply?: { id: string; title: string; description?: string };
+  };
+  button?: {
+    text: string;
+    payload: string;
+  };
   // Future: handle other message types
 }
 
