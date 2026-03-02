@@ -360,7 +360,7 @@ function normalizePrompt(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return trimmed.slice(0, 8000);
+  return trimmed;
 }
 
 function normalizeOutboundMode(value: unknown): OutboundNumberMode {
@@ -376,7 +376,7 @@ function normalizeProviderPriority(value: unknown): string[] {
   const providers = value
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
-    .filter((item) => /^[a-z0-9_-]{2,32}$/i.test(item));
+    .filter((item) => /^[a-z0-9_\-\/]{2,64}$/i.test(item));
 
   return providers.slice(0, 4);
 }

@@ -326,7 +326,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                 />
                                             </div>
 
-                                            <div className="space-y-1.5">
+                                            <div className="space-y-1.5 sm:col-span-2">
                                                 <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
                                                     Sağlayıcı Stratejisi
                                                 </label>
@@ -344,8 +344,25 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                     {(Object.keys(PROVIDER_STRATEGIES) as Array<Exclude<ProviderStrategyKey, "custom">>).map((k) => (
                                                         <option key={k} value={k}>{PROVIDER_STRATEGIES[k].label}</option>
                                                     ))}
-                                                    <option value="custom" disabled>Özel Yapılandırma</option>
+                                                    <option value="custom">Özel (manuel)</option>
                                                 </select>
+                                                <input
+                                                    type="text"
+                                                    value={settings.providerPriority.join(", ")}
+                                                    onChange={(e) => {
+                                                        const providers = e.target.value
+                                                            .split(",")
+                                                            .map((p) => p.trim())
+                                                            .filter(Boolean);
+                                                        setSettings({ ...settings, providerPriority: providers });
+                                                    }}
+                                                    disabled={!canEdit}
+                                                    className="form-input font-mono text-[12px]"
+                                                    placeholder="groq, deepinfra, together (boş = OpenRouter varsayılan)"
+                                                />
+                                                <p className="text-[10px] text-[var(--color-text-muted)]">
+                                                    Virgülle ayır · Örnek: <span className="font-mono">groq, deepinfra</span> veya <span className="font-mono">deepinfra/turbo</span> · Boş bırakırsan OpenRouter otomatik seçer
+                                                </p>
                                             </div>
                                         </div>
 

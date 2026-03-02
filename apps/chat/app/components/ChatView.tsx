@@ -30,6 +30,17 @@ export default function ChatView({
     const [optimisticMessages, setOptimisticMessages] = useState<OptimisticMessage[]>([]);
     const bindToTenant = useMutation(api.conversations.bindToTenant);
 
+    // Query data first before using in effects
+    const conversation = useQuery(
+        api.conversations.getById,
+        conversationId ? { id: conversationId } : "skip"
+    );
+
+    const messages = useQuery(
+        api.messages.listByConversation,
+        conversationId ? { conversationId, isAdmin: isAdmin ?? false } : "skip"
+    );
+
     // Handle optimistic message sending
     const handleOptimisticSend = useCallback((message: OptimisticMessage, clearCallback: () => void) => {
         setOptimisticMessages(prev => [...prev, message]);
@@ -63,16 +74,6 @@ export default function ChatView({
         await bindToTenant({ id: conversationId, tenantId });
         setShowReassign(false);
     };
-
-    const conversation = useQuery(
-        api.conversations.getById,
-        conversationId ? { id: conversationId } : "skip"
-    );
-
-    const messages = useQuery(
-        api.messages.listByConversation,
-        conversationId ? { conversationId, isAdmin: isAdmin ?? false } : "skip"
-    );
 
     useEffect(() => {
         if (scrollRef.current) {
