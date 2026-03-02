@@ -254,27 +254,10 @@ async function buildContext(
   let dashboardPrompt: string | null = null;
   let tenantContext: Awaited<ReturnType<typeof fetchTenantContext>> = null;
 
-  console.log(`\n========== BUILD CONTEXT START ==========`);
-  console.log(`📋 Tenant ID: ${conversation.tenantId || 'NULL (unbound)'}`);
-  console.log(`📋 Customer Phone: ${job.customerPhone}`);
-
   if (conversation.tenantId) {
     tenantContext = await fetchTenantContext(conversation.tenantId);
-
-    console.log(`📋 Tenant Context Fetched: ${tenantContext ? 'YES' : 'NO'}`);
-    console.log(`📋 Integration Keys: ${tenantContext?.integrationKeys ? JSON.stringify(Object.keys(tenantContext.integrationKeys)) : 'NONE'}`);
-
-    if (tenantContext?.integrationKeys) {
-      const rawPrompt = tenantContext.integrationKeys.ai_system_prompt_text;
-      console.log(`📋 Raw ai_system_prompt_text type: ${typeof rawPrompt}`);
-      console.log(`📋 Raw ai_system_prompt_text value (first 150 chars): ${rawPrompt ? String(rawPrompt).slice(0, 150) : 'NULL/UNDEFINED'}`);
-    }
-
     tenantAiSettings = resolveTenantAiSettings(tenantContext?.integrationKeys, globalPrompt);
     dashboardPrompt = tenantAiSettings.systemPromptText;
-
-    console.log(`📋 Resolved System Prompt Length: ${dashboardPrompt?.length || 0}`);
-    console.log(`📋 Resolved System Prompt (first 200 chars): ${dashboardPrompt ? dashboardPrompt.slice(0, 200) : 'NULL'}`);
   }
 
   // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT ==========
@@ -331,7 +314,6 @@ async function buildContext(
   if (conversation.adminMode) {
     systemPromptContent = ADMIN_MODE.systemPrompt;
     promptSource = 'ADMIN_MODE';
-    console.log(`🔓 ADMIN MODE ACTIVE - Using admin system prompt`);
   } else if (!conversation.tenantId) {
     const activeTenants = await fetchActiveTenants(convex);
     const tenantList = activeTenants.length > 0
@@ -347,7 +329,7 @@ async function buildContext(
       systemPromptContent = `## Aktif İşletmeler\n${tenantList}`;
       promptSource = 'TENANT_LIST_ONLY';
     }
-    console.log(`🔀 UNBOUND - Using ${promptSource} prompt (${activeTenants.length} tenants)`);
+    console.log(`🔀 Unbound routing: ${promptSource} (${activeTenants.length} tenants)`);
   } else {
     const rawPrompt = dashboardPrompt || globalPrompt || null;
 
@@ -395,7 +377,6 @@ async function buildContext(
 
       systemPromptContent = resolvePlaceholders(rawPrompt, placeholders);
       promptSource = dashboardPrompt ? 'DASHBOARD' : 'GLOBAL';
-      console.log(`✅ Placeholder resolution complete. Resolved ${Object.keys(placeholders).length} placeholders.`);
     } else {
       systemPromptContent = null;
       promptSource = 'NONE';
@@ -405,10 +386,9 @@ async function buildContext(
   if (systemPromptContent) {
     const systemPromptFormatted = `<system_prompt>\n${systemPromptContent}\n</system_prompt>`;
     messages.push({ role: "system", content: systemPromptFormatted });
-    console.log(`✅ SYSTEM PROMPT ADDED (source: ${promptSource})`);
-    console.log(`   Length: ${systemPromptContent.length} chars`);
+    console.log(`📋 Prompt source=${promptSource} len=${systemPromptContent.length}chars`);
   } else {
-    console.log(`⚠️ NO SYSTEM PROMPT (source: ${promptSource}) - panel prompt not configured, tools only`);
+    console.warn(`⚠️ No system prompt (source: ${promptSource})`);
   }
 
   // ========== STEP 3: MESSAGE HISTORY ==========
@@ -417,8 +397,6 @@ async function buildContext(
     limit: 20,
     sessionStartedAt: conversation.sessionStartedAt || undefined,
   });
-
-  console.log(`📋 Message History: ${recentMessages.length} messages (session boundary: ${conversation.sessionStartedAt ? new Date(conversation.sessionStartedAt).toISOString() : 'none'})`);
 
   if (recentMessages.length > 0) {
     for (const msg of recentMessages) {
@@ -430,8 +408,7 @@ async function buildContext(
     }
   }
 
-  console.log(`✅ TOTAL MESSAGES TO LLM: ${messages.length}`);
-  console.log(`========== BUILD CONTEXT END ==========\n`);
+  console.log(`📋 Context built: ${messages.length} messages (tenant=${conversation.tenantId || 'unbound'})`);
 
   return { messages, tenantAiSettings };
 }

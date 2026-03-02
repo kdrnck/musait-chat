@@ -3,13 +3,15 @@
  * These provide clear error messages back to the LLM when arguments are malformed.
  */
 
-interface ValidationResult {
-  valid: true;
-  data: Record<string, unknown>;
-} | {
-  valid: false;
-  error: string;
-}
+type ValidationResult =
+  | {
+      valid: true;
+      data: Record<string, unknown>;
+    }
+  | {
+      valid: false;
+      error: string;
+    };
 
 interface FieldSpec {
   name: string;

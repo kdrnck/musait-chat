@@ -27,11 +27,8 @@ export async function PUT(request: Request) {
     const { supabase } = auth;
 
     const body = await request.json();
-    const promptText = typeof body.promptText === "string" ? body.promptText.trim() : "";
-
-    if (!promptText) {
-        return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
-    }
+    // Allow empty string to clear the global prompt (consistent with tenant-system-prompt behavior)
+    const promptText = typeof body.promptText === "string" ? body.promptText.trim() : null;
 
     const { data, error } = await supabase
         .from("global_settings")

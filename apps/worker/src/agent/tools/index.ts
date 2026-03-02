@@ -13,6 +13,8 @@ import { listBusinesses } from "./list-businesses.js";
 import { takeNotesForUser } from "./take-notes.js";
 import { updateCustomerName } from "./update-customer-name.js";
 
+const TOOL_TIMEOUT_MS = 10_000;
+
 interface ToolContext {
   tenantId: string | null;
   conversationId: string;
@@ -21,11 +23,32 @@ interface ToolContext {
 }
 
 /**
- * Execute a tool call.
+ * Execute a tool call with a 10s timeout per tool.
  * All tool calls are server-side only.
  * All respect tenant isolation.
  */
 export async function executeToolCall(
+  convex: ConvexHttpClient,
+  toolCall: ToolCallRequest,
+  ctx: ToolContext
+): Promise<ToolCallResult> {
+  const timeoutPromise: Promise<ToolCallResult> = new Promise((resolve) =>
+    setTimeout(
+      () =>
+        resolve({
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: null,
+          error: `Tool '${toolCall.name}' timed out after ${TOOL_TIMEOUT_MS}ms`,
+        }),
+      TOOL_TIMEOUT_MS
+    )
+  );
+
+  return Promise.race([executeToolCallInner(convex, toolCall, ctx), timeoutPromise]);
+}
+
+async function executeToolCallInner(
   convex: ConvexHttpClient,
   toolCall: ToolCallRequest,
   ctx: ToolContext

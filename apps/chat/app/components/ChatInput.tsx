@@ -1,18 +1,29 @@
 /* eslint-disable */
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { Send, Zap, UserPlus, Loader2, Sparkles } from "lucide-react";
 
+// Type for optimistic message
+export interface OptimisticMessage {
+    id: string;
+    content: string;
+    role: "human";
+    status: "sending" | "sent" | "error";
+    createdAt: number;
+}
+
 export default function ChatInput({
     conversationId,
     status,
+    onOptimisticSend,
 }: {
     conversationId: Id<"conversations">;
     status: "active" | "handoff" | "archived";
+    onOptimisticSend?: (message: OptimisticMessage, clearCallback: () => void) => void;
 }) {
     const [text, setText] = useState("");
     const [sending, setSending] = useState(false);
@@ -23,17 +34,45 @@ export default function ChatInput({
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!text.trim() || sending) return;
+        
+        const messageContent = text.trim();
+        const optimisticId = `optimistic-${Date.now()}`;
+        
+        // Clear input immediately for better UX
+        setText("");
         setSending(true);
+        
+        // Create optimistic message
+        const optimisticMessage: OptimisticMessage = {
+            id: optimisticId,
+            content: messageContent,
+            role: "human",
+            status: "sending",
+            createdAt: Date.now(),
+        };
+        
+        // Callback to clear the optimistic message
+        let clearOptimistic = () => {};
+        
+        // Show optimistic message immediately
+        if (onOptimisticSend) {
+            onOptimisticSend(optimisticMessage, () => {
+                clearOptimistic();
+            });
+        }
+        
         try {
             await sendMessage({
                 conversationId,
-                content: text.trim(),
+                content: messageContent,
                 role: "human",
                 status: "pending",
             });
-            setText("");
+            // Message will appear via Convex subscription, optimistic message will be replaced
         } catch (err) {
             console.error(err);
+            // On error, update the optimistic message status (could be extended)
+            setText(messageContent); // Restore the message on error
         } finally {
             setSending(false);
         }
@@ -50,7 +89,7 @@ export default function ChatInput({
 
     return (
         <div className="px-4 pb-4 pt-3 bg-[var(--color-surface-elevated)] border-t border-[var(--color-border)]">
-            <div className="max-w-3xl mx-auto flex flex-col gap-2.5">
+            <div className="w-full flex flex-col gap-2.5">
 
                 {/* Status + Handoff toggle row */}
                 <div className="flex items-center justify-between">

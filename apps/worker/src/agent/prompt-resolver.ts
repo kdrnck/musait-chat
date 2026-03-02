@@ -1,7 +1,5 @@
 /**
  * Prompt resolution: placeholder replacement and date/time helpers.
- *
- * Supports both {{placeholder}} and {placeholder} formats.
  */
 
 /**
@@ -41,7 +39,8 @@ export function getCurrentDateInfo(): { date: string; dayName: string; time: str
 
 /**
  * Resolve placeholders in system prompt.
- * Supports both {{placeholder}} and {placeholder} formats.
+ * Uses {{double-brace}} format only. Single-brace {key} is not supported
+ * to avoid collisions with JSON content in user-authored prompts.
  */
 export function resolvePlaceholders(
   prompt: string,
@@ -49,10 +48,7 @@ export function resolvePlaceholders(
 ): string {
   let resolved = prompt;
   for (const [key, value] of Object.entries(placeholders)) {
-    const doubleBrace = `{{${key}}}`;
-    const singleBrace = `{${key}}`;
-    resolved = resolved.replaceAll(doubleBrace, value);
-    resolved = resolved.replaceAll(singleBrace, value);
+    resolved = resolved.replaceAll(`{{${key}}}`, value);
   }
   return resolved;
 }

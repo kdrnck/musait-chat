@@ -46,12 +46,27 @@ export default function ConversationList({
     const [loadingError, setLoadingError] = useState(false);
     const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const router = useRouter();
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     const handleLogout = async () => {
-        const supabase = createClient();
-        await supabase.auth.signOut();
-        router.push("/login");
-        router.refresh();
+        if (isLoggingOut) return;
+        setIsLoggingOut(true);
+        try {
+            const supabase = createClient();
+            // Clear all auth state
+            await supabase.auth.signOut();
+            // Clear any cached data
+            if (typeof window !== 'undefined') {
+                sessionStorage.clear();
+            }
+            // Navigate and force refresh
+            router.push("/login");
+            router.refresh();
+        } catch (error) {
+            console.error('Logout error:', error);
+            // Force navigate even on error
+            window.location.href = '/login';
+        }
     };
 
     const tenantConversations = useQuery(
@@ -197,44 +212,44 @@ export default function ConversationList({
             )}
 
             {/* ── Search & Filters ── */}
-            <div className="px-3 pt-3 pb-2 flex-shrink-0 space-y-2">
+            <div className="px-4 pt-4 pb-3 flex-shrink-0 space-y-3">
                 {/* Admin tenant selector */}
                 {isAdmin && allTenants && onTenantChange && !isRoutingMode && (
                     <div className="relative">
-                        <LayoutGrid size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
+                        <LayoutGrid size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
                         <select
                             value={tenantId ?? "all"}
                             onChange={(e) => onTenantChange(e.target.value === "all" ? null : e.target.value)}
-                            className="form-select pl-9 pr-8 py-2.5 text-[13px] appearance-none cursor-pointer"
+                            className="form-select pl-11 pr-10 py-3 text-[14px] appearance-none cursor-pointer"
                         >
                             <option value="all">Tüm İşletmeler</option>
                             {allTenants.map((t) => (
                                 <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                         </select>
-                        <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
+                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
                     </div>
                 )}
 
                 {/* Search */}
                 <div className="relative group">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] group-focus-within:text-[var(--color-brand-dim)] transition-colors pointer-events-none" />
+                    <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] group-focus-within:text-[var(--color-brand-dim)] transition-colors pointer-events-none" />
                     <input
                         type="text"
                         placeholder="Ara..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="native-input w-full py-2.5 pl-9 pr-4 text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none"
+                        className="native-input w-full py-3 pl-11 pr-4 text-[14px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none"
                     />
                 </div>
 
                 {/* Filter tabs */}
-                <div className="flex gap-1 p-1 bg-[var(--color-surface-hover)] rounded-xl border border-[var(--color-border)]">
+                <div className="flex gap-1.5 p-1.5 bg-[var(--color-surface-hover)] rounded-xl border border-[var(--color-border)]">
                     {filterTabs.map((tab) => (
                         <button
                             key={tab.key}
                             onClick={() => setFilter(tab.key)}
-                            className={`flex-1 flex items-center justify-center gap-1 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold rounded-lg transition-all duration-150 ${
                                 filter === tab.key
                                     ? "bg-[var(--color-brand)] text-black shadow-sm"
                                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-active)]"
@@ -243,7 +258,7 @@ export default function ConversationList({
                             {tab.icon}
                             <span>{tab.label}</span>
                             {tab.count > 0 && (
-                                <span className={`min-w-[16px] h-[16px] px-1 rounded text-[9px] font-bold flex items-center justify-center ${
+                                <span className={`min-w-[18px] h-[18px] px-1.5 rounded text-[10px] font-bold flex items-center justify-center ${
                                     filter === tab.key
                                         ? "bg-black/20 text-black"
                                         : "bg-[var(--color-border)] text-[var(--color-text-secondary)]"
@@ -257,38 +272,38 @@ export default function ConversationList({
             </div>
 
             {/* ── Conversation List ── */}
-            <div className="flex-1 overflow-y-auto px-2 py-1">
+            <div className="flex-1 overflow-y-auto px-3 py-2">
                 {!conversations ? (
                     <div className="flex flex-col items-center justify-center h-48 gap-4">
                         {loadingError ? (
                             <>
-                                <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center border border-red-100">
-                                    <RefreshCw size={18} className="text-red-500" />
+                                <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center border border-red-100">
+                                    <RefreshCw size={20} className="text-red-500" />
                                 </div>
                                 <div className="text-center px-4">
-                                    <p className="text-[11px] font-bold uppercase tracking-widest text-red-500">Bağlantı Hatası</p>
-                                    <p className="text-[12px] text-red-400 mt-1">Sayfayı yenileyin</p>
+                                    <p className="text-[12px] font-bold uppercase tracking-widest text-red-500">Bağlantı Hatası</p>
+                                    <p className="text-[13px] text-red-400 mt-1">Sayfayı yenileyin</p>
                                 </div>
                             </>
                         ) : (
                             <>
-                                <div className="w-5 h-5 border-2 border-[var(--color-border)] rounded-full animate-spin"
+                                <div className="w-6 h-6 border-2 border-[var(--color-border)] rounded-full animate-spin"
                                     style={{ borderTopColor: "var(--color-brand-dim)" }} />
-                                <span className="text-[11px] font-medium text-[var(--color-text-muted)]">Yükleniyor...</span>
+                                <span className="text-[12px] font-medium text-[var(--color-text-muted)]">Yükleniyor...</span>
                             </>
                         )}
                     </div>
                 ) : filtered.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-48 gap-3 animate-fade-in">
-                        <div className="w-10 h-10 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center border border-[var(--color-border)]">
-                            <MessageSquare size={16} className="text-[var(--color-text-muted)]" />
+                    <div className="flex flex-col items-center justify-center h-48 gap-4 animate-fade-in">
+                        <div className="w-12 h-12 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center border border-[var(--color-border)]">
+                            <MessageSquare size={18} className="text-[var(--color-text-muted)]" />
                         </div>
-                        <span className="text-[12px] text-[var(--color-text-muted)]">
+                        <span className="text-[13px] text-[var(--color-text-muted)]">
                             {search ? "Sonuç bulunamadı" : "Henüz konuşma yok"}
                         </span>
                     </div>
                 ) : (
-                    <div className="space-y-0.5">
+                    <div className="space-y-2">
                         {filtered.map((c) => (
                             <ConversationCard
                                 key={c._id}
@@ -304,45 +319,49 @@ export default function ConversationList({
             </div>
 
             {/* ── Footer ── */}
-            <div className="flex-shrink-0 p-3 bg-[var(--color-sidebar-bg)] border-t border-[var(--color-sidebar-border)] space-y-2">
+            <div className="flex-shrink-0 p-4 bg-[var(--color-sidebar-bg)] border-t border-[var(--color-sidebar-border)] space-y-3">
                 <AiControlPanel tenantId={isRoutingMode ? null : tenantId} />
 
                 {/* User row */}
-                <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
-                    <div className="w-8 h-8 rounded-lg bg-[var(--color-text-primary)] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--color-brand)] text-black flex items-center justify-center font-bold text-sm flex-shrink-0">
                         {userEmail?.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-semibold text-[var(--color-text-primary)] truncate">
+                        <p className="text-[13px] font-semibold text-[var(--color-text-primary)] truncate">
                             {userEmail?.split("@")[0]}
                         </p>
-                        <p className="text-[10px] font-medium text-[var(--color-text-muted)] truncate">
+                        <p className="text-[11px] font-medium text-[var(--color-text-muted)] truncate">
                             {isAdmin ? "Süper Yönetici" : "İşletme Yetkilisi"}
                         </p>
                     </div>
 
-                    <div className="flex gap-1">
+                    <div className="flex gap-2">
                         {/* Debug toggle */}
                         <button
                             onClick={onToggleDebug}
-                            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+                            className={`btn-icon !w-10 !h-10 ${
                                 debugMode
-                                    ? "bg-[rgba(217,119,6,0.12)] border-amber-800 text-amber-400"
-                                    : "bg-[var(--color-surface-pure)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-primary)]"
+                                    ? "!bg-[rgba(217,119,6,0.12)] !border-amber-800 !text-amber-400"
+                                    : ""
                             }`}
                             title="Debug Modu"
                         >
-                            <Bug size={12} />
-                            <span className="hidden sm:inline">{debugMode ? "ON" : "DBG"}</span>
+                            <Bug size={16} />
                         </button>
 
                         {!isAdmin && (
                             <button
                                 onClick={handleLogout}
-                                className="btn-ghost p-1.5"
+                                disabled={isLoggingOut}
+                                className={`btn-icon !w-10 !h-10 ${isLoggingOut ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title="Çıkış yap"
                             >
-                                <LogOut size={14} />
+                                {isLoggingOut ? (
+                                    <RefreshCw size={16} className="animate-spin" />
+                                ) : (
+                                    <LogOut size={16} />
+                                )}
                             </button>
                         )}
                     </div>

@@ -18,8 +18,17 @@ interface Tenant {
 
 interface SavedPrompt {
     id: string;
-    title: string;
-    content: string;
+    name: string;
+    description?: string;
+    category: string;
+    prompt_text: string;
+    model_id?: string;
+    tenant_id?: string;
+    parameters?: Record<string, any>;
+    is_active?: boolean;
+    is_default?: boolean;
+    created_at?: string;
+    updated_at?: string;
 }
 
 interface ToolCall {
@@ -61,6 +70,7 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
     
     // Saved prompts
     const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
+    const [loadingPrompts, setLoadingPrompts] = useState(true);
     const [showSavePrompt, setShowSavePrompt] = useState(false);
     const [newPromptTitle, setNewPromptTitle] = useState("");
     const [editingPrompt, setEditingPrompt] = useState<SavedPrompt | null>(null);
@@ -79,18 +89,26 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
     useEffect(() => {
         const savedPhone = localStorage.getItem("modelTest_phone") || "+905550000000";
         const savedSystem = localStorage.getItem("modelTest_system") || "Sen profesyonel bir yapay zeka asistanısın. Kısa ve öz yanıtlar ver.";
-        const savedPromptsRaw = localStorage.getItem("modelTest_savedPrompts");
         
         setPhone(savedPhone);
         setSystem(savedSystem);
-        
-        if (savedPromptsRaw) {
+    }, []);
+
+    // Load saved prompts from database
+    useEffect(() => {
+        const loadPrompts = async () => {
             try {
-                setSavedPrompts(JSON.parse(savedPromptsRaw));
-            } catch (e) {
-                console.error("Saved prompts parse error:", e);
+                const res = await fetch("/api/admin/prompt-templates?category=general", { cache: "no-store" });
+                if (!res.ok) throw new Error("Promptlar yüklenemedi");
+                const data = await res.json();
+                setSavedPrompts(data);
+            } catch (err) {
+                console.error("Prompt yükleme hatası:", err);
+            } finally {
+                setLoadingPrompts(false);
             }
-        }
+        };
+        void loadPrompts();
     }, []);
 
     // Save settings to localStorage
@@ -109,10 +127,6 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
     useEffect(() => {
         if (system) localStorage.setItem("modelTest_system", system);
     }, [system]);
-
-    useEffect(() => {
-        localStorage.setItem("modelTest_savedPrompts", JSON.stringify(savedPrompts));
-    }, [savedPrompts]);
 
     // Load models from API
     useEffect(() => {
@@ -214,8 +228,6 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
             role: "assistant",
             content: "",
             tool_calls: [],
-            reasoning: null,
-            metrics: null,
         };
         
         setMessages((prev) => [...prev, assistantMessage]);
@@ -359,47 +371,85 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
         }
     };
 
-    const handleSavePrompt = () => {
+    const handleSavePrompt = async () => {
         if (!newPromptTitle.trim()) return;
         
-        const newPrompt: SavedPrompt = {
-            id: Date.now().toString(),
-            title: newPromptTitle.trim(),
-            content: system,
-        };
-        
-        setSavedPrompts((prev) => [...prev, newPrompt]);
-        setNewPromptTitle("");
-        setShowSavePrompt(false);
+        try {
+            const res = await fetch("/api/admin/prompt-templates", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: newPromptTitle.trim(),
+                    category: "general",
+                    prompt_text: system,
+                }),
+            });
+            
+            if (!res.ok) throw new Error("Prompt kaydedilemedi");
+            
+            const newPrompt = await res.json();
+            setSavedPrompts((prev) => [newPrompt, ...prev]);
+            setNewPromptTitle("");
+            setShowSavePrompt(false);
+        } catch (err) {
+            console.error("Prompt kaydetme hatası:", err);
+            alert("Prompt kaydedilemedi");
+        }
     };
 
-    const handleDeletePrompt = (id: string) => {
-        setSavedPrompts((prev) => prev.filter((p) => p.id !== id));
+    const handleDeletePrompt = async (id: string) => {
+        if (!confirm("Bu promptu silmek istediğinize emin misiniz?")) return;
+        
+        try {
+            const res = await fetch(`/api/admin/prompt-templates/${id}`, {
+                method: "DELETE",
+            });
+            
+            if (!res.ok) throw new Error("Prompt silinemedi");
+            
+            setSavedPrompts((prev) => prev.filter((p) => p.id !== id));
+        } catch (err) {
+            console.error("Prompt silme hatası:", err);
+            alert("Prompt silinemedi");
+        }
     };
 
     const handleLoadPrompt = (prompt: SavedPrompt) => {
-        setSystem(prompt.content);
+        setSystem(prompt.prompt_text);
     };
 
     const handleStartEdit = (prompt: SavedPrompt) => {
         setEditingPrompt(prompt);
-        setEditTitle(prompt.title);
-        setEditContent(prompt.content);
+        setEditTitle(prompt.name);
+        setEditContent(prompt.prompt_text);
     };
 
-    const handleSaveEdit = () => {
+    const handleSaveEdit = async () => {
         if (!editingPrompt || !editTitle.trim()) return;
         
-        setSavedPrompts((prev) =>
-            prev.map((p) =>
-                p.id === editingPrompt.id
-                    ? { ...p, title: editTitle.trim(), content: editContent }
-                    : p
-            )
-        );
-        setEditingPrompt(null);
-        setEditTitle("");
-        setEditContent("");
+        try {
+            const res = await fetch(`/api/admin/prompt-templates/${editingPrompt.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: editTitle.trim(),
+                    prompt_text: editContent,
+                }),
+            });
+            
+            if (!res.ok) throw new Error("Prompt güncellenemedi");
+            
+            const updatedPrompt = await res.json();
+            setSavedPrompts((prev) =>
+                prev.map((p) => p.id === editingPrompt.id ? updatedPrompt : p)
+            );
+            setEditingPrompt(null);
+            setEditTitle("");
+            setEditContent("");
+        } catch (err) {
+            console.error("Prompt güncelleme hatası:", err);
+            alert("Prompt güncellenemedi");
+        }
     };
 
     const handleCancelEdit = () => {
@@ -552,7 +602,7 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                                     >
                                         <Code2 size={12} className="text-[var(--color-text-muted)]" />
                                         <span className="flex-1 text-[12px] font-medium text-[var(--color-text-primary)] truncate">
-                                            {prompt.title}
+                                            {prompt.name}
                                         </span>
                                         <button
                                             onClick={(e) => {
@@ -567,9 +617,7 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (confirm(`"${prompt.title}" prompt'unu silmek istediğinize emin misiniz?`)) {
-                                                    handleDeletePrompt(prompt.id);
-                                                }
+                                                handleDeletePrompt(prompt.id);
                                             }}
                                             className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
                                             title="Sil"

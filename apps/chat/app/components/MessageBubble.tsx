@@ -457,7 +457,7 @@ export default function MessageBubble({
             {/* Bubble */}
             <div className={`max-w-[80%] md:max-w-[68%] flex flex-col ${isRight ? "items-end" : "items-start"}`}>
                 <div
-                    className={`px-4 py-2.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap shadow-sm ${config.bubbleClass}`}
+                    className={`px-5 py-3.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap shadow-sm ${config.bubbleClass}`}
                     style={{ borderRadius: config.borderRadius }}
                 >
                     {message.content}

@@ -97,7 +97,15 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [settings, setSettings] = useState<TenantAiSettings | null>(null);
+    const [originalSettings, setOriginalSettings] = useState<TenantAiSettings | null>(null);
     const [registryModels, setRegistryModels] = useState<RegistryModel[]>([]);
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+    // Detect unsaved changes
+    const hasUnsavedChanges = useMemo(() => {
+        if (!settings || !originalSettings) return false;
+        return JSON.stringify(settings) !== JSON.stringify(originalSettings);
+    }, [settings, originalSettings]);;
 
     const selectedProviderStrategy = useMemo<ProviderStrategyKey>(() => {
         if (!settings) return "groq_first";
@@ -127,9 +135,22 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
     };
 
     const closePanel = () => {
+        if (hasUnsavedChanges) {
+            setShowCloseConfirm(true);
+            return;
+        }
         setOpen(false);
         setError(null);
         setSuccess(null);
+    };
+
+    const forceClosePanel = () => {
+        setShowCloseConfirm(false);
+        setOpen(false);
+        setError(null);
+        setSuccess(null);
+        // Reset to original settings
+        setSettings(originalSettings);
     };
 
     const loadSettings = async () => {
@@ -149,6 +170,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
             }
             if (!response.ok) throw new Error(payload?.error || "AI ayarları alınamadı.");
             setSettings(payload);
+            setOriginalSettings(payload);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Beklenmeyen hata.");
         } finally {
@@ -173,6 +195,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
             }
             if (!response.ok) throw new Error(payload?.error || "AI ayarları kaydedilemedi.");
             setSettings(payload);
+            setOriginalSettings(payload); // Update original after successful save
             setSuccess("Ayarlar başarıyla kaydedildi.");
             setTimeout(() => setSuccess(null), 3000);
         } catch (err) {
@@ -447,7 +470,10 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
 
                         {/* Modal Footer */}
                         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between flex-shrink-0 bg-[var(--color-surface-hover)]">
-                            <div className="text-[12px]">
+                            <div className="text-[12px] flex items-center gap-2">
+                                {hasUnsavedChanges && !error && !success && (
+                                    <span className="text-amber-400 font-medium">• Kaydedilmemiş değişiklikler var</span>
+                                )}
                                 {error && <span className="text-red-400 font-medium">{error}</span>}
                                 {success && <span className="text-[var(--color-brand-dim)] font-semibold">{success}</span>}
                             </div>
@@ -468,6 +494,40 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                 >
                                     {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
                                     {saving ? "Kaydediliyor..." : "Kaydet"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Unsaved Changes Confirmation Dialog */}
+            {showCloseConfirm && (
+                <div className="modal-overlay animate-fade-in" style={{ zIndex: 110 }} onClick={() => setShowCloseConfirm(false)}>
+                    <div 
+                        className="bg-[var(--color-surface-pure)] rounded-2xl border border-[var(--color-border)] shadow-2xl max-w-[380px] w-full mx-4 animate-scale-up"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-6 text-center">
+                            <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
+                                <X size={24} className="text-amber-400" />
+                            </div>
+                            <h3 className="text-[16px] font-bold text-[var(--color-text-primary)] mb-2">Kaydedilmemiş Değişiklikler</h3>
+                            <p className="text-[13px] text-[var(--color-text-muted)] mb-6">
+                                Yaptığınız değişiklikler kaydedilmedi. Çıkmak istediğinize emin misiniz?
+                            </p>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={() => setShowCloseConfirm(false)}
+                                    className="btn-secondary flex-1 py-3"
+                                >
+                                    İptal
+                                </button>
+                                <button 
+                                    onClick={forceClosePanel}
+                                    className="btn-primary flex-1 py-3 !bg-red-500 hover:!bg-red-600"
+                                >
+                                    Kaydetmeden Çık
                                 </button>
                             </div>
                         </div>
