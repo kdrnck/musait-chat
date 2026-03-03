@@ -10,15 +10,15 @@ export interface AiModelPreset {
 
 export const AI_MODEL_PRESETS: Record<AiModelProfile, AiModelPreset> = {
   cheap: {
-    label: "Ucuz Default (DeepSeek + DeepInfra)",
+    label: "Ucuz Default (DeepSeek via DeepInfra)",
     model: "deepseek/deepseek-chat-v3-0324",
-    providerPriority: ["deepinfra", "groq"],
+    providerPriority: ["deepinfra"],
     allowFallbacks: true,
   },
   fast: {
-    label: "Hızlı Default (DeepSeek + Groq)",
+    label: "Hızlı Default (DeepSeek via DeepInfra)",
     model: "deepseek/deepseek-chat-v3-0324",
-    providerPriority: ["groq", "deepinfra"],
+    providerPriority: ["deepinfra"],
     allowFallbacks: true,
   },
   premium: {
@@ -88,7 +88,12 @@ export interface ResolvedAiSettings {
   promptText: string;
   outboundNumberMode: OutboundNumberMode;
   bookingFlowEnabled: boolean;
+  maxIterations: number;
+  llmTimeoutMs: number;
 }
+
+export const DEFAULT_MAX_ITERATIONS = 3;
+export const DEFAULT_LLM_TIMEOUT_MS = 8000;
 
 export function resolveAiSettingsFromIntegrationKeys(
   integrationKeys: unknown,
@@ -131,6 +136,9 @@ export function resolveAiSettingsFromIntegrationKeys(
   // Booking flow disabled by default - LLM handles conversation flow
   const bookingFlowEnabled = asBoolean(keys.ai_booking_flow_enabled) ?? false;
 
+  const maxIterations = asPositiveInt(keys.ai_max_iterations, DEFAULT_MAX_ITERATIONS, 1, 10);
+  const llmTimeoutMs = asPositiveInt(keys.ai_llm_timeout_ms, DEFAULT_LLM_TIMEOUT_MS, 3000, 30000);
+
   return {
     modelProfile,
     model,
@@ -139,6 +147,8 @@ export function resolveAiSettingsFromIntegrationKeys(
     promptText,
     outboundNumberMode,
     bookingFlowEnabled,
+    maxIterations,
+    llmTimeoutMs,
   };
 }
 
@@ -161,6 +171,19 @@ function asBoolean(value: unknown): boolean | null {
     if (normalized === "false") return false;
   }
   return null;
+}
+
+function asPositiveInt(value: unknown, defaultVal: number, min: number, max: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(min, Math.min(max, Math.round(value)));
+  }
+  if (typeof value === "string") {
+    const parsed = parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return Math.max(min, Math.min(max, parsed));
+    }
+  }
+  return defaultVal;
 }
 
 function parseProviderPriority(value: unknown): string[] | null {

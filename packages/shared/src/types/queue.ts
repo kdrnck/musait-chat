@@ -27,6 +27,10 @@ export interface AgentJob {
   wamid?: string;
   /** Tenant ID (null if unbound/master number) */
   tenantId: string | null;
+  /** Whether the inbound number is a master number (avoids duplicate Convex query) */
+  isMasterNumber?: boolean;
+  /** Timestamp when webhook received the message (for end-to-end latency) */
+  webhookReceivedAt?: number;
   /** Timestamp when job was created */
   createdAt: number;
   /** Current retry count */

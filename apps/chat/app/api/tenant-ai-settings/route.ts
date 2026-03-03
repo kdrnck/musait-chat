@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import {
   AI_MODEL_PRESETS,
   DEFAULT_AI_MODEL_PROFILE,
+  DEFAULT_MAX_ITERATIONS,
+  DEFAULT_LLM_TIMEOUT_MS,
   resolveAiSettingsFromIntegrationKeys,
   type AiModelProfile,
   type OutboundNumberMode,
@@ -19,6 +21,8 @@ interface TenantAiResponse {
   promptText: string;
   outboundNumberMode: OutboundNumberMode;
   bookingFlowEnabled: boolean;
+  maxIterations: number;
+  llmTimeoutMs: number;
   wabaPhoneNumberId: string;
   wabaAccessToken: string;
   wabaBusinessAccountId: string;
@@ -111,6 +115,8 @@ interface UpdateBody {
   promptText?: string;
   outboundNumberMode?: OutboundNumberMode;
   bookingFlowEnabled?: boolean;
+  maxIterations?: number;
+  llmTimeoutMs?: number;
   wabaPhoneNumberId?: string;
   wabaAccessToken?: string;
   wabaBusinessAccountId?: string;
@@ -173,6 +179,8 @@ export async function PUT(request: NextRequest) {
   const promptText = normalizePrompt(body.promptText);
   const outboundNumberMode = normalizeOutboundMode(body.outboundNumberMode);
   const bookingFlowEnabled = typeof body.bookingFlowEnabled === "boolean" ? body.bookingFlowEnabled : false;
+  const maxIterations = normalizeInt(body.maxIterations, DEFAULT_MAX_ITERATIONS, 1, 10);
+  const llmTimeoutMs = normalizeInt(body.llmTimeoutMs, DEFAULT_LLM_TIMEOUT_MS, 3000, 30000);
 
   if (!promptText) {
     return NextResponse.json(
@@ -216,6 +224,8 @@ export async function PUT(request: NextRequest) {
     ai_system_prompt_text: promptText,
     ai_outbound_number_mode: outboundNumberMode,
     ai_booking_flow_enabled: String(bookingFlowEnabled),
+    ai_max_iterations: String(maxIterations),
+    ai_llm_timeout_ms: String(llmTimeoutMs),
   } as Record<string, unknown>;
 
   const payload = {
@@ -334,6 +344,8 @@ function buildResponse(args: {
     ),
     outboundNumberMode: resolved.outboundNumberMode,
     bookingFlowEnabled: resolved.bookingFlowEnabled,
+    maxIterations: resolved.maxIterations,
+    llmTimeoutMs: resolved.llmTimeoutMs,
     wabaPhoneNumberId: args.canEdit ? wabaPhoneNumberId : "",
     wabaAccessToken: args.canEdit ? wabaAccessToken : "",
     wabaBusinessAccountId: args.canEdit ? wabaBusinessAccountId : "",
@@ -379,6 +391,13 @@ function normalizeProviderPriority(value: unknown): string[] {
     .filter((item) => /^[a-z0-9_\-\/]{2,64}$/i.test(item));
 
   return providers.slice(0, 4);
+}
+
+function normalizeInt(value: unknown, defaultVal: number, min: number, max: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(min, Math.min(max, Math.round(value)));
+  }
+  return defaultVal;
 }
 
 function normalizeNullable(value: unknown): string | null {

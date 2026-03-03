@@ -375,6 +375,8 @@ async function handleAgentMessage(params: {
     tenantId: conversation.tenantId,
     createdAt: Date.now(),
     retryCount: 0,
+    webhookReceivedAt: Date.now(),
+    isMasterNumber: Boolean(numberMapping.isMasterNumber),
   });
 
   console.log(

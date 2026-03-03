@@ -23,6 +23,8 @@ interface TenantAiSettings {
     promptText: string;
     outboundNumberMode: OutboundNumberMode;
     bookingFlowEnabled: boolean;
+    maxIterations: number;
+    llmTimeoutMs: number;
     wabaPhoneNumberId: string;
     wabaAccessToken: string;
     wabaBusinessAccountId: string;
@@ -335,7 +337,11 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                     onChange={(e) => {
                                                         const strat = e.target.value as ProviderStrategyKey;
                                                         if (strat !== "custom") {
-                                                            setSettings({ ...settings, providerPriority: PROVIDER_STRATEGIES[strat].providers });
+                                                            setSettings({
+                                                                ...settings,
+                                                                providerPriority: PROVIDER_STRATEGIES[strat].providers,
+                                                                allowFallbacks: false,
+                                                            });
                                                         }
                                                     }}
                                                     disabled={!canEdit}
@@ -354,24 +360,55 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                             .split(",")
                                                             .map((p) => p.trim())
                                                             .filter(Boolean);
-                                                        setSettings({ ...settings, providerPriority: providers });
+                                                        setSettings({
+                                                            ...settings,
+                                                            providerPriority: providers,
+                                                            // When user explicitly types providers, default to strict mode
+                                                            allowFallbacks: providers.length === 0 ? true : settings.allowFallbacks,
+                                                        });
                                                     }}
                                                     disabled={!canEdit}
                                                     className="form-input font-mono text-[12px]"
                                                     placeholder="groq, deepinfra, together (boş = OpenRouter varsayılan)"
                                                 />
+                                                {settings.providerPriority.length > 0 && (
+                                                    <div className={`flex items-center gap-1.5 mt-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium ${
+                                                        settings.allowFallbacks
+                                                            ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                                                            : "bg-green-500/10 text-green-400 border border-green-500/20"
+                                                    }`}>
+                                                        <span>{settings.allowFallbacks ? "⚠️" : "🔒"}</span>
+                                                        <span>
+                                                            {settings.allowFallbacks
+                                                                ? `Sadece tercih: ${settings.providerPriority.join(", ")} öncelikli ama başka providerlar da kullanılabilir`
+                                                                : `Zorunlu: Sadece ${settings.providerPriority.join(", ")} kullanılacak`}
+                                                        </span>
+                                                    </div>
+                                                )}
                                                 <p className="text-[10px] text-[var(--color-text-muted)]">
-                                                    Virgülle ayır · Örnek: <span className="font-mono">groq, deepinfra</span> veya <span className="font-mono">deepinfra/turbo</span> · Boş bırakırsan OpenRouter otomatik seçer
+                                                    Virgülle ayır · Örnek: <span className="font-mono">groq, deepinfra</span> · Boş bırakırsan OpenRouter otomatik seçer
                                                 </p>
                                             </div>
                                         </div>
 
                                         {/* Toggles */}
                                         <div className="mt-4 space-y-3">
-                                            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
+                                            <div className={`flex items-center justify-between p-3.5 rounded-xl border ${
+                                                settings.providerPriority.length > 0 && settings.allowFallbacks
+                                                    ? "bg-yellow-500/5 border-yellow-500/20"
+                                                    : "bg-[var(--color-surface-hover)] border-[var(--color-border)]"
+                                            }`}>
                                                 <div>
-                                                    <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">Yedek Sağlayıcı (Fallback)</p>
-                                                    <p className="text-[11px] text-[var(--color-text-muted)]">Birincil başarısız olunca yedek devreye girer</p>
+                                                    <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+                                                        Diğer Sağlayıcılara İzin Ver
+                                                    </p>
+                                                    <p className="text-[11px] text-[var(--color-text-muted)]">
+                                                        {settings.providerPriority.length > 0
+                                                            ? settings.allowFallbacks
+                                                                ? "AÇIK: Seçtiklerin başarısız olursa başka providerlar da denenebilir"
+                                                                : "KAPALI: Sadece seçtiğin providerlar kullanılacak (önerilen)"
+                                                            : "Provider listesi boş — OpenRouter otomatik seçiyor"}
+                                                    </p>
                                                 </div>
                                                 <Toggle
                                                     checked={settings.allowFallbacks}
@@ -390,6 +427,57 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                     onChange={(v) => setSettings({ ...settings, bookingFlowEnabled: v })}
                                                     disabled={!canEdit}
                                                 />
+                                            </div>
+                                        </div>
+
+                                        {/* Performance Tuning */}
+                                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                                                    Maks Tool İterasyon
+                                                </label>
+                                                <div className="flex items-center gap-3">
+                                                    <input
+                                                        type="range"
+                                                        min={1}
+                                                        max={10}
+                                                        step={1}
+                                                        value={settings.maxIterations ?? 3}
+                                                        onChange={(e) => setSettings({ ...settings, maxIterations: parseInt(e.target.value, 10) })}
+                                                        disabled={!canEdit}
+                                                        className="flex-1 accent-[var(--color-brand)]"
+                                                    />
+                                                    <span className="text-[14px] font-bold text-[var(--color-text-primary)] w-8 text-center tabular-nums">
+                                                        {settings.maxIterations ?? 3}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-[var(--color-text-muted)]">
+                                                    Tool çağrısı sonrası LLM tekrar çağırma limiti (önerilen: 3)
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                                                    LLM Zaman Aşımı
+                                                </label>
+                                                <div className="flex items-center gap-3">
+                                                    <input
+                                                        type="range"
+                                                        min={3000}
+                                                        max={30000}
+                                                        step={1000}
+                                                        value={settings.llmTimeoutMs ?? 8000}
+                                                        onChange={(e) => setSettings({ ...settings, llmTimeoutMs: parseInt(e.target.value, 10) })}
+                                                        disabled={!canEdit}
+                                                        className="flex-1 accent-[var(--color-brand)]"
+                                                    />
+                                                    <span className="text-[14px] font-bold text-[var(--color-text-primary)] w-12 text-right tabular-nums">
+                                                        {((settings.llmTimeoutMs ?? 8000) / 1000).toFixed(0)}s
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-[var(--color-text-muted)]">
+                                                    Her LLM isteği için maks bekleme süresi (önerilen: 8s)
+                                                </p>
                                             </div>
                                         </div>
                                     </section>

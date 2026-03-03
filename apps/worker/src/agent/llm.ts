@@ -8,6 +8,7 @@ import {
 } from "./tenant-ai-settings.js";
 import { ADMIN_MODE } from "./master-prompts.js";
 import { listServices, listStaff, getBusinessInfo } from "./tools/list-business-data.js";
+import type { PerfTimer } from "../lib/perf-timer.js";
 
 // New modular imports
 import { callOpenRouter, type OpenRouterResponse } from "./openrouter-client.js";
@@ -43,6 +44,10 @@ export interface AgentDebugInfo {
   totalTokens?: number;
   thinkingContent?: string;
   toolCallTrace?: string;
+  /** Step-level timing breakdown for performance analysis */
+  timingBreakdown?: import("../lib/perf-timer.js").TimingBreakdown;
+  /** Correlation ID for cross-referencing logs */
+  correlationId?: string;
 }
 
 export interface AgentLoopResult {
@@ -62,9 +67,10 @@ export interface AgentLoopResult {
 export async function runAgentLoop(
   convex: ConvexHttpClient,
   job: AgentJob,
-  conversation: Conversation
+  conversation: Conversation,
+  opts?: { timer?: PerfTimer; customerProfile?: any }
 ): Promise<AgentLoopResult> {
-  const MAX_ITERATIONS = 5;
+  const timer = opts?.timer;
 
   // Check for admin mode activation
   const messageNormalized = (job.messageContent || "").trim().toLowerCase();
@@ -80,9 +86,13 @@ export async function runAgentLoop(
   const useReasoning = !!(conversation.adminMode && isSuperUltraThink);
 
   // 1. Build context
-  const context = await buildContext(convex, job, conversation);
+  timer?.start("contextBuild");
+  const context = await buildContext(convex, job, conversation, opts?.customerProfile);
+  timer?.end("contextBuild");
+
   const messages = context.messages;
   const tenantAiSettings = context.tenantAiSettings;
+  const MAX_ITERATIONS = tenantAiSettings.maxIterations || 3;
 
   // Context-aware tool filtering: unbound conversations only need routing tools
   const toolDefs = !conversation.tenantId && !conversation.adminMode
@@ -105,6 +115,7 @@ export async function runAgentLoop(
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
+    timer?.start("llmCall");
     const response = await callOpenRouter(messages, {
       useReasoning: i === 0 && useReasoning,
       tenantAiSettings,
@@ -112,6 +123,7 @@ export async function runAgentLoop(
       isSuperThink: isSuperUltraThink,
       toolDefinitions: toolDefs,
     });
+    timer?.end("llmCall");
     lastResponse = response;
 
     // Accumulate token counts across all iterations
@@ -136,6 +148,7 @@ export async function runAgentLoop(
       // Execute all tool calls in parallel for speed
       console.log(`🔧 Executing ${response.tool_calls.length} tool call(s) in parallel`);
 
+      timer?.start("toolExecution");
       const toolResults = await Promise.all(
         response.tool_calls.map(async (toolCall) => {
           // If tool arguments failed to parse, return error to LLM instead of executing with empty args
@@ -161,6 +174,7 @@ export async function runAgentLoop(
           return { toolCall, result };
         })
       );
+      timer?.end("toolExecution");
 
       // Propagate bind_tenant side-effect
       for (const { toolCall, result } of toolResults) {
@@ -243,31 +257,40 @@ export async function runAgentLoop(
 async function buildContext(
   convex: ConvexHttpClient,
   job: AgentJob,
-  conversation: Conversation
+  conversation: Conversation,
+  preloadedProfile?: any
 ): Promise<{ messages: LLMMessage[]; tenantAiSettings: TenantAiSettings }> {
   const messages: LLMMessage[] = [];
 
-  // ========== STEP 1: FETCH SETTINGS ==========
-  const globalSettingsResult = await fetchGlobalSettings();
-  const globalPrompt = globalSettingsResult?.globalPromptText ?? null;
-  let tenantAiSettings = resolveTenantAiSettings(null, globalPrompt);
-  let dashboardPrompt: string | null = null;
-  let tenantContext: Awaited<ReturnType<typeof fetchTenantContext>> = null;
+  // ========== STEP 1: FETCH SETTINGS (parallelized) ==========
+  const [globalSettingsResult, tenantContext] = await Promise.all([
+    fetchGlobalSettings(),
+    conversation.tenantId ? fetchTenantContext(conversation.tenantId) : Promise.resolve(null),
+  ]);
 
-  if (conversation.tenantId) {
-    tenantContext = await fetchTenantContext(conversation.tenantId);
-    tenantAiSettings = resolveTenantAiSettings(tenantContext?.integrationKeys, globalPrompt);
+  const globalPrompt = globalSettingsResult?.globalPromptText ?? null;
+  let tenantAiSettings = resolveTenantAiSettings(
+    tenantContext?.integrationKeys ?? null,
+    globalPrompt
+  );
+  let dashboardPrompt: string | null = null;
+  if (tenantContext) {
     dashboardPrompt = tenantAiSettings.systemPromptText;
   }
 
-  // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT ==========
+  // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT (parallelized) ==========
   let servicesListText = "";
   let staffListText = "";
   let businessInfoText = "";
 
   if (conversation.tenantId) {
     try {
-      const servicesResult = await listServices({}, { tenantId: conversation.tenantId });
+      const [servicesResult, staffResult, businessResult] = await Promise.all([
+        listServices({}, { tenantId: conversation.tenantId }),
+        listStaff({}, { tenantId: conversation.tenantId }),
+        getBusinessInfo({}, { tenantId: conversation.tenantId }),
+      ]);
+
       if (servicesResult && !(servicesResult as Record<string, unknown>).error) {
         const services = (servicesResult as any).services || [];
         servicesListText = services
@@ -278,7 +301,6 @@ async function buildContext(
           .join("\n\n");
       }
 
-      const staffResult = await listStaff({}, { tenantId: conversation.tenantId });
       if (staffResult && !(staffResult as Record<string, unknown>).error) {
         const staff = (staffResult as any).staff || [];
         staffListText = staff
@@ -286,7 +308,6 @@ async function buildContext(
           .join("\n");
       }
 
-      const businessResult = await getBusinessInfo({}, { tenantId: conversation.tenantId });
       if (businessResult && !(businessResult as Record<string, unknown>).error) {
         const tenant = (businessResult as any).tenant;
         const infoParts: string[] = [
@@ -339,7 +360,8 @@ async function buildContext(
       let customerProfileText = "";
       let customerName = "";
       try {
-        const profile = await convex.query(api.customerProfiles.getByPhone, {
+        // Use pre-fetched profile from identity sync to avoid duplicate query
+        const profile = preloadedProfile ?? await convex.query(api.customerProfiles.getByPhone, {
           tenantId: conversation.tenantId,
           customerPhone: job.customerPhone,
         });

@@ -29,10 +29,16 @@ export async function routeMessage(
   job: AgentJob,
   conversation: Conversation
 ): Promise<RoutingResult> {
-  const numberMapping = await convex.query(api.whatsappNumbers.getByPhoneNumberId, {
-    phoneNumberId: job.phoneNumberId,
-  });
-  const isMasterNumber = Boolean(numberMapping?.isMasterNumber);
+  // Use pre-computed isMasterNumber from webhook (fallback to Convex query for backward compat)
+  let isMasterNumber: boolean;
+  if (job.isMasterNumber !== undefined) {
+    isMasterNumber = job.isMasterNumber;
+  } else {
+    const numberMapping = await convex.query(api.whatsappNumbers.getByPhoneNumberId, {
+      phoneNumberId: job.phoneNumberId,
+    });
+    isMasterNumber = Boolean(numberMapping?.isMasterNumber);
+  }
 
   // 1) Bound conversation path
   if (conversation.tenantId !== null) {

@@ -5,7 +5,7 @@ export const DEFAULT_QUEUE_CONFIG: QueueConfig = {
   concurrency: 3, // 3 parallel workers for throughput
   maxRetries: 3,
   retryBaseDelay: 1000, // 1s base, exponential backoff
-  jobTimeout: 30_000, // 30s per job
+  jobTimeout: 45_000, // 45s per job — aligned with 8s LLM timeout + retry + overhead
 };
 
 // WhatsApp config

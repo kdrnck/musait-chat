@@ -1,9 +1,10 @@
 import { Router, type Request, type Response } from "express";
 import type { InMemoryQueue } from "../queue/in-memory-queue.js";
+import { latencyTracker } from "../lib/latency-tracker.js";
 
 /**
  * Health check endpoint for Railway.
- * Returns queue status and uptime info.
+ * Returns queue status, uptime info, and latency statistics.
  */
 export function createHealthRouter(
   queue: InMemoryQueue
@@ -19,6 +20,7 @@ export function createHealthRouter(
         size: queue.size(),
         processing: queue.processingCount,
       },
+      latency: latencyTracker.getStats(),
       timestamp: new Date().toISOString(),
     });
   });

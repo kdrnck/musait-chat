@@ -1,5 +1,24 @@
 import { SUPABASE_CONFIG } from "../../config.js";
 
+// --- Business data cache (TTL 120s) ---
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+const BUSINESS_CACHE_TTL_MS = 120_000; // 120 seconds
+const businessDataCache = new Map<string, CacheEntry<unknown>>();
+
+function getCached<T>(key: string): T | undefined {
+  const entry = businessDataCache.get(key);
+  if (entry && Date.now() < entry.expiresAt) return entry.data as T;
+  if (entry) businessDataCache.delete(key);
+  return undefined;
+}
+
+function setCache(key: string, data: unknown): void {
+  businessDataCache.set(key, { data, expiresAt: Date.now() + BUSINESS_CACHE_TTL_MS });
+}
+
 interface ToolContext {
   tenantId: string;
 }
@@ -26,6 +45,12 @@ export async function listServices(
 ): Promise<unknown> {
   const includeInactive = Boolean(args.include_inactive);
   const query = typeof args.query === "string" ? args.query.trim() : "";
+
+  // Cache key includes inactive flag since it changes the result set
+  const cacheKey = `${ctx.tenantId}:services:${includeInactive}`;
+  const cached = getCached<unknown>(cacheKey);
+  // Only use cache for default (no query filter) requests
+  if (cached && !query) return cached;
 
   const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/services`);
   url.searchParams.set("tenant_id", `eq.${ctx.tenantId}`);
@@ -80,10 +105,14 @@ export async function listServices(
       return normalizeText(svc.name).includes(normalized);
     });
 
-  return {
+  const result = {
     total: services.length,
     services,
   };
+
+  // Cache the full (unfiltered) result
+  if (!query) setCache(cacheKey, result);
+  return result;
 }
 
 export async function listStaff(
@@ -98,6 +127,10 @@ export async function listStaff(
   if (serviceId) {
     return listStaffByService(serviceId, query, includeInactive, ctx.tenantId);
   }
+
+  const staffCacheKey = `${ctx.tenantId}:staff:${includeInactive}`;
+  const cachedStaff = getCached<unknown>(staffCacheKey);
+  if (cachedStaff && !query) return cachedStaff;
 
   const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/staff`);
   url.searchParams.set("tenant_id", `eq.${ctx.tenantId}`);
@@ -130,16 +163,23 @@ export async function listStaff(
       is_active: s.is_active !== false,
     }));
 
-  return {
+  const staffResult = {
     total: staff.length,
     staff,
   };
+
+  if (!query) setCache(staffCacheKey, staffResult);
+  return staffResult;
 }
 
 export async function getBusinessInfo(
   _args: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<unknown> {
+  const bizCacheKey = `${ctx.tenantId}:business`;
+  const cachedBiz = getCached<unknown>(bizCacheKey);
+  if (cachedBiz) return cachedBiz;
+
   const url = new URL(`${SUPABASE_CONFIG.url}/rest/v1/tenants`);
   url.searchParams.set("id", `eq.${ctx.tenantId}`);
   url.searchParams.set(
@@ -177,7 +217,7 @@ export async function getBusinessInfo(
     return { error: "İşletme bulunamadı." };
   }
 
-  return {
+  const bizResult = {
     tenant: {
       id: tenant.id,
       name: tenant.name,
@@ -192,6 +232,9 @@ export async function getBusinessInfo(
         : null,
     },
   };
+
+  setCache(bizCacheKey, bizResult);
+  return bizResult;
 }
 
 async function listStaffByService(

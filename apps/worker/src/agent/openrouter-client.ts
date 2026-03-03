@@ -4,7 +4,7 @@ import { getToolDefinitions } from "./tools/index.js";
 import type { TenantAiSettings } from "./tenant-ai-settings.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const REQUEST_TIMEOUT_MS = 15_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
 
 const OPENROUTER_HEADERS = {
   "Content-Type": "application/json",
@@ -97,9 +97,12 @@ export async function callOpenRouter(
     };
   }
 
+  // Use tenant-configured timeout or fall back to default
+  const timeoutMs = options.tenantAiSettings.llmTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+
   // Attempt 1: with configured provider order
   const controller1 = new AbortController();
-  const timeout1 = setTimeout(() => controller1.abort(), REQUEST_TIMEOUT_MS);
+  const timeout1 = setTimeout(() => controller1.abort(), timeoutMs);
 
   let response: Response;
   try {
@@ -111,14 +114,14 @@ export async function callOpenRouter(
     });
   } catch (err) {
     if ((err as Error).name === "AbortError") {
-      throw new Error(`OpenRouter request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+      throw new Error(`OpenRouter request timed out after ${timeoutMs}ms`);
     }
     throw err;
   } finally {
     clearTimeout(timeout1);
   }
 
-  // Attempt 2: transient/provider error → retry with explicit tool-capable providers
+  // Attempt 2: transient/provider error → retry with relaxed fallback strategy
   if (!response.ok) {
     const errorBody = await response.text();
     const isTransientOrProvider =
@@ -134,18 +137,28 @@ export async function callOpenRouter(
 
     if (isTransientOrProvider) {
       console.warn(
-        `⚠️ Provider error (${response.status}), retrying with explicit tool-capable providers...`
+        `⚠️ Provider error (${response.status}), retrying with relaxed fallback...`
       );
+
+      // Retry strategy: keep user's providers but allow fallbacks.
+      // If user already had allow_fallbacks=true and it still failed,
+      // broaden the provider order with known tool-capable providers.
+      const userProviders = providerOrder.length > 0 ? providerOrder : [];
+      const broadenedOrder = [
+        ...userProviders,
+        ...["deepinfra", "together", "fireworks"].filter(p => !userProviders.includes(p)),
+      ];
+
       const fallbackPayload = {
         ...payload,
         provider: {
-          order: ["deepinfra", "groq", "together"],
-          allow_fallbacks: false,
+          order: broadenedOrder,
+          allow_fallbacks: true,
         },
       };
 
       const controller2 = new AbortController();
-      const timeout2 = setTimeout(() => controller2.abort(), REQUEST_TIMEOUT_MS);
+      const timeout2 = setTimeout(() => controller2.abort(), timeoutMs);
 
       try {
         response = await fetch(OPENROUTER_URL, {
@@ -156,7 +169,7 @@ export async function callOpenRouter(
         });
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          throw new Error(`OpenRouter retry timed out after ${REQUEST_TIMEOUT_MS}ms`);
+          throw new Error(`OpenRouter retry timed out after ${timeoutMs}ms`);
         }
         throw err;
       } finally {
