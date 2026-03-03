@@ -25,6 +25,12 @@ export interface OpenRouterResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    /** Tokens served from cache (~75% cheaper) */
+    cache_read_tokens?: number;
+    /** Tokens written to cache this request */
+    cache_creation_tokens?: number;
+    /** Alias used by some providers */
+    prompt_tokens_cached?: number;
   };
   model?: string;
 }
@@ -49,24 +55,61 @@ function makeHeaders(): Record<string, string> {
   };
 }
 
+/**
+ * Build the message array for the OpenRouter API.
+ *
+ * Prompt caching: mark the system message with cache_control: ephemeral.
+ * Providers that support it (DeepSeek, Anthropic, Google) will cache the
+ * prefix up to that point and serve it at ~75% fewer tokens on repeated calls
+ * (same tenant = same system prompt = cache hit every time).
+ *
+ * Silently ignored on providers that don't support it (Groq etc.).
+ */
+function buildMessages(messages: LLMMessage[]): unknown[] {
+  return messages.map((m) => {
+    const base: Record<string, unknown> = {
+      role: m.role,
+      content: m.content,
+    };
+
+    if (m.tool_calls) base.tool_calls = m.tool_calls;
+    if (m.tool_call_id) base.tool_call_id = m.tool_call_id;
+    if (m.name) base.name = m.name;
+
+    // Apply cache_control to the system message — biggest, most static content.
+    // Always safe to include; providers apply it only if the prefix meets their
+    // minimum token threshold (DeepSeek >= 1024, Anthropic >= 2048).
+    if (
+      m.role === "system" &&
+      typeof m.content === "string" &&
+      m.content.length > 200
+    ) {
+      base.content = [
+        {
+          type: "text",
+          text: m.content,
+          cache_control: { type: "ephemeral" },
+        },
+      ];
+    }
+
+    return base;
+  });
+}
+
 export async function callOpenRouter(
   messages: LLMMessage[],
   options: CallOpenRouterOptions
 ): Promise<OpenRouterResponse> {
   const providerOrder = options.tenantAiSettings.providerPriority;
-  const tools = options.toolDefinitions !== undefined
-    ? options.toolDefinitions
-    : getToolDefinitions();
+  const tools =
+    options.toolDefinitions !== undefined
+      ? options.toolDefinitions
+      : getToolDefinitions();
 
   const payload: Record<string, unknown> = {
     model: options.tenantAiSettings.model,
-    messages: messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-      ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-      ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-      ...(m.name ? { name: m.name } : {}),
-    })),
+    messages: buildMessages(messages),
     temperature: LLM_CONFIG.temperature,
     max_tokens: LLM_CONFIG.maxTokens,
   };
@@ -98,7 +141,8 @@ export async function callOpenRouter(
   }
 
   // Use tenant-configured timeout or fall back to default
-  const timeoutMs = options.tenantAiSettings.llmTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+  const timeoutMs =
+    options.tenantAiSettings.llmTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
 
   // Attempt 1: with configured provider order
   const controller1 = new AbortController();
@@ -140,13 +184,12 @@ export async function callOpenRouter(
         `⚠️ Provider error (${response.status}), retrying with relaxed fallback...`
       );
 
-      // Retry strategy: keep user's providers but allow fallbacks.
-      // If user already had allow_fallbacks=true and it still failed,
-      // broaden the provider order with known tool-capable providers.
       const userProviders = providerOrder.length > 0 ? providerOrder : [];
       const broadenedOrder = [
         ...userProviders,
-        ...["deepinfra", "together", "fireworks"].filter(p => !userProviders.includes(p)),
+        ...["deepinfra", "together", "fireworks"].filter(
+          (p) => !userProviders.includes(p)
+        ),
       ];
 
       const fallbackPayload = {
@@ -178,7 +221,9 @@ export async function callOpenRouter(
 
       if (!response.ok) {
         const retryErrorBody = await response.text();
-        throw new Error(`OpenRouter API error (${response.status}): ${retryErrorBody}`);
+        throw new Error(
+          `OpenRouter API error (${response.status}): ${retryErrorBody}`
+        );
       }
     } else {
       // Non-transient error (400, 422 etc.) — don't retry
@@ -191,6 +236,27 @@ export async function callOpenRouter(
 
   if (!choice) {
     throw new Error("No response from OpenRouter");
+  }
+
+  // Log cache stats when provider returns them
+  if (data.usage) {
+    const cached =
+      data.usage.cache_read_tokens ??
+      data.usage.prompt_tokens_cached ??
+      0;
+    const created = data.usage.cache_creation_tokens ?? 0;
+    const total = data.usage.prompt_tokens ?? 0;
+
+    if (cached > 0 && total > 0) {
+      console.log(
+        `💾 Prompt cache HIT: ${cached}/${total} tokens from cache ` +
+          `(${Math.round((cached / total) * 100)}% hit rate)`
+      );
+    } else if (created > 0) {
+      console.log(
+        `💾 Prompt cache WRITE: ${created} tokens written to cache`
+      );
+    }
   }
 
   // Extract reasoning/thinking content
@@ -212,7 +278,9 @@ export async function callOpenRouter(
             ? JSON.parse(tc.function.arguments)
             : tc.function?.arguments ?? {};
       } catch (e) {
-        parseError = `Tool argument parse error for ${tc.function?.name}: ${e instanceof Error ? e.message : String(e)}`;
+        parseError = `Tool argument parse error for ${tc.function?.name}: ${
+          e instanceof Error ? e.message : String(e)
+        }`;
         console.warn(`⚠️ ${parseError}. Raw: ${tc.function?.arguments}`);
       }
       return {

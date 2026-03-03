@@ -77,13 +77,14 @@ Webhook → Convex persist → Queue.enqueue
 | 21 | `upsertPreferredTenant` fire-and-forget | `job-handler.ts` | ✅ |
 | 22 | CorrelationId ile tüm log'lar | `job-handler.ts` | ✅ |
 
-### Faz 2 — LLM Optimizasyonu (Gelecek)
+### Faz 2 — LLM Optimizasyonu ✅
 
-| # | Adım | Açıklama |
-|---|------|----------|
-| 23 | System prompt kısaltma | Token sayısını azaltarak TTFT düşür |
-| 24 | Streaming response | İlk token geldiğinde hemen yanıt başlat |
-| 25 | Prompt cache (OpenRouter) | Aynı system prompt tekrar gönderildiğinde cache hit |
+| # | Adım | Açıklama | Durum |
+|---|------|----------|-------|
+| 23 | System prompt kısaltma | Token sayısını azaltarak TTFT düşür — kullanıcı manuel yapacak | ⏸️ Ertelendi |
+| 24 | ~~Streaming response~~ | WhatsApp API tam mesaj gerektiriyor — streaming faydasız, iptal edildi | ❌ İptal |
+| 25 | Prompt cache (OpenRouter) | `cache_control: { type: "ephemeral" }` system message üzerine eklendi. DeepSeek/Anthropic/Google destekler. Cache hit'te ~30-50% TTFT kazancı, ~75% token maliyet düşüşü | ✅ |
+| 26 | Admin panel: Max iterations + LLM timeout | Tenant bazlı `ai_max_iterations` (1-10) ve `ai_llm_timeout_ms` (3-30s) slider | ✅ |
 
 ### Faz 3 — Altyapı (Gelecek)
 

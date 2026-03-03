@@ -42,6 +42,10 @@ export interface AgentDebugInfo {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  /** Tokens served from prompt cache (provider-reported) */
+  cacheReadTokens?: number;
+  /** Tokens written to prompt cache this request */
+  cacheCreationTokens?: number;
   thinkingContent?: string;
   toolCallTrace?: string;
   /** Step-level timing breakdown for performance analysis */
@@ -109,6 +113,8 @@ export async function runAgentLoop(
   let accPromptTokens = 0;
   let accCompletionTokens = 0;
   let accTotalTokens = 0;
+  let accCacheReadTokens = 0;
+  let accCacheCreationTokens = 0;
   const thinkingParts: string[] = [];
   const toolTraceLines: string[] = [];
   const toolCallsExecuted = new Set<string>();
@@ -130,6 +136,8 @@ export async function runAgentLoop(
     accPromptTokens += response.usage?.prompt_tokens ?? 0;
     accCompletionTokens += response.usage?.completion_tokens ?? 0;
     accTotalTokens += response.usage?.total_tokens ?? 0;
+    accCacheReadTokens += response.usage?.cache_read_tokens ?? response.usage?.prompt_tokens_cached ?? 0;
+    accCacheCreationTokens += response.usage?.cache_creation_tokens ?? 0;
 
     // Capture reasoning/thinking content
     if (response.thinking) {
@@ -240,6 +248,8 @@ export async function runAgentLoop(
       promptTokens: accPromptTokens || undefined,
       completionTokens: accCompletionTokens || undefined,
       totalTokens: accTotalTokens || undefined,
+      cacheReadTokens: accCacheReadTokens || undefined,
+      cacheCreationTokens: accCacheCreationTokens || undefined,
       thinkingContent: thinkingParts.length > 0 ? thinkingParts.join("\n\n---\n\n") : undefined,
       toolCallTrace: toolTraceLines.length > 0 ? toolTraceLines.join("\n\n") : undefined,
     };
