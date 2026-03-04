@@ -18,6 +18,9 @@ import {
     Brain,
     Wrench,
 } from "lucide-react";
+import ModelTiersPanel from "./ModelTiersPanel";
+
+type ModelTab = "registry" | "tiers";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 
@@ -209,6 +212,7 @@ function modelToForm(model: AiModel): ModelFormState {
 /* ─────────────────── Component ────────────────────────────── */
 
 export default function ModelRegistryPanel() {
+    const [activeTab, setActiveTab] = useState<ModelTab>("registry");
     const [models, setModels] = useState<AiModel[]>([]);
     const [tiers, setTiers] = useState<ModelTier[]>([]);
     const [loading, setLoading] = useState(true);
@@ -348,7 +352,35 @@ export default function ModelRegistryPanel() {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
+            {/* Tab Header */}
+            <div className="flex items-center gap-1 border-b border-[var(--color-border)] pb-0">
+                <button
+                    onClick={() => setActiveTab("registry")}
+                    className={`px-5 py-3 text-[14px] font-semibold border-b-2 transition-colors ${
+                        activeTab === "registry"
+                            ? "border-[var(--color-brand)] text-[var(--color-brand)]"
+                            : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                    }`}
+                >
+                    Model Registry
+                </button>
+                <button
+                    onClick={() => setActiveTab("tiers")}
+                    className={`px-5 py-3 text-[14px] font-semibold border-b-2 transition-colors ${
+                        activeTab === "tiers"
+                            ? "border-[var(--color-brand)] text-[var(--color-brand)]"
+                            : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                    }`}
+                >
+                    Tier Yönetimi
+                </button>
+            </div>
+
+            {activeTab === "tiers" ? (
+                <ModelTiersPanel />
+            ) : (
+            <div className="space-y-4">
             {error && (
                 <div className="p-3 rounded-lg bg-red-900/20 border border-red-800 text-[12px] text-red-400">{error}</div>
             )}
@@ -636,6 +668,8 @@ export default function ModelRegistryPanel() {
                         </div>
                     </div>
                 </div>
+            )}
+        </div>
             )}
         </div>
     );

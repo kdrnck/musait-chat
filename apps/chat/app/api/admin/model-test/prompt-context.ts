@@ -182,7 +182,6 @@ export async function resolveModelTestPromptContext(
     customer_first_name: customerName.split(" ")[0] || customerName,
     customer_name: customerName,
     customer_profile: customerProfileText,
-    test_phone: phone || "",
   };
 
   const resolvedPrompt = resolvePlaceholders(systemPrompt || "", placeholders);

@@ -236,15 +236,31 @@ async function manualSlotQuery(
   return {
     date,
     serviceDurationMinutes: serviceDuration,
-    availableSlots: available,
-    recommendedSlots,
+    availableSlots: available.map(enrichSlot),
+    recommendedSlots: recommendedSlots.map(enrichSlot),
   };
 }
 
+function enrichSlot(slot: { staffId?: string; time: string }): { staffId?: string; time: string; id: string; label: string } {
+  const id = slot.staffId ? `${slot.staffId}|${slot.time}` : slot.time;
+  const label = `\uD83D\uDD51 ${slot.time}`;
+  return { ...slot, id, label };
+}
+
 function attachRecommendedSlots(payload: Record<string, unknown>): Record<string, unknown> {
-  const recommendedSlots = getTopRecommendedSlots(payload);
+  const recommendedSlots = getTopRecommendedSlots(payload).map(enrichSlot);
+
+  // Also enrich availableSlots in-place if present
+  const rawAvailable = payload.availableSlots;
+  const availableSlots = Array.isArray(rawAvailable)
+    ? rawAvailable.map((s: any) =>
+        s && typeof s === "object" && typeof s.time === "string" ? enrichSlot(s) : s
+      )
+    : rawAvailable;
+
   return {
     ...payload,
+    availableSlots,
     recommendedSlots,
   };
 }
@@ -262,6 +278,7 @@ function getTopRecommendedSlots(payload: Record<string, unknown>): Array<{ staff
     if (unique.length >= 6) break;
   }
 
+  // Note: callers are responsible for calling enrichSlot on the result
   return unique;
 }
 

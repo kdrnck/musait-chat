@@ -769,3 +769,42 @@ body {
   padding: 16px;
   animation: slide-up 0.2s ease forwards;
 }
+
+/* ===== ADMIN PANEL OVERRIDES ===== */
+
+.admin-panel {
+  font-size: 14px;
+}
+
+.admin-panel .panel-card {
+  padding: 1.5rem;
+  border-radius: 1rem;
+}
+
+.admin-panel .form-input,
+.admin-panel .form-select,
+.admin-panel .form-textarea {
+  padding: 0.75rem 1rem;
+  font-size: 14px;
+}
+
+.admin-panel .btn-primary,
+.admin-panel .btn-secondary,
+.admin-panel .btn-chunky {
+  padding: 0.625rem 1.25rem;
+  font-size: 14px;
+  min-height: 2.5rem;
+}
+
+.admin-panel .section-header {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.admin-panel .section-body {
+  font-size: 14px;
+}
+
+.admin-panel .form-label {
+  font-size: 13px;
+}

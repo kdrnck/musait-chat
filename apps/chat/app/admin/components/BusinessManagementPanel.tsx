@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Building2, Search, Settings, MessageSquare, Bot, ChevronDown, ChevronUp, Save, Loader2, Check, AlertCircle, Globe } from "lucide-react";
+import { Building2, Search, Settings, MessageSquare, Bot, ChevronDown, ChevronUp, Save, Loader2, Check, AlertCircle, Globe, Layers } from "lucide-react";
+import PromptPickerModal from "./PromptPickerModal";
 
 interface Tenant {
     id: string;
@@ -17,6 +18,13 @@ interface TenantSettings {
     bookingFlowEnabled: boolean;
 }
 
+interface ModelTier {
+    id: string;
+    name: string;
+    display_name: string;
+    is_default: boolean;
+}
+
 export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[] }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
@@ -25,7 +33,10 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
-    const [registryModels, setRegistryModels] = useState<Array<{ id: string; openrouter_id: string; display_name: string }>>([])
+    const [registryModels, setRegistryModels] = useState<Array<{ id: string; openrouter_id: string; display_name: string }>>([]);
+    const [showPromptPicker, setShowPromptPicker] = useState(false);
+    const [tiers, setTiers] = useState<ModelTier[]>([]);
+    const [selectedTierName, setSelectedTierName] = useState<string>("");
 
     const filteredTenants = tenants.filter(t => 
         t.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -37,6 +48,49 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
             if (res.ok) setRegistryModels(await res.json());
         } catch { /* ignore */ }
     }, []);
+
+    // Load tiers on mount
+    useEffect(() => {
+        const loadTiers = async () => {
+            try {
+                const res = await fetch("/api/admin/model-tiers", { cache: "no-store" });
+                if (res.ok) {
+                    const data = await res.json();
+                    setTiers(data);
+                }
+            } catch { /* ignore */ }
+        };
+        void loadTiers();
+    }, []);
+
+    // Load tenant tier when tenant changes
+    useEffect(() => {
+        if (!selectedTenant) return;
+        const loadTenantTier = async () => {
+            try {
+                const res = await fetch(`/api/admin/tenant-tier?tenantId=${encodeURIComponent(selectedTenant)}`, { cache: "no-store" });
+                if (res.ok) {
+                    const data = await res.json();
+                    setSelectedTierName(data.tierName || "default");
+                }
+            } catch { /* ignore */ }
+        };
+        void loadTenantTier();
+    }, [selectedTenant]);
+
+    const handleTierChange = async (tierName: string) => {
+        if (!selectedTenant) return;
+        setSelectedTierName(tierName);
+        try {
+            await fetch("/api/admin/tenant-tier", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tenantId: selectedTenant, tierName }),
+            });
+            // Refresh models for new tier
+            loadRegistryModels(selectedTenant);
+        } catch { /* ignore */ }
+    };
 
     useEffect(() => {
         if (!selectedTenant) {
@@ -251,6 +305,25 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                                 
                                 {expandedSection === "ai" && (
                                     <div className="p-5 pt-0 space-y-5 border-t border-[var(--color-border)]">
+                                        {/* Tier Selection */}
+                                        {tiers.length > 0 && (
+                                            <div className="form-group !mb-0">
+                                                <label className="form-label flex items-center gap-2">
+                                                    <Layers size={14} className="text-purple-400" />
+                                                    Tier
+                                                </label>
+                                                <select
+                                                    value={selectedTierName}
+                                                    onChange={(e) => handleTierChange(e.target.value)}
+                                                    className="form-select"
+                                                >
+                                                    {tiers.map((t) => (
+                                                        <option key={t.name} value={t.name}>{t.display_name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="form-group !mb-0">
                                                 <label className="form-label">Model</label>
@@ -315,7 +388,15 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                                 {expandedSection === "prompt" && (
                                     <div className="p-5 pt-0 space-y-5 border-t border-[var(--color-border)]">
                                         <div className="form-group !mb-0">
-                                            <label className="form-label">Özel Sistem Promptu (Opsiyonel)</label>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="form-label !mb-0">Özel Sistem Promptu (Opsiyonel)</label>
+                                                <button
+                                                    onClick={() => setShowPromptPicker(true)}
+                                                    className="text-[12px] font-semibold text-[var(--color-brand-dark)] hover:text-[var(--color-brand)] transition-colors"
+                                                >
+                                                    Kütüphaneden Seç
+                                                </button>
+                                            </div>
                                             <p className="text-xs text-[var(--color-text-muted)] mb-2">
                                                 Boş bırakılırsa global prompt kullanılır
                                             </p>
@@ -349,6 +430,19 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                     ) : null}
                 </div>
             </div>
+
+            {/* Prompt Picker Modal */}
+            {showPromptPicker && (
+                <PromptPickerModal
+                    category="system"
+                    onSelect={(promptText) => {
+                        if (settings) {
+                            setSettings({ ...settings, promptText });
+                        }
+                    }}
+                    onClose={() => setShowPromptPicker(false)}
+                />
+            )}
         </div>
     );
 }

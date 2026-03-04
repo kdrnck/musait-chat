@@ -327,16 +327,38 @@ async function executeToolCall(toolName: string, args: any, tenantId: string, cu
             }
             
             case "view_available_slots": {
-                // Simplified - return mock data for now
-                return JSON.stringify({
-                    date: args.date,
-                    slots: [
-                        { time: "10:00", available: true },
-                        { time: "11:00", available: true },
-                        { time: "14:00", available: false },
-                        { time: "15:00", available: true },
-                    ]
-                });
+                // Call the real RPC for available slots
+                const slotDate = args.date as string;
+                if (!slotDate) return JSON.stringify({ error: "date zorunludur" });
+
+                let durationMinutes: number | undefined;
+                if (args.service_id) {
+                    const { data: svcRow } = await supabase
+                        .from("services")
+                        .select("duration_minutes")
+                        .eq("id", args.service_id)
+                        .maybeSingle();
+                    durationMinutes = svcRow?.duration_minutes;
+                }
+
+                const rpcParams: Record<string, unknown> = {
+                    p_tenant_id: tenantId,
+                    p_date: slotDate,
+                };
+                if (durationMinutes) rpcParams.p_duration_minutes = durationMinutes;
+                if (args.staff_id) rpcParams.p_staff_id = args.staff_id;
+
+                const { data: rpcData, error: rpcErr } = await supabase.rpc(
+                    "get_available_slots",
+                    rpcParams
+                );
+
+                if (rpcErr) {
+                    // Fallback: simple query
+                    return JSON.stringify({ date: slotDate, availableSlots: [], error: rpcErr.message });
+                }
+
+                return JSON.stringify(rpcData ?? { date: slotDate, availableSlots: [] });
             }
             
             case "get_customer_profile": {
@@ -459,21 +481,127 @@ async function executeToolCall(toolName: string, args: any, tenantId: string, cu
                         error: "service_id, staff_id ve start_time zorunludur.",
                     });
                 }
+
+                // 1. Find or create customer by phone
+                const caPhoneVariants = [
+                    customerPhone,
+                    customerPhone.replace(/^\+90/, '0'),
+                    customerPhone.replace(/^\+/, ''),
+                ];
+                let { data: caCustomer } = await supabase
+                    .from("customers")
+                    .select("id, name, phone")
+                    .eq("tenant_id", tenantId)
+                    .in("phone", caPhoneVariants)
+                    .limit(1)
+                    .maybeSingle();
+
+                if (!caCustomer) {
+                    // Create customer record
+                    const { data: newCust, error: custErr } = await supabase
+                        .from("customers")
+                        .insert({
+                            tenant_id: tenantId,
+                            phone: customerPhone,
+                            name: args.customer_name || "Test Lab Müşteri",
+                        })
+                        .select("id, name, phone")
+                        .single();
+                    if (custErr) return JSON.stringify({ success: false, error: "Müşteri oluşturulamadı: " + custErr.message });
+                    caCustomer = newCust;
+                }
+
+                // 2. Get service for duration
+                const { data: caService } = await supabase
+                    .from("services")
+                    .select("duration_minutes, name")
+                    .eq("id", args.service_id)
+                    .maybeSingle();
+
+                const duration = caService?.duration_minutes || 30;
+
+                // 3. Normalize start_time
+                let caStartTime = args.start_time as string;
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(caStartTime)) {
+                    caStartTime = `${caStartTime}:00+03:00`;
+                } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(caStartTime)) {
+                    caStartTime = `${caStartTime}+03:00`;
+                }
+
+                const caStartDate = new Date(caStartTime);
+                const caEndDate = new Date(caStartDate.getTime() + duration * 60 * 1000);
+
+                // 4. Insert appointment
+                const { data: caAppt, error: caApptErr } = await supabase
+                    .from("appointments")
+                    .insert({
+                        tenant_id: tenantId,
+                        service_id: args.service_id,
+                        staff_id: args.staff_id,
+                        customer_id: caCustomer!.id,
+                        start_time: caStartDate.toISOString(),
+                        end_time: caEndDate.toISOString(),
+                        status: "booked",
+                        source: "test-lab",
+                        notes: `Test Lab üzerinden oluşturuldu (${customerPhone})`,
+                    })
+                    .select("id")
+                    .single();
+
+                if (caApptErr) {
+                    return JSON.stringify({
+                        success: false,
+                        error: "Randevu oluşturulamadı: " + caApptErr.message,
+                    });
+                }
+
                 return JSON.stringify({
                     success: true,
-                    simulated: true,
-                    appointmentId: "test-single-appointment",
-                    serviceId: args.service_id,
-                    staffId: args.staff_id,
-                    startTime: args.start_time,
+                    appointmentId: caAppt.id,
+                    serviceName: caService?.name || args.service_id,
+                    startTime: caStartDate.toISOString(),
+                    endTime: caEndDate.toISOString(),
+                    message: `Randevu oluşturuldu: ${caService?.name || "Hizmet"}, ${caStartDate.toLocaleDateString("tr-TR")} ${caStartDate.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`,
                 });
             }
 
             case "cancel_appointment": {
+                const cancelApptId = args.appointment_id as string;
+                if (!cancelApptId) {
+                    return JSON.stringify({ success: false, error: "appointment_id zorunludur." });
+                }
+
+                // Verify appointment exists and belongs to tenant
+                const { data: cancelAppt } = await supabase
+                    .from("appointments")
+                    .select("id, status")
+                    .eq("id", cancelApptId)
+                    .eq("tenant_id", tenantId)
+                    .maybeSingle();
+
+                if (!cancelAppt) {
+                    return JSON.stringify({ success: false, error: "Randevu bulunamadı veya bu işletmeye ait değil." });
+                }
+                if (cancelAppt.status === "cancelled") {
+                    return JSON.stringify({ success: false, error: "Bu randevu zaten iptal edilmiş." });
+                }
+
+                const { error: cancelErr } = await supabase
+                    .from("appointments")
+                    .update({
+                        status: "cancelled",
+                        notes: args.reason ? `Test Lab iptal: ${args.reason}` : `Test Lab üzerinden iptal edildi`,
+                    })
+                    .eq("id", cancelApptId);
+
+                if (cancelErr) {
+                    return JSON.stringify({ success: false, error: "İptal başarısız: " + cancelErr.message });
+                }
+
                 return JSON.stringify({
                     success: true,
-                    simulated: true,
-                    appointmentId: args.appointment_id || "test-single-appointment",
+                    appointmentId: cancelApptId,
+                    message: "Randevu başarıyla iptal edildi.",
                 });
             }
 
@@ -481,10 +609,10 @@ async function executeToolCall(toolName: string, args: any, tenantId: string, cu
                 const services = Array.isArray(args.service_names)
                     ? args.service_names.filter((s: unknown) => typeof s === "string" && s.trim().length > 0)
                     : [];
-                const date = typeof args.date === "string" ? args.date : "";
-                const startTime = typeof args.start_time === "string" ? args.start_time : "";
+                const batchDate = typeof args.date === "string" ? args.date : "";
+                const batchStartTime = typeof args.start_time === "string" ? args.start_time : "";
 
-                if (services.length === 0 || !date || !startTime) {
+                if (services.length === 0 || !batchDate || !batchStartTime) {
                     return JSON.stringify({
                         success: false,
                         code: "validation_error",
@@ -492,30 +620,55 @@ async function executeToolCall(toolName: string, args: any, tenantId: string, cu
                     });
                 }
 
-                const [hh, mm] = startTime.split(":").map((n: string) => parseInt(n, 10));
-                let cursor = (Number.isFinite(hh) ? hh : 9) * 60 + (Number.isFinite(mm) ? mm : 0);
-                const appointments = services.map((serviceName: string, idx: number) => {
-                    const startHour = String(Math.floor(cursor / 60)).padStart(2, "0");
-                    const startMinute = String(cursor % 60).padStart(2, "0");
-                    const start = `${date}T${startHour}:${startMinute}:00+03:00`;
-                    cursor += 30;
-                    const endHour = String(Math.floor(cursor / 60)).padStart(2, "0");
-                    const endMinute = String(cursor % 60).padStart(2, "0");
-                    const end = `${date}T${endHour}:${endMinute}:00+03:00`;
-                    return {
-                        appointment_id: `test-batch-${idx + 1}`,
-                        service_name: serviceName,
-                        start_time: start,
-                        end_time: end,
-                    };
-                });
+                // Resolve staff_id from staff_name if needed
+                let batchStaffId = typeof args.staff_id === "string" ? args.staff_id.trim() : "";
+                if (!batchStaffId && typeof args.staff_name === "string" && args.staff_name.trim()) {
+                    const { data: staffRows } = await supabase
+                        .from("staff")
+                        .select("id, name")
+                        .eq("tenant_id", tenantId)
+                        .eq("is_active", true);
+                    const normalizedInput = args.staff_name.trim().toLocaleLowerCase("tr-TR");
+                    const match = (staffRows || []).find(
+                        (s: any) => s.name.trim().toLocaleLowerCase("tr-TR") === normalizedInput
+                    );
+                    if (match) batchStaffId = match.id;
+                    else return JSON.stringify({ success: false, error: `"${args.staff_name}" isimli personel bulunamadı.` });
+                }
 
-                return JSON.stringify({
-                    success: true,
-                    simulated: true,
-                    count: appointments.length,
-                    appointments,
-                });
+                if (!batchStaffId) {
+                    return JSON.stringify({
+                        success: false,
+                        code: "validation_error",
+                        error: "Çoklu randevu için staff_id veya staff_name zorunludur.",
+                    });
+                }
+
+                // Call batch RPC
+                const { data: batchResult, error: batchErr } = await supabase.rpc(
+                    "create_appointments_batch_atomic",
+                    {
+                        p_tenant_id: tenantId,
+                        p_customer_phone: customerPhone,
+                        p_customer_name: args.customer_name || "Test Lab Müşteri",
+                        p_staff_id: batchStaffId,
+                        p_date: batchDate,
+                        p_start_time: batchStartTime,
+                        p_service_names: services,
+                        p_require_atomic: args.require_atomic !== false,
+                    }
+                );
+
+                if (batchErr) {
+                    return JSON.stringify({
+                        success: false,
+                        code: "rpc_error",
+                        error: "Çoklu randevu oluşturulamadı: " + batchErr.message,
+                    });
+                }
+
+                const result = Array.isArray(batchResult) && batchResult.length === 1 ? batchResult[0] : batchResult;
+                return JSON.stringify(result ?? { success: false, error: "RPC geçersiz yanıt" });
             }
 
             case "compose_interactive_message": {
@@ -582,13 +735,92 @@ async function executeToolCall(toolName: string, args: any, tenantId: string, cu
                 return JSON.stringify({ success: true, message: "Test ortamında handoff simüle edildi." });
             case "end_session":
                 return JSON.stringify({ success: true, message: "Test ortamında oturum sonlandırıldı." });
-            case "take_notes_for_user":
-                return JSON.stringify({ success: true, note: args.note || "" });
-            case "update_customer_name":
+            case "take_notes_for_user": {
+                const note = args.note as string;
+                if (!note?.trim()) {
+                    return JSON.stringify({ success: false, error: "Not içeriği boş olamaz." });
+                }
+
+                // Find customer
+                const tnPhoneVariants = [
+                    customerPhone,
+                    customerPhone.replace(/^\+90/, '0'),
+                    customerPhone.replace(/^\+/, ''),
+                ];
+                const { data: tnCustomer } = await supabase
+                    .from("customers")
+                    .select("id")
+                    .eq("tenant_id", tenantId)
+                    .in("phone", tnPhoneVariants)
+                    .limit(1)
+                    .maybeSingle();
+
+                if (tnCustomer) {
+                    // Append note to customer's notes field
+                    const timestampedNote = `[${new Date().toLocaleDateString("tr-TR")}] ${note.trim()}`;
+                    const { data: existingCust } = await supabase
+                        .from("customers")
+                        .select("notes")
+                        .eq("id", tnCustomer.id)
+                        .single();
+
+                    const existingNotes = (existingCust as any)?.notes || "";
+                    const newNotes = existingNotes ? `${existingNotes}\n${timestampedNote}` : timestampedNote;
+
+                    await supabase
+                        .from("customers")
+                        .update({ notes: newNotes } as any)
+                        .eq("id", tnCustomer.id);
+                }
+
+                return JSON.stringify({ success: true, note: note.trim(), message: "Not kaydedildi." });
+            }
+            case "update_customer_name": {
+                const ucFirstName = (args.first_name as string | undefined)?.trim();
+                const ucLastName = (args.last_name as string | undefined)?.trim();
+
+                if (!ucFirstName && !ucLastName) {
+                    return JSON.stringify({ success: false, error: "Ad veya soyad belirtilmeli." });
+                }
+
+                const ucPhoneVariants = [
+                    customerPhone,
+                    customerPhone.replace(/^\+90/, '0'),
+                    customerPhone.replace(/^\+/, ''),
+                ];
+                const { data: ucCustomer } = await supabase
+                    .from("customers")
+                    .select("id, name")
+                    .eq("tenant_id", tenantId)
+                    .in("phone", ucPhoneVariants)
+                    .limit(1)
+                    .maybeSingle();
+
+                let existingFirst = "";
+                let existingLast = "";
+                if (ucCustomer?.name) {
+                    const parts = ucCustomer.name.trim().split(/\s+/);
+                    existingFirst = parts[0] ?? "";
+                    existingLast = parts.slice(1).join(" ") || "";
+                }
+
+                const newFirst = ucFirstName || existingFirst;
+                const newLast = ucLastName || existingLast;
+                const fullName = [newFirst, newLast].filter(Boolean).join(" ").trim();
+
+                if (ucCustomer && fullName) {
+                    await supabase
+                        .from("customers")
+                        .update({ name: fullName })
+                        .eq("id", ucCustomer.id);
+                }
+
                 return JSON.stringify({
                     success: true,
-                    fullName: [args.first_name, args.last_name].filter(Boolean).join(" ").trim(),
+                    fullName: fullName || "(boş)",
+                    message: `İsim güncellendi: ${fullName}`,
                 });
+            }
             
             default:
                 return JSON.stringify({
@@ -620,13 +852,10 @@ export async function POST(req: Request) {
     try {
         const { messages, model, tenantId, system, phone } = await req.json();
         
-        console.log("[Model Test Lab] Received request with model:", model, "tenant:", tenantId);
+        console.log("[Test Lab] Request: model=%s tenant=%s", model, tenantId);
 
         if (!tenantId) {
-            return NextResponse.json(
-                { error: "Test işletmesi seçmelisiniz" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Test işletmesi seçmelisiniz" }, { status: 400 });
         }
 
         const supabase = await createClient();
@@ -638,362 +867,239 @@ export async function POST(req: Request) {
             phone: testPhone,
             systemPrompt: system || "",
         });
-        const placeholders = resolved.placeholders;
         const finalSystemPrompt = resolved.resolvedPrompt;
-        const unresolvedPlaceholders = resolved.unresolvedPlaceholders;
-
-        console.log("[Model Test Lab] Using model:", openRouterModel);
-        console.log("[Model Test Lab] Resolved placeholders:", Object.keys(placeholders).length);
-        console.log("[Model Test Lab] Unresolved placeholders:", unresolvedPlaceholders.join(", "));
-        console.log("[Model Test Lab] Final system prompt (first 500 chars):", finalSystemPrompt.substring(0, 500));
 
         // Build initial conversation
-        const conversationMessages = [
+        const currentMessages: any[] = [
             { role: "system", content: finalSystemPrompt },
-            ...messages.map((m: ChatMessage) => ({
-                role: m.role,
-                content: m.content,
-            })),
+            ...messages.map((m: ChatMessage) => ({ role: m.role, content: m.content })),
         ];
 
-        let currentMessages = [...conversationMessages];
         let totalMs = 0;
         let totalTokens = { prompt: 0, completion: 0, total: 0 };
-        let iterations = 0;
-        const maxIterations = 5; // Prevent infinite loops
-        
-        let collectedToolCalls: ToolCall[] = [];
+        const maxIterations = 5;
 
-        // Multi-turn conversation loop for tool calling
-        while (iterations < maxIterations) {
-            iterations++;
-            
-            // Always stream - we'll handle tool calls in the stream
-            const shouldStream = true;
-            
-            console.log(`[Model Test Lab] Iteration ${iterations}, streaming: ${shouldStream}`);
-            
-            const payload: Record<string, unknown> = {
-                model: openRouterModel,
-                messages: currentMessages,
-                tools: getToolDefinitions(),
-                temperature: 0.7,
-                max_tokens: 4096,
-                stream: shouldStream,
-            };
-
-            if (supportsReasoning(openRouterModel)) {
-                payload.reasoning = {
-                    enabled: true,
-                    effort: "medium",
-                    exclude: false,
+        // Create SSE output stream upfront — all events flow through this
+        const encoder = new TextEncoder();
+        const outputStream = new ReadableStream({
+            async start(controller) {
+                const emit = (obj: Record<string, unknown>) => {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
                 };
-            }
 
-            const startTime = Date.now();
-
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://musait.app",
-                    "X-Title": "Musait Model Test Lab",
-                },
-                body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`OpenRouter API error (${response.status}):`, errorText);
-                return NextResponse.json(
-                    { error: `Model API hatası (${response.status}): ${errorText}` },
-                    { status: response.status }
-                );
-            }
-
-            // If streaming is enabled
-            if (payload.stream && response.body) {
-                const decoder = new TextDecoder();
-                const reader = response.body.getReader();
-                
-                // Accumulate the full response first
-                let accumulatedContent = "";
-                let accumulatedReasoning = "";
-                let accumulatedToolCalls: any[] = [];
-                let finishReason = "";
-                
                 try {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split('\n').filter(line => line.trim() !== '');
-                        
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const data = line.slice(6);
-                                if (data === '[DONE]') continue;
-                                
+                    for (let iteration = 1; iteration <= maxIterations; iteration++) {
+                        console.log(`[Test Lab] Iteration ${iteration}`);
+
+                        const payload: Record<string, unknown> = {
+                            model: openRouterModel,
+                            messages: currentMessages,
+                            tools: getToolDefinitions(),
+                            temperature: 0.7,
+                            max_tokens: 4096,
+                            stream: true,
+                        };
+                        if (supportsReasoning(openRouterModel)) {
+                            payload.reasoning = { enabled: true, effort: "medium", exclude: false };
+                        }
+
+                        const t0 = Date.now();
+                        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                            method: "POST",
+                            headers: {
+                                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                                "Content-Type": "application/json",
+                                "HTTP-Referer": "https://musait.app",
+                                "X-Title": "Musait Test Lab",
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        if (!response.ok) {
+                            const errText = await response.text();
+                            emit({ type: "error", error: `Model API hatası (${response.status}): ${errText}` });
+                            break;
+                        }
+
+                        if (!response.body) {
+                            emit({ type: "error", error: "Stream body yok" });
+                            break;
+                        }
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+
+                        let accContent = "";
+                        let accReasoning = "";
+                        const accToolCalls: any[] = [];
+                        let firstTokenEmitted = false;
+
+                        // ── Stream OpenRouter deltas directly to client ──
+                        let partial = "";
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            partial += decoder.decode(value, { stream: true });
+                            const lines = partial.split("\n");
+                            partial = lines.pop() || ""; // keep incomplete line
+
+                            for (const line of lines) {
+                                const trimmed = line.trim();
+                                if (!trimmed.startsWith("data: ")) continue;
+                                const data = trimmed.slice(6);
+                                if (data === "[DONE]") continue;
+
                                 try {
                                     const parsed = JSON.parse(data);
                                     const choice = parsed.choices?.[0];
                                     const delta = choice?.delta;
-                                    
+
+                                    // ── Content tokens → forward immediately ──
                                     if (delta?.content) {
-                                        accumulatedContent += delta.content;
+                                        if (!firstTokenEmitted) {
+                                            firstTokenEmitted = true;
+                                        }
+                                        accContent += delta.content;
+                                        emit({ type: "content", content: delta.content });
                                     }
-                                    
-                                    // Handle reasoning from various model formats
+
+                                    // ── Reasoning tokens → forward immediately ──
                                     const reasoning = delta?.reasoning || delta?.reasoning_content || delta?.thinking;
                                     if (reasoning) {
-                                        accumulatedReasoning += reasoning;
+                                        accReasoning += reasoning;
+                                        emit({ type: "reasoning", reasoning });
                                     }
-                                    
-                                    // Accumulate tool calls
+
+                                    // ── Tool calls → accumulate ──
                                     if (delta?.tool_calls) {
                                         for (const tc of delta.tool_calls) {
                                             const idx = tc.index ?? 0;
-                                            if (!accumulatedToolCalls[idx]) {
-                                                accumulatedToolCalls[idx] = {
+                                            if (!accToolCalls[idx]) {
+                                                accToolCalls[idx] = {
                                                     id: tc.id || "",
                                                     type: "function",
-                                                    function: { name: "", arguments: "" }
+                                                    function: { name: "", arguments: "" },
                                                 };
                                             }
-                                            if (tc.id) accumulatedToolCalls[idx].id = tc.id;
-                                            if (tc.function?.name) accumulatedToolCalls[idx].function.name += tc.function.name;
-                                            if (tc.function?.arguments) accumulatedToolCalls[idx].function.arguments += tc.function.arguments;
+                                            if (tc.id) accToolCalls[idx].id = tc.id;
+                                            if (tc.function?.name) accToolCalls[idx].function.name += tc.function.name;
+                                            if (tc.function?.arguments) accToolCalls[idx].function.arguments += tc.function.arguments;
                                         }
                                     }
-                                    
-                                    if (choice?.finish_reason) {
-                                        finishReason = choice.finish_reason;
-                                    }
-                                    
-                                    // Update token counts if available
+
+                                    // ── Token usage ──
                                     if (parsed.usage) {
                                         totalTokens.prompt = parsed.usage.prompt_tokens || totalTokens.prompt;
                                         totalTokens.completion = parsed.usage.completion_tokens || totalTokens.completion;
                                         totalTokens.total = parsed.usage.total_tokens || totalTokens.total;
                                     }
-                                } catch (e) {
-                                    // Skip invalid JSON
+                                } catch {
+                                    // skip invalid json
                                 }
                             }
                         }
+
+                        totalMs += Date.now() - t0;
+                        const validToolCalls = accToolCalls.filter(tc => tc.id && tc.function.name);
+
+                        console.log(`[Test Lab] Iter ${iteration}: content=${accContent.length}c, reasoning=${accReasoning.length}c, tools=${validToolCalls.length}`);
+
+                        // ── If no tool calls → we're done ──
+                        if (validToolCalls.length === 0) {
+                            break;
+                        }
+
+                        // ── Execute tool calls with timing ──
+                        currentMessages.push({
+                            role: "assistant",
+                            content: accContent || "",
+                            tool_calls: validToolCalls,
+                        });
+
+                        for (const toolCall of validToolCalls) {
+                            const toolName = toolCall.function.name;
+                            let toolArgs: any = {};
+                            try {
+                                toolArgs = JSON.parse(toolCall.function.arguments);
+                            } catch {
+                                // skip
+                            }
+
+                            // Emit tool_call event to client
+                            emit({
+                                type: "tool_call",
+                                id: toolCall.id,
+                                name: toolName,
+                                arguments: toolArgs,
+                            });
+
+                            const toolStart = Date.now();
+                            const result = await executeToolCall(toolName, toolArgs, tenantId, testPhone);
+                            const durationMs = Date.now() - toolStart;
+
+                            // Emit tool_result event to client
+                            let parsedResult: unknown;
+                            try { parsedResult = JSON.parse(result); } catch { parsedResult = result; }
+                            emit({
+                                type: "tool_result",
+                                tool_call_id: toolCall.id,
+                                name: toolName,
+                                result: parsedResult,
+                                durationMs,
+                            });
+
+                            currentMessages.push({
+                                role: "tool",
+                                tool_call_id: toolCall.id,
+                                name: toolName,
+                                content: result,
+                            });
+                        }
+
+                        // Continue loop → next OpenRouter call (streamed directly)
                     }
-                } catch (error) {
-                    console.error('Stream reading error:', error);
-                }
-                
-                const endTime = Date.now();
-                totalMs += endTime - startTime;
-                
-                // Filter out empty tool calls
-                const validToolCalls = accumulatedToolCalls.filter(tc => tc.id && tc.function.name);
-                
-                console.log(`[Model Test Lab] Stream complete. Content: ${accumulatedContent.length} chars, Reasoning: ${accumulatedReasoning.length} chars, Tool calls: ${validToolCalls.length}`);
-                
-                // If there are tool calls, execute them and continue the loop
-                if (validToolCalls.length > 0) {
-                    console.log(`[Model Test Lab] Executing ${validToolCalls.length} tool calls`);
-                    
-                    // Add assistant message with tool calls to conversation
-                    currentMessages.push({
-                        role: "assistant",
-                        content: accumulatedContent || "",
-                        tool_calls: validToolCalls,
+
+                    // ── Emit final metrics ──
+                    const tokensPerSec = totalTokens.completion && totalMs > 0
+                        ? parseFloat((totalTokens.completion / (totalMs / 1000)).toFixed(1))
+                        : 0;
+
+                    emit({
+                        type: "metrics",
+                        metrics: {
+                            totalMs,
+                            tokensPerSec,
+                            promptTokens: totalTokens.prompt,
+                            completionTokens: totalTokens.completion,
+                            totalTokens: totalTokens.total,
+                            iterations: Math.min(maxIterations, maxIterations),
+                        },
                     });
 
-                    // Execute each tool call
-                    for (const toolCall of validToolCalls) {
-                        const toolName = toolCall.function.name;
-                        let toolArgs: any = {};
-                        try {
-                            toolArgs = JSON.parse(toolCall.function.arguments);
-                        } catch (e) {
-                            console.error("Failed to parse tool arguments:", toolCall.function.arguments);
-                        }
-
-                        console.log(`[Model Test Lab] Executing tool: ${toolName}`, toolArgs);
-                        
-                        const result = await executeToolCall(toolName, toolArgs, tenantId, testPhone);
-                        
-                        currentMessages.push({
-                            role: "tool",
-                            tool_call_id: toolCall.id,
-                            name: toolName,
-                            content: result,
-                        });
-                    }
-                    
-                    // Continue loop to get final response
-                    continue;
-                }
-                
-                // No tool calls - stream the accumulated response to client
-                const encoder = new TextEncoder();
-                const outputStream = new ReadableStream({
-                    async start(controller) {
-                        // DEBUG: Send resolved customer profile info as first SSE event
+                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                } catch (err) {
+                    console.error("[Test Lab] Stream error:", err);
+                    try {
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                            type: 'debug',
-                            debug: {
-                                tenantId,
-                                phone: testPhone,
-                                unresolvedPlaceholders,
-                                placeholderPreview: Object.fromEntries(Object.entries(placeholders).slice(0, 8)),
-                                resolvedSystemPromptPreview: finalSystemPrompt.substring(0, 400),
-                            }
+                            type: "error",
+                            error: err instanceof Error ? err.message : "Bilinmeyen hata",
                         })}\n\n`));
-
-                        // First send reasoning in chunks (if any)
-                        if (accumulatedReasoning) {
-                            const reasoningChunks = accumulatedReasoning.match(/.{1,50}/g) || [accumulatedReasoning];
-                            for (const chunk of reasoningChunks) {
-                                controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                    type: 'reasoning',
-                                    reasoning: chunk
-                                })}\n\n`));
-                                await new Promise(r => setTimeout(r, 10)); // Small delay for visual effect
-                            }
-                        }
-                        
-                        // Then send content in chunks
-                        if (accumulatedContent) {
-                            const contentChunks = accumulatedContent.match(/.{1,30}/g) || [accumulatedContent];
-                            for (const chunk of contentChunks) {
-                                controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                    type: 'content',
-                                    content: chunk
-                                })}\n\n`));
-                                await new Promise(r => setTimeout(r, 15)); // Small delay for visual effect
-                            }
-                        }
-                        
-                        // Send final metrics
-                        const tokensPerSec = totalTokens.completion
-                            ? ((totalTokens.completion / (totalMs / 1000)) * 1).toFixed(1)
-                            : "0";
-                        
-                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                            type: 'metrics',
-                            metrics: {
-                                totalMs,
-                                tokensPerSec: parseFloat(tokensPerSec),
-                                promptTokens: totalTokens.prompt,
-                                completionTokens: totalTokens.completion,
-                                totalTokens: totalTokens.total,
-                                iterations,
-                            }
-                        })}\n\n`));
-                        
-                        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                        controller.close();
+                        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                    } catch {
+                        // controller may be closed
                     }
-                });
-                
-                return new Response(outputStream, {
-                    headers: {
-                        'Content-Type': 'text/event-stream',
-                        'Cache-Control': 'no-cache',
-                        'Connection': 'keep-alive',
-                    },
-                });
-            }
-
-            // Non-streaming fallback path (shouldn't reach here normally)
-            const data = await response.json();
-            const choice = data.choices?.[0];
-
-            if (!choice) {
-                return NextResponse.json({ error: "Model yanıt vermedi" }, { status: 500 });
-            }
-
-            const endTime = Date.now();
-            totalMs += endTime - startTime;
-            
-            const usage = data.usage || {};
-            totalTokens.prompt += usage.prompt_tokens || 0;
-            totalTokens.completion += usage.completion_tokens || 0;
-            totalTokens.total += usage.total_tokens || 0;
-
-            const message = choice.message;
-            const toolCalls: ToolCall[] = message.tool_calls || [];
-            const reasoning = message.reasoning || message.thinking || null;
-
-            // If no tool calls, this is the final response
-            if (!toolCalls || toolCalls.length === 0) {
-                const tokensPerSec = totalTokens.completion
-                    ? ((totalTokens.completion / (totalMs / 1000)) * 1).toFixed(1)
-                    : "0";
-
-                return NextResponse.json({
-                    role: "assistant",
-                    content: message.content || "",
-                    tool_calls: [],
-                    reasoning: reasoning,
-                    metrics: {
-                        totalMs,
-                        tokensPerSec: parseFloat(tokensPerSec),
-                        promptTokens: totalTokens.prompt,
-                        completionTokens: totalTokens.completion,
-                        totalTokens: totalTokens.total,
-                        iterations,
-                    },
-                });
-            }
-
-            // Execute tool calls
-            console.log(`[Model Test Lab] Non-streaming: Executing ${toolCalls.length} tool calls`);
-            
-            // Add assistant message with tool calls to conversation
-            currentMessages.push({
-                role: "assistant",
-                content: message.content || "",
-                tool_calls: toolCalls,
-            });
-
-            // Execute each tool call and add results
-            for (const toolCall of toolCalls) {
-                const toolName = toolCall.function.name;
-                let toolArgs: any = {};
-                try {
-                    toolArgs = JSON.parse(toolCall.function.arguments);
-                } catch (e) {
-                    console.error("Failed to parse tool arguments:", toolCall.function.arguments);
+                } finally {
+                    controller.close();
                 }
+            },
+        });
 
-                console.log(`[Model Test Lab] Executing tool: ${toolName}`, toolArgs);
-                
-                const result = await executeToolCall(toolName, toolArgs, tenantId, testPhone);
-                
-                currentMessages.push({
-                    role: "tool",
-                    tool_call_id: toolCall.id,
-                    name: toolName,
-                    content: result,
-                });
-            }
-
-            // Continue loop to get final response
-        }
-
-        // If we hit max iterations
-        return NextResponse.json({
-            role: "assistant",
-            content: "⚠️ Maksimum tool call iterasyonuna ulaşıldı. Conversation çok karmaşık.",
-            tool_calls: [],
-            reasoning: null,
-            metrics: {
-                totalMs,
-                tokensPerSec: 0,
-                promptTokens: totalTokens.prompt,
-                completionTokens: totalTokens.completion,
-                totalTokens: totalTokens.total,
-                iterations,
+        return new Response(outputStream, {
+            headers: {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                Connection: "keep-alive",
             },
         });
     } catch (error) {

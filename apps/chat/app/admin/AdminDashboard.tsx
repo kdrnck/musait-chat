@@ -2,15 +2,12 @@
 
 import { useState } from "react";
 import ChatLayout from "../components/ChatLayout";
-import GlobalAiSettingsPanel from "./components/GlobalAiSettingsPanel";
-import ModelTestPanel from "./components/ModelTestPanel";
-import TenantSystemPromptPanel from "./components/TenantSystemPromptPanel";
 import ModelRegistryPanel from "./components/ModelRegistryPanel";
-import ModelTiersPanel from "./components/ModelTiersPanel";
 import AdminTenantSettingsModal from "./components/AdminTenantSettingsModal";
 import BusinessManagementPanel from "./components/BusinessManagementPanel";
 import PromptLibraryPanel from "./components/PromptLibraryPanel";
-import { Shield, Activity, Terminal, Network, Globe, LogOut, SlidersHorizontal, Cpu, MessageSquare, Building2, ChevronDown, ChevronRight, FileText, RefreshCw, Layers } from "lucide-react";
+import TestLabPanel from "./components/test-lab/TestLabPanel";
+import { Shield, Activity, Terminal, Network, Globe, LogOut, SlidersHorizontal, Cpu, Building2, ChevronDown, ChevronRight, FileText, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -20,7 +17,7 @@ interface Tenant {
     logo_url: string | null;
 }
 
-type AdminSection = "chat" | "global" | "routing" | "businesses" | "prompt-library" | "global-prompt" | "tenant-prompt" | "models" | "model-tiers" | "test-lab";
+type AdminSection = "chat" | "global" | "routing" | "businesses" | "prompt-library" | "models" | "test-lab";
 
 export default function AdminDashboard({
     userEmail,
@@ -101,31 +98,13 @@ export default function AdminDashboard({
                     key: "prompt-library" as AdminSection,
                     label: "Prompt Kütüphanesi",
                     icon: <FileText size={18} />,
-                    description: "Prompt şablonları yönetimi",
-                },
-                {
-                    key: "global-prompt" as AdminSection,
-                    label: "Global Prompt",
-                    icon: <Shield size={18} />,
-                    description: "Genel sistem AI yönergeleri",
-                },
-                {
-                    key: "tenant-prompt" as AdminSection,
-                    label: "Tenant Prompt",
-                    icon: <MessageSquare size={18} />,
-                    description: "İşletme bazlı AI ayarları",
+                    description: "Prompt şablonları ve global prompt",
                 },
                 {
                     key: "models" as AdminSection,
                     label: "Modeller",
                     icon: <Cpu size={18} />,
-                    description: "AI model kayıt defteri",
-                },
-                {
-                    key: "model-tiers" as AdminSection,
-                    label: "Model Tier'ları",
-                    icon: <Layers size={18} />,
-                    description: "Model havuzu ve tier yönetimi",
+                    description: "AI model ve tier yönetimi",
                 },
                 {
                     key: "test-lab" as AdminSection,
@@ -138,7 +117,7 @@ export default function AdminDashboard({
     ];
 
     return (
-        <div className="flex h-screen w-full bg-[var(--color-bg-base)] overflow-hidden">
+        <div className="flex h-screen w-full bg-[var(--color-bg-base)] overflow-hidden admin-panel">
 
             {/* ── Admin Navigation Sidebar ── */}
             <aside className="w-[260px] flex-shrink-0 flex flex-col bg-[var(--color-sidebar-bg)] border-r border-[var(--color-sidebar-border)] z-20">
@@ -322,29 +301,14 @@ export default function AdminDashboard({
                                     <PromptLibraryPanel />
                                 </div>
                             )}
-                            {activeSection === "global-prompt" && (
-                                <div className="max-w-3xl mx-auto px-6 md:px-10 py-8">
-                                    <GlobalAiSettingsPanel />
-                                </div>
-                            )}
-                            {activeSection === "tenant-prompt" && (
-                                <div className="max-w-3xl mx-auto px-6 md:px-10 py-8">
-                                    <TenantSystemPromptPanel tenants={tenants} />
-                                </div>
-                            )}
                             {activeSection === "models" && (
                                 <div className="max-w-5xl mx-auto px-6 md:px-10 py-8">
                                     <ModelRegistryPanel />
                                 </div>
                             )}
-                            {activeSection === "model-tiers" && (
-                                <div className="max-w-4xl mx-auto px-6 md:px-10 py-8">
-                                    <ModelTiersPanel />
-                                </div>
-                            )}
                             {activeSection === "test-lab" && (
-                                <div className="h-full p-6">
-                                    <ModelTestPanel debugMode={false} />
+                                <div className="h-full">
+                                    <TestLabPanel />
                                 </div>
                             )}
                         </div>

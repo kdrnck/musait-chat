@@ -16,8 +16,15 @@ import {
     Building2,
     Filter,
     Copy,
-    Check
+    Check,
+    Shield,
+    RefreshCw,
+    Sparkles,
+    ArrowRight,
 } from "lucide-react";
+import GlobalAiSettingsPanel from "./GlobalAiSettingsPanel";
+
+type LibraryTab = "templates" | "global-prompt";
 
 interface PromptTemplate {
     id: string;
@@ -47,6 +54,7 @@ const CATEGORIES = [
 ];
 
 export default function PromptLibraryPanel() {
+    const [activeTab, setActiveTab] = useState<LibraryTab>("templates");
     const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [loading, setLoading] = useState(true);
@@ -245,6 +253,34 @@ export default function PromptLibraryPanel() {
 
     return (
         <div className="space-y-6">
+            {/* Tab Header */}
+            <div className="flex items-center gap-1 border-b border-[var(--color-border)] pb-0">
+                <button
+                    onClick={() => setActiveTab("templates")}
+                    className={`px-5 py-3 text-[14px] font-semibold border-b-2 transition-colors ${
+                        activeTab === "templates"
+                            ? "border-[var(--color-brand)] text-[var(--color-brand)]"
+                            : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                    }`}
+                >
+                    Şablon Kütüphanesi
+                </button>
+                <button
+                    onClick={() => setActiveTab("global-prompt")}
+                    className={`px-5 py-3 text-[14px] font-semibold border-b-2 transition-colors ${
+                        activeTab === "global-prompt"
+                            ? "border-[var(--color-brand)] text-[var(--color-brand)]"
+                            : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                    }`}
+                >
+                    Global Master Prompt
+                </button>
+            </div>
+
+            {activeTab === "global-prompt" ? (
+                <GlobalAiSettingsPanel />
+            ) : (
+            <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
@@ -408,10 +444,10 @@ export default function PromptLibraryPanel() {
                 </div>
             )}
 
-            {/* Prompts List */}
-            <div className="space-y-3">
+            {/* Prompts Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {filteredPrompts.length === 0 ? (
-                    <div className="panel-card text-center py-12">
+                    <div className="col-span-full panel-card text-center py-12">
                         <FileText size={40} className="mx-auto text-[var(--color-text-muted)] opacity-50 mb-3" />
                         <p className="text-[var(--color-text-muted)]">
                             {searchQuery || filterCategory || filterTenant
@@ -431,10 +467,13 @@ export default function PromptLibraryPanel() {
                             onCopy={() => handleCopy(prompt)}
                             getCategoryLabel={getCategoryLabel}
                             getTenantName={getTenantName}
+                            tenants={tenants}
                         />
                     ))
                 )}
             </div>
+            </div>
+            )}
         </div>
     );
 }
@@ -448,6 +487,7 @@ function PromptCard({
     onCopy,
     getCategoryLabel,
     getTenantName,
+    tenants,
 }: {
     prompt: PromptTemplate;
     isEditing: boolean;
@@ -457,8 +497,30 @@ function PromptCard({
     onCopy: () => void;
     getCategoryLabel: (cat: string) => string;
     getTenantName: (tenantId?: string) => string;
+    tenants: Tenant[];
 }) {
     const [expanded, setExpanded] = useState(false);
+    const [showTenantPicker, setShowTenantPicker] = useState(false);
+    const [applyingToTenant, setApplyingToTenant] = useState(false);
+
+    const handleApplyToTenant = async (tenantId: string) => {
+        setApplyingToTenant(true);
+        try {
+            const res = await fetch("/api/admin/tenant-system-prompt", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tenantId, promptText: prompt.prompt_text }),
+            });
+            if (res.ok) {
+                setShowTenantPicker(false);
+                alert("Prompt işletmeye uygulandı!");
+            }
+        } catch {
+            alert("Uygulama başarısız oldu");
+        } finally {
+            setApplyingToTenant(false);
+        }
+    };
 
     return (
         <div className={`panel-card transition-all ${isEditing ? "ring-2 ring-[var(--color-brand)]" : ""}`}>
@@ -528,6 +590,37 @@ function PromptCard({
                     <pre className="text-[12px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap bg-[var(--color-surface-hover)] rounded-lg p-4 max-h-[300px] overflow-y-auto">
                         {prompt.prompt_text}
                     </pre>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 mt-3">
+                        <button
+                            onClick={() => setShowTenantPicker(!showTenantPicker)}
+                            className="text-[11px] font-semibold text-[var(--color-brand-dark)] hover:text-[var(--color-brand)] transition-colors flex items-center gap-1"
+                        >
+                            <Building2 size={12} />
+                            İşletmeye Uygula
+                        </button>
+                    </div>
+
+                    {/* Tenant Picker */}
+                    {showTenantPicker && (
+                        <div className="mt-2 p-3 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] space-y-2">
+                            <p className="text-[11px] font-semibold text-[var(--color-text-muted)]">İşletme seçin:</p>
+                            <div className="max-h-[150px] overflow-y-auto space-y-1">
+                                {tenants.map((t) => (
+                                    <button
+                                        key={t.id}
+                                        onClick={() => handleApplyToTenant(t.id)}
+                                        disabled={applyingToTenant}
+                                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--color-surface-active)] text-[12px] text-[var(--color-text-primary)] transition-colors disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        <Building2 size={12} className="text-[var(--color-text-muted)]" />
+                                        {t.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
