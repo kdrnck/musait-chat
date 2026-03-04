@@ -44,11 +44,6 @@ export const OTP_PROMPTS = {
 } as const;
 
 // =========================================================================
-// ROUTER AGENT FALLBACK PROMPT (used when DB has no router_agent_master_prompt_text)
-// =========================================================================
-
-// BEN USER ROUTER AGENT PROMPT'U KALDIRDIM. BU Bİ YERDE GEÇİYOSA BANA HABER VE & O CODE U KALDIRALIM
-// =========================================================================
 // BOOKING AGENT MASTER PROMPT
 // =========================================================================
 // This is the reference/template prompt. The actual prompt used by the agent
