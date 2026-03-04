@@ -40,12 +40,26 @@ export async function GET(request: Request) {
 
 // POST /api/admin/prompt-templates - Create a new prompt template
 export async function POST(request: Request) {
-    const auth = await requireMasterAdmin();
-    if (isErrorResponse(auth)) return auth;
-    const { supabase, user } = auth;
+    console.log("[prompt-templates POST] Request received");
 
-    const body = await request.json();
+    const auth = await requireMasterAdmin();
+    if (isErrorResponse(auth)) {
+        console.log("[prompt-templates POST] Auth failed");
+        return auth;
+    }
+    const { supabase, user } = auth;
+    console.log("[prompt-templates POST] Auth OK, user:", user.id, user.email);
+
+    let body: any;
+    try {
+        body = await request.json();
+    } catch (e) {
+        console.error("[prompt-templates POST] Body parse error:", e);
+        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
     const { name, description, category, prompt_text, model_id, tenant_id, parameters, is_default } = body;
+    console.log("[prompt-templates POST] Body:", { name, category, tenant_id, is_default, prompt_text_length: prompt_text?.length });
 
     if (!name || !prompt_text) {
         return NextResponse.json(
@@ -54,26 +68,33 @@ export async function POST(request: Request) {
         );
     }
 
+    const insertPayload = {
+        name: name.trim(),
+        description: description?.trim() || null,
+        category: category || "general",
+        prompt_text: prompt_text.trim(),
+        model_id: model_id || null,
+        tenant_id: tenant_id || null,
+        parameters: parameters || {},
+        is_default: is_default || false,
+        created_by: user.id,
+    };
+    console.log("[prompt-templates POST] Insert payload:", { ...insertPayload, prompt_text: "(truncated)" });
+
     const { data, error } = await supabase
         .from("prompt_templates")
-        .insert({
-            name: name.trim(),
-            description: description?.trim() || null,
-            category: category || "general",
-            prompt_text: prompt_text.trim(),
-            model_id: model_id || null,
-            tenant_id: tenant_id || null,
-            parameters: parameters || {},
-            is_default: is_default || false,
-            created_by: user.id,
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
     if (error) {
-        console.error("Error creating prompt template:", error);
-        return NextResponse.json({ error: "Failed to create prompt template" }, { status: 500 });
+        console.error("[prompt-templates POST] Supabase insert error:", JSON.stringify(error));
+        return NextResponse.json(
+            { error: "Failed to create prompt template", details: error.message, code: error.code },
+            { status: 500 }
+        );
     }
 
+    console.log("[prompt-templates POST] Created successfully, id:", data.id);
     return NextResponse.json(data);
 }

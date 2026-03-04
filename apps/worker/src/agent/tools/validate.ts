@@ -94,6 +94,7 @@ export const VIEW_SLOTS_FIELDS: FieldSpec[] = [
   },
   { name: "service_id", type: "string" },
   { name: "staff_id", type: "string" },
+  { name: "show_all", type: "boolean" },
 ];
 
 export const BIND_TENANT_FIELDS: FieldSpec[] = [

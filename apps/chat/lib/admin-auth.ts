@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 const MASTER_EMAILS = new Set(
   (process.env.MASTER_ADMIN_EMAILS || "kdrnck1@gmail.com,musait@musait.app")
@@ -9,7 +9,7 @@ const MASTER_EMAILS = new Set(
 );
 
 export interface MasterAdminResult {
-  supabase: Awaited<ReturnType<typeof createClient>>;
+  supabase: ReturnType<typeof createAdminClient>;
   user: { id: string; email?: string | null; [key: string]: any };
 }
 
@@ -43,7 +43,8 @@ export async function requireMasterAdmin(): Promise<MasterAdminResult | NextResp
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  return { supabase, user };
+  // Return service-role client so admin routes bypass RLS
+  return { supabase: createAdminClient(), user };
 }
 
 /**

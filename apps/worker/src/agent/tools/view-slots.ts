@@ -30,6 +30,7 @@ export async function viewAvailableSlots(
   const date = validation.data.date as string;
   const serviceId = validation.data.service_id as string | undefined;
   const staffId = validation.data.staff_id as string | undefined;
+  const showAll = validation.data.show_all === true;
 
   // Call Supabase via service role to get availability
   // This uses the same logic as musait.app's availability calculation
@@ -78,7 +79,7 @@ export async function viewAvailableSlots(
   if (!response.ok) {
     // Fallback: manual slot calculation if RPC doesn't exist
     const fallbackResult = await manualSlotQuery(ctx.tenantId, date, serviceId, staffId);
-    return attachRecommendedSlots(fallbackResult);
+    return attachRecommendedSlots(fallbackResult, showAll);
   }
 
   const rpcData = (await response.json()) as Record<string, unknown>;
@@ -90,14 +91,13 @@ export async function viewAvailableSlots(
     const available = rpcSlots
       .filter((s: any) => s.isAvailable !== false)
       .map((s: any) => ({ time: String(s.time) }));
-    // Don't just slice first 6 — apply sandwich scoring so the RPC path
-    // also returns smart recommendations (same logic as manual fallback).
-    return attachRecommendedSlots({ date, availableSlots: available });
+    // Apply sandwich scoring so the RPC path also returns smart recommendations.
+    return attachRecommendedSlots({ date, availableSlots: available }, showAll);
   }
 
   // RPC returned unexpected format — fall through to manual
   const fallbackResult = await manualSlotQuery(ctx.tenantId, date, serviceId, staffId);
-  return attachRecommendedSlots(fallbackResult);
+  return attachRecommendedSlots(fallbackResult, showAll);
 }
 
 /**
@@ -238,6 +238,7 @@ async function manualSlotQuery(
     serviceDurationMinutes: serviceDuration,
     availableSlots: available.map(enrichSlot),
     recommendedSlots: recommendedSlots.map(enrichSlot),
+    _totalAvailable: available.length,
   };
 }
 
@@ -247,21 +248,33 @@ function enrichSlot(slot: { staffId?: string; time: string }): { staffId?: strin
   return { ...slot, id, label };
 }
 
-function attachRecommendedSlots(payload: Record<string, unknown>): Record<string, unknown> {
-  const recommendedSlots = getTopRecommendedSlots(payload).map(enrichSlot);
+function attachRecommendedSlots(payload: Record<string, unknown>, showAll = false): Record<string, unknown> {
+  const recommended = getTopRecommendedSlots(payload).map(enrichSlot);
 
-  // Also enrich availableSlots in-place if present
+  // Enrich the full available list
   const rawAvailable = payload.availableSlots;
-  const availableSlots = Array.isArray(rawAvailable)
+  const allSlots: Array<{ staffId?: string; time: string; id: string; label: string }> = Array.isArray(rawAvailable)
     ? rawAvailable.map((s: any) =>
         s && typeof s === "object" && typeof s.time === "string" ? enrichSlot(s) : s
       )
-    : rawAvailable;
+    : [];
+
+  const totalAvailable = (payload._totalAvailable as number | undefined) ?? allSlots.length;
+  const slotsToShow = showAll ? allSlots : recommended;
 
   return {
-    ...payload,
-    availableSlots,
-    recommendedSlots,
+    date: payload.date,
+    serviceDurationMinutes: payload.serviceDurationMinutes,
+    // `slots` is what the model should use to build the interactive list
+    slots: slotsToShow,
+    totalAvailable,
+    // Hint to the model about what is being shown
+    mode: showAll ? "all" : "recommended",
+    ...(showAll ? {} : {
+      note: totalAvailable > slotsToShow.length
+        ? `Toplam ${totalAvailable} boş saat var. Sadece önerilen ${slotsToShow.length} saat gösteriliyor. Müşteri daha fazla isterse show_all: true kullanın.`
+        : undefined,
+    }),
   };
 }
 

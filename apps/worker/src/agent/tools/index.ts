@@ -245,7 +245,7 @@ export function getToolDefinitions() {
       function: {
         name: "view_available_slots",
         description:
-          "Belirtilen tarih için müsait randevu slotlarını gösterir. Hizmet ve personel filtresi opsiyoneldir.",
+          "Belirtilen tarih için müsait randevu slotlarını gösterir. Varsayılan olarak optimize edilmiş önerilen slotları döner (slots alanı). Müşteri daha fazla saat istediğinde show_all: true geçin.",
         parameters: {
           type: "object",
           properties: {
@@ -260,6 +260,10 @@ export function getToolDefinitions() {
             staff_id: {
               type: "string",
               description: "Personel ID (opsiyonel)",
+            },
+            show_all: {
+              type: "boolean",
+              description: "true geçilirse tüm boş saatler döner. Sadece müşteri \"başka saat var mı\" veya \"diğer saatler\" gibi bir şey söylediğinde kullanın. Aksi halde false/eksik bırakın.",
             },
           },
           required: ["date"],
