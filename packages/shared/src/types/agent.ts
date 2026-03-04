@@ -86,7 +86,7 @@ export interface LLMConfig {
 }
 
 export const DEFAULT_LLM_CONFIG: Omit<LLMConfig, "apiKey"> = {
-  model: "deepseek/deepseek-chat",
+  model: "google/gemini-3-flash-preview",
   temperature: 0.7,
   maxTokens: 1024,
 };

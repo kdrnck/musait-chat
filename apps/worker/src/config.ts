@@ -17,18 +17,12 @@ export const WHATSAPP_CONFIG = {
 } as const;
 
 // OpenRouter config
+// NOT: Model ve provider panelden ayarlanır (tenants.integration_keys).
+// Buradaki ayarlar sadece API key, temperature ve maxTokens için.
 export const LLM_CONFIG = {
   apiKey: process.env.OPENROUTER_API_KEY || "",
-  model: process.env.LLM_MODEL || "deepseek/deepseek-chat-v3-0324",
   temperature: 0.7,
   maxTokens: 2048, // Turkish text needs more tokens; 1024 often truncates
-  providerPriority: (process.env.LLM_PROVIDER_PRIORITY || "groq,deepinfra")
-    .split(",")
-    .map((p) => p.trim())
-    .filter(Boolean),
-  providerAllowFallbacks:
-    (process.env.LLM_PROVIDER_ALLOW_FALLBACKS || "true").toLowerCase() !==
-    "false",
   enableReasoningForComplex:
     (process.env.LLM_ENABLE_REASONING_COMPLEX || "true").toLowerCase() !==
     "false",

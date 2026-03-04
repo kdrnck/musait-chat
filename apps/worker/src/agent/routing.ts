@@ -199,7 +199,7 @@ async function selectTenantWithLlm(
     .join("\n");
 
   const payload: Record<string, unknown> = {
-    model: LLM_CONFIG.model,
+    model: "google/gemini-3.1-flash-lite-preview",
     temperature: 0,
     max_tokens: 100,
     messages: [
@@ -213,13 +213,6 @@ async function selectTenantWithLlm(
       },
     ],
   };
-
-  if (LLM_CONFIG.providerPriority.length > 0) {
-    payload.provider = {
-      order: LLM_CONFIG.providerPriority,
-      allow_fallbacks: LLM_CONFIG.providerAllowFallbacks,
-    };
-  }
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",

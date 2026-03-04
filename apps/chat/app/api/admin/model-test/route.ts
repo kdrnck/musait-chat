@@ -218,7 +218,7 @@ function getToolDefinitions() {
 }
 
 function supportsReasoning(model: string): boolean {
-    return /deepseek/i.test(model);
+    return /deepseek|gemini/i.test(model);
 }
 
 // Tool execution functions

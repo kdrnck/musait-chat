@@ -45,7 +45,7 @@ export interface CallOpenRouterOptions {
 }
 
 function supportsReasoning(model: string): boolean {
-  return /deepseek/i.test(model);
+  return /deepseek|gemini/i.test(model);
 }
 
 function makeHeaders(): Record<string, string> {
@@ -114,11 +114,26 @@ export async function callOpenRouter(
     max_tokens: LLM_CONFIG.maxTokens,
   };
 
+  // Log which model + provider is being used
+  const providerInfo = options.tenantAiSettings.providerConfig
+    ? "provider_config (registry)"
+    : options.tenantAiSettings.providerPriority.length > 0
+      ? options.tenantAiSettings.providerPriority.join(",")
+      : "auto (OpenRouter default)";
+  console.log(
+    `🤖 LLM Call → model: ${options.tenantAiSettings.model} | provider: ${providerInfo}`
+  );
+
   if (tools) {
     payload.tools = tools;
   }
 
-  if (providerOrder.length > 0) {
+  // Build provider object: prefer full providerConfig (from ai_models table),
+  // fall back to legacy providerPriority array
+  if (options.tenantAiSettings.providerConfig && Object.keys(options.tenantAiSettings.providerConfig).length > 0) {
+    // Full provider routing config from ai_models.provider_config JSONB
+    payload.provider = { ...options.tenantAiSettings.providerConfig };
+  } else if (providerOrder.length > 0) {
     payload.provider = {
       order: providerOrder,
       allow_fallbacks: options.tenantAiSettings.allowFallbacks,

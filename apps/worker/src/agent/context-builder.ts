@@ -9,7 +9,7 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-const CACHE_TTL_MS = 60_000; // 60 seconds
+const CACHE_TTL_MS = 10_000; // 10 seconds — panel changes reflect quickly
 const tenantContextCache = new Map<string, CacheEntry<TenantContext | null>>();
 let globalSettingsCache: CacheEntry<GlobalSettings | null> | null = null;
 

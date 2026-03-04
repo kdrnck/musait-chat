@@ -1,7 +1,8 @@
-import { LLM_CONFIG } from "../config.js";
-
 export type AiModelProfile = "cheap" | "fast" | "premium" | "oss-deepinfra" | "oss-groq";
 export type OutboundNumberMode = "inbound" | "musait" | "tenant";
+
+/** Panel → DB'den gelen tier bazlı default modeller */
+const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 
 interface ModelPreset {
   model: string;
@@ -11,17 +12,17 @@ interface ModelPreset {
 
 const MODEL_PRESETS: Record<AiModelProfile, ModelPreset> = {
   cheap: {
-    model: "deepseek/deepseek-chat-v3-0324",
-    providerPriority: ["deepinfra"],
+    model: "google/gemini-3.1-flash-lite-preview",
+    providerPriority: [],
     allowFallbacks: true,
   },
   fast: {
-    model: "deepseek/deepseek-chat-v3-0324",
-    providerPriority: ["deepinfra"],
+    model: "google/gemini-3-flash-preview",
+    providerPriority: [],
     allowFallbacks: true,
   },
   premium: {
-    model: "google/gemini-2.5-flash-preview",
+    model: "anthropic/claude-haiku-4.5",
     providerPriority: [],
     allowFallbacks: true,
   },
@@ -44,6 +45,7 @@ export interface TenantAiSettings {
   model: string;
   providerPriority: string[];
   allowFallbacks: boolean;
+  providerConfig: Record<string, unknown> | null;
   systemPromptText: string | null;
   legacyExtraSystemPrompt: string | null;
   outboundNumberMode: OutboundNumberMode;
@@ -71,20 +73,23 @@ export function resolveTenantAiSettings(
   // Normalize legacy model slugs that OpenRouter has retired
   const MODEL_ALIASES: Record<string, string> = {
     "deepseek/deepseek-chat": "deepseek/deepseek-chat-v3-0324",
+    "deepseek/deepseek-chat-v3-0324": "google/gemini-3-flash-preview",
   };
   const normalizedModel = rawModel ? (MODEL_ALIASES[rawModel] ?? rawModel) : null;
-  const model = normalizedModel || preset.model || LLM_CONFIG.model;
+  // Model önceliği: 1) DB'deki ai_model  2) Preset model  3) Hardcoded default
+  // .env KULLANILMAZ — model her zaman panelden yönetilir
+  const model = normalizedModel || preset.model || DEFAULT_MODEL;
 
   const providerPriority =
     parseProviderPriority(keys.ai_provider_priority) ||
     (preset.providerPriority.length > 0
       ? preset.providerPriority
-      : LLM_CONFIG.providerPriority);
+      : []);
 
   const allowFallbacks =
     asBoolean(keys.ai_allow_fallbacks) ??
     preset.allowFallbacks ??
-    LLM_CONFIG.providerAllowFallbacks;
+    true;
 
   const systemPromptText = asString(keys.ai_system_prompt_text) || globalPrompt || null;
   const legacyExtraSystemPrompt = asString(keys.ai_extra_system_prompt);
@@ -101,11 +106,21 @@ export function resolveTenantAiSettings(
   const maxIterations = asPositiveInt(keys.ai_max_iterations, 3, 1, 10);
   const llmTimeoutMs = asPositiveInt(keys.ai_llm_timeout_ms, 8000, 3000, 30000);
 
+  // Provider config from ai_models table (JSONB), stored in integration keys
+  const providerConfigRaw = keys.ai_provider_config;
+  const providerConfig: Record<string, unknown> | null =
+    providerConfigRaw && typeof providerConfigRaw === "object" && !Array.isArray(providerConfigRaw)
+      ? (providerConfigRaw as Record<string, unknown>)
+      : typeof providerConfigRaw === "string"
+        ? (() => { try { return JSON.parse(providerConfigRaw); } catch { return null; } })()
+        : null;
+
   return {
     modelProfile,
     model,
     providerPriority,
     allowFallbacks,
+    providerConfig,
     systemPromptText,
     legacyExtraSystemPrompt,
     outboundNumberMode,

@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    Settings2, X, Save, RefreshCw, Sparkles, Cpu, Zap, Globe, ChevronDown,
+    Settings2, X, Save, RefreshCw, Cpu, Zap, Globe,
 } from "lucide-react";
 import {
-    AI_MODEL_PRESETS,
     DEFAULT_AI_SYSTEM_PROMPT,
     type AiModelProfile,
     type OutboundNumberMode,
@@ -28,17 +27,13 @@ interface TenantAiSettings {
     wabaAppSecret: string;
 }
 
-type ProviderStrategyKey = "groq_first" | "deepinfra_first" | "groq_only" | "deepinfra_only" | "custom";
+interface TenantTierInfo {
+    tier_id: string;
+    tier_name: string;
+    tier_display_name: string;
+    is_explicit: boolean;
+}
 
-const PROVIDER_STRATEGIES: Record<
-    Exclude<ProviderStrategyKey, "custom">,
-    { label: string; providers: string[] }
-> = {
-    groq_first: { label: "Groq öncelikli (Groq → DeepInfra)", providers: ["groq", "deepinfra"] },
-    deepinfra_first: { label: "DeepInfra öncelikli (DeepInfra → Groq)", providers: ["deepinfra", "groq"] },
-    groq_only: { label: "Sadece Groq", providers: ["groq"] },
-    deepinfra_only: { label: "Sadece DeepInfra", providers: ["deepinfra"] },
-};
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
     return (
@@ -77,6 +72,16 @@ interface RegistryModel {
     id: string;
     openrouter_id: string;
     display_name: string;
+    tier: string;
+    provider_config: Record<string, unknown> | null;
+    supports_tools: boolean;
+    supports_reasoning: boolean;
+}
+
+interface ModelTier {
+    id: string;
+    name: string;
+    display_name: string;
 }
 
 export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose }: AdminTenantSettingsModalProps) {
@@ -87,6 +92,8 @@ export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose
     const [settings, setSettings] = useState<TenantAiSettings | null>(null);
     const [originalSettings, setOriginalSettings] = useState<TenantAiSettings | null>(null);
     const [registryModels, setRegistryModels] = useState<RegistryModel[]>([]);
+    const [tenantTier, setTenantTier] = useState<TenantTierInfo | null>(null);
+    const [allTiers, setAllTiers] = useState<ModelTier[]>([]);
     const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
     // Detect unsaved changes
@@ -94,16 +101,6 @@ export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose
         if (!settings || !originalSettings) return false;
         return JSON.stringify(settings) !== JSON.stringify(originalSettings);
     }, [settings, originalSettings]);
-
-    const selectedProviderStrategy = useMemo<ProviderStrategyKey>(() => {
-        if (!settings) return "groq_first";
-        const normalized = settings.providerPriority.join(",").toLowerCase();
-        if (normalized === "groq,deepinfra") return "groq_first";
-        if (normalized === "deepinfra,groq") return "deepinfra_first";
-        if (normalized === "groq") return "groq_only";
-        if (normalized === "deepinfra") return "deepinfra_only";
-        return "custom";
-    }, [settings]);
 
     const canEdit = Boolean(settings?.canEdit);
     
@@ -173,13 +170,25 @@ export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose
 
     const loadRegistryModels = useCallback(async () => {
         try {
-            const res = await fetch("/api/models", { cache: "no-store" });
-            if (res.ok) {
-                const data = await res.json();
+            const [modelsRes, tierRes, allTiersRes] = await Promise.all([
+                fetch(`/api/models?tenantId=${encodeURIComponent(tenantId)}`, { cache: "no-store" }),
+                fetch(`/api/admin/tenant-tier?tenantId=${encodeURIComponent(tenantId)}`, { cache: "no-store" }),
+                fetch("/api/admin/model-tiers", { cache: "no-store" }),
+            ]);
+            if (modelsRes.ok) {
+                const data = await modelsRes.json();
                 setRegistryModels(data);
             }
+            if (tierRes.ok) {
+                const data = await tierRes.json();
+                setTenantTier(data);
+            }
+            if (allTiersRes.ok) {
+                const data = await allTiersRes.json();
+                if (Array.isArray(data)) setAllTiers(data);
+            }
         } catch { /* ignore */ }
-    }, []);
+    }, [tenantId]);
 
     useEffect(() => {
         void loadSettings();
@@ -204,7 +213,7 @@ export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose
                             <h2 className="text-[16px] font-bold text-[var(--color-text-primary)]">İşletme AI Yapılandırması</h2>
                             <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
                                 <span className="font-semibold text-[var(--color-brand-dim)]">{tenantName}</span>
-                                {" "}— model, sağlayıcı & prompt ayarları
+                                {" "}— model & prompt ayarları
                             </p>
                         </div>
                     </div>
@@ -230,111 +239,99 @@ export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose
                         </div>
                     ) : settings && (
                         <>
-                            {/* Section: Model & Provider */}
+                            {/* Section: Model */}
                             <section>
                                 <SectionHeader
                                     icon={<Cpu size={15} className="text-[var(--color-brand-dim)]" />}
-                                    title="Model & Sağlayıcı"
+                                    title="Model Seçimi"
                                 />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                                            Model Profili
-                                        </label>
-                                        <select
-                                            value={settings.modelProfile}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (val.startsWith("registry:")) {
-                                                    const routerId = val.replace("registry:", "");
-                                                    const rm = registryModels.find((m) => m.openrouter_id === routerId);
-                                                    setSettings({
-                                                        ...settings,
-                                                        modelProfile: "fast" as AiModelProfile,
-                                                        model: routerId,
-                                                    });
-                                                } else {
-                                                    const preset = AI_MODEL_PRESETS[val as AiModelProfile];
-                                                    setSettings({
-                                                        ...settings,
-                                                        modelProfile: val as AiModelProfile,
-                                                        model: preset.model,
-                                                        providerPriority: [...preset.providerPriority],
-                                                        allowFallbacks: preset.allowFallbacks,
-                                                    });
-                                                }
-                                            }}
-                                            disabled={!canEdit}
-                                            className="form-select"
-                                        >
-                                            <optgroup label="Profiller">
-                                                {(Object.keys(AI_MODEL_PRESETS) as AiModelProfile[]).map((p) => (
-                                                    <option key={p} value={p}>{AI_MODEL_PRESETS[p].label}</option>
-                                                ))}
-                                            </optgroup>
-                                            {registryModels.length > 0 && (
-                                                <optgroup label="Kayıtlı Modeller">
-                                                    {registryModels.map((m) => (
-                                                        <option key={m.id} value={`registry:${m.openrouter_id}`}>
-                                                            {m.display_name}
-                                                        </option>
-                                                    ))}
-                                                </optgroup>
+
+                                {/* Tier Badge & Change */}
+                                {tenantTier && (
+                                    <div className="mb-4 p-3.5 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)] flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="text-[12px] text-[var(--color-text-muted)]">Model Tier:</span>
+                                            <span className={`inline-flex px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${
+                                                tenantTier.tier_name === "premium" ? "bg-amber-900/30 text-amber-400 border border-amber-800" :
+                                                tenantTier.tier_name === "enterprise" ? "bg-purple-900/30 text-purple-400 border border-purple-800" :
+                                                "bg-[var(--color-surface-active)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
+                                            }`}>
+                                                {tenantTier.tier_display_name}
+                                            </span>
+                                            {!tenantTier.is_explicit && (
+                                                <span className="text-[10px] text-[var(--color-text-muted)]">(varsayılan)</span>
                                             )}
-                                        </select>
+                                        </div>
+                                        {canEdit && allTiers.length > 0 && (
+                                            <select
+                                                value={tenantTier.tier_name}
+                                                onChange={async (e) => {
+                                                    const newTierName = e.target.value;
+                                                    const selectedTier = allTiers.find((t) => t.name === newTierName);
+                                                    if (!selectedTier) return;
+                                                    try {
+                                                        const res = await fetch("/api/admin/tenant-tier", {
+                                                            method: "PUT",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ tenant_id: tenantId, tier_id: selectedTier.id }),
+                                                        });
+                                                        if (res.ok) {
+                                                            setTenantTier({
+                                                                tier_id: selectedTier.id,
+                                                                tier_name: selectedTier.name,
+                                                                tier_display_name: selectedTier.display_name,
+                                                                is_explicit: true,
+                                                            });
+                                                            // Reload models for new tier
+                                                            const modelsRes = await fetch(`/api/models?tenantId=${encodeURIComponent(tenantId)}`, { cache: "no-store" });
+                                                            if (modelsRes.ok) setRegistryModels(await modelsRes.json());
+                                                        }
+                                                    } catch { /* ignore */ }
+                                                }}
+                                                className="form-select text-[11px] py-1 px-2 w-auto"
+                                            >
+                                                {allTiers.map((t) => <option key={t.name} value={t.name}>{t.display_name}</option>)}
+                                            </select>
+                                        )}
                                     </div>
+                                )}
 
-                                    <div className="space-y-1.5">
-                                        <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                                            Model ID
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={settings.model}
-                                            onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-                                            disabled={!canEdit}
-                                            className="form-input font-mono"
-                                            placeholder="model/id..."
-                                        />
-                                    </div>
 
-                                    <div className="space-y-1.5">
-                                        <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                                            Sağlayıcı Stratejisi
-                                        </label>
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                                        Model
+                                    </label>
+                                    {registryModels.length > 0 ? (
                                         <select
-                                            value={selectedProviderStrategy}
+                                            value={registryModels.find((m) => m.openrouter_id === settings.model)?.openrouter_id || ""}
                                             onChange={(e) => {
-                                                const strat = e.target.value as ProviderStrategyKey;
-                                                if (strat !== "custom") {
-                                                    setSettings({ ...settings, providerPriority: PROVIDER_STRATEGIES[strat].providers });
-                                                }
+                                                const rm = registryModels.find((m) => m.openrouter_id === e.target.value);
+                                                if (rm) setSettings({ ...settings, modelProfile: "fast" as AiModelProfile, model: rm.openrouter_id });
                                             }}
                                             disabled={!canEdit}
                                             className="form-select"
                                         >
-                                            {(Object.keys(PROVIDER_STRATEGIES) as Array<Exclude<ProviderStrategyKey, "custom">>).map((k) => (
-                                                <option key={k} value={k}>{PROVIDER_STRATEGIES[k].label}</option>
+                                            {!registryModels.find((m) => m.openrouter_id === settings.model) && (
+                                                <option value="" disabled>— mevcut model tier dışında —</option>
+                                            )}
+                                            {registryModels.map((m) => (
+                                                <option key={m.id} value={m.openrouter_id}>
+                                                    {m.display_name}{m.supports_reasoning ? " 🧠" : ""}{m.supports_tools ? " 🔧" : ""}
+                                                </option>
                                             ))}
-                                            <option value="custom" disabled>Özel Yapılandırma</option>
                                         </select>
-                                    </div>
+                                    ) : (
+                                        <div className="form-input font-mono text-[12px] text-[var(--color-text-muted)] cursor-default">
+                                            {settings.model || "—"}
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-[var(--color-text-muted)]">
+                                        Provider ayarları seçilen modele göre otomatik uygulanır.
+                                    </p>
                                 </div>
 
-                                {/* Toggles */}
-                                <div className="mt-4 space-y-3">
-                                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
-                                        <div>
-                                            <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">Yedek Sağlayıcı (Fallback)</p>
-                                            <p className="text-[11px] text-[var(--color-text-muted)]">Birincil başarısız olunca yedek devreye girer</p>
-                                        </div>
-                                        <Toggle
-                                            checked={settings.allowFallbacks}
-                                            onChange={(v) => setSettings({ ...settings, allowFallbacks: v })}
-                                            disabled={!canEdit}
-                                        />
-                                    </div>
-
+                                {/* Booking flow toggle */}
+                                <div className="mt-4">
                                     <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
                                         <div>
                                             <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">Yapılandırılmış Randevu Akışı</p>

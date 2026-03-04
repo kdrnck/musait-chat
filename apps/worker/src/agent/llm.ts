@@ -6,7 +6,7 @@ import {
   resolveTenantAiSettings,
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
-import { ADMIN_MODE } from "./master-prompts.js";
+import { ADMIN_MODE, ROUTER_AGENT_FALLBACK_PROMPT } from "./master-prompts.js";
 import { listServices, listStaff, getBusinessInfo } from "./tools/list-business-data.js";
 import type { PerfTimer } from "../lib/perf-timer.js";
 
@@ -348,18 +348,13 @@ async function buildContext(
   } else if (!conversation.tenantId) {
     const activeTenants = await fetchActiveTenants(convex);
     const tenantList = activeTenants.length > 0
-      ? activeTenants.map((t) => `- ${t.tenantName} (tenant_id: ${t.tenantId})`).join("\n")
+      ? activeTenants.map((t) => `- ${t.tenantName}`).join("\n")
       : "Şu anda aktif işletme yok.";
 
-    const routerAgentPrompt = globalSettingsResult?.routerAgentPromptText;
+    const routerAgentPrompt = globalSettingsResult?.routerAgentPromptText || ROUTER_AGENT_FALLBACK_PROMPT;
 
-    if (routerAgentPrompt) {
-      systemPromptContent = `${routerAgentPrompt}\n\n## Aktif İşletmeler\n${tenantList}`;
-      promptSource = 'ROUTER_AGENT_DB';
-    } else {
-      systemPromptContent = `## Aktif İşletmeler\n${tenantList}`;
-      promptSource = 'TENANT_LIST_ONLY';
-    }
+    systemPromptContent = `${routerAgentPrompt}\n\n## Aktif İşletmeler\n${tenantList}`;
+    promptSource = globalSettingsResult?.routerAgentPromptText ? 'ROUTER_AGENT_DB' : 'ROUTER_AGENT_FALLBACK';
     console.log(`🔀 Unbound routing: ${promptSource} (${activeTenants.length} tenants)`);
   } else {
     const rawPrompt = dashboardPrompt || globalPrompt || null;

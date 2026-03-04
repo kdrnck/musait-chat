@@ -189,7 +189,7 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  const [tenantResult, globalResult] = await Promise.all([
+  const [tenantResult, globalResult, modelRegistryResult] = await Promise.all([
     supabase
       .from("tenants")
       .select("integration_keys")
@@ -199,7 +199,17 @@ export async function PUT(request: NextRequest) {
       .from("global_settings")
       .select("ai_system_prompt_text")
       .eq("id", "default")
-      .single()
+      .single(),
+    // Fetch provider_config from ai_models registry if model is set
+    model
+      ? supabase
+          .from("ai_models")
+          .select("provider_config")
+          .eq("openrouter_id", model)
+          .eq("is_enabled", true)
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   if (tenantResult.error) {
@@ -215,6 +225,9 @@ export async function PUT(request: NextRequest) {
 
   const globalPrompt = globalResult.data?.ai_system_prompt_text || null;
 
+  // Get provider_config from model registry (if model matched)
+  const registryProviderConfig = modelRegistryResult?.data?.provider_config ?? null;
+
   const integrationKeys = {
     ...currentIntegrationKeys,
     ai_model_profile: modelProfile,
@@ -226,6 +239,8 @@ export async function PUT(request: NextRequest) {
     ai_booking_flow_enabled: String(bookingFlowEnabled),
     ai_max_iterations: String(maxIterations),
     ai_llm_timeout_ms: String(llmTimeoutMs),
+    // Write provider_config from model registry — worker uses this for OpenRouter routing
+    ai_provider_config: registryProviderConfig,
   } as Record<string, unknown>;
 
   const payload = {

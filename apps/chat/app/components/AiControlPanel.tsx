@@ -4,22 +4,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Settings2, X, Save, RefreshCw, Sparkles, Cpu, Zap, Globe,
-    ChevronDown,
 } from "lucide-react";
 import {
-    AI_MODEL_PRESETS,
     DEFAULT_AI_SYSTEM_PROMPT,
-    type AiModelProfile,
     type OutboundNumberMode,
 } from "@/lib/ai/settings";
 
 interface TenantAiSettings {
     tenantId: string;
     canEdit: boolean;
-    modelProfile: AiModelProfile;
     model: string;
-    providerPriority: string[];
-    allowFallbacks: boolean;
     promptText: string;
     outboundNumberMode: OutboundNumberMode;
     bookingFlowEnabled: boolean;
@@ -32,17 +26,6 @@ interface TenantAiSettings {
     wabaAppSecret: string;
 }
 
-type ProviderStrategyKey = "groq_first" | "deepinfra_first" | "groq_only" | "deepinfra_only" | "custom";
-
-const PROVIDER_STRATEGIES: Record<
-    Exclude<ProviderStrategyKey, "custom">,
-    { label: string; providers: string[] }
-> = {
-    groq_first: { label: "Groq öncelikli (Groq → DeepInfra)", providers: ["groq", "deepinfra"] },
-    deepinfra_first: { label: "DeepInfra öncelikli (DeepInfra → Groq)", providers: ["deepinfra", "groq"] },
-    groq_only: { label: "Sadece Groq", providers: ["groq"] },
-    deepinfra_only: { label: "Sadece DeepInfra", providers: ["deepinfra"] },
-};
 
 /* ── Toggle component ── */
 function Toggle({
@@ -109,27 +92,20 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
         return JSON.stringify(settings) !== JSON.stringify(originalSettings);
     }, [settings, originalSettings]);;
 
-    const selectedProviderStrategy = useMemo<ProviderStrategyKey>(() => {
-        if (!settings) return "groq_first";
-        const normalized = settings.providerPriority.join(",").toLowerCase();
-        if (normalized === "groq,deepinfra") return "groq_first";
-        if (normalized === "deepinfra,groq") return "deepinfra_first";
-        if (normalized === "groq") return "groq_only";
-        if (normalized === "deepinfra") return "deepinfra_only";
-        return "custom";
-    }, [settings]);
-
     const canEdit = Boolean(settings?.canEdit);
 
     const loadRegistryModels = useCallback(async () => {
         try {
-            const res = await fetch("/api/models", { cache: "no-store" });
+            const url = tenantId
+                ? `/api/models?tenantId=${encodeURIComponent(tenantId)}`
+                : "/api/models";
+            const res = await fetch(url, { cache: "no-store" });
             if (res.ok) {
                 const data = await res.json();
                 setRegistryModels(data);
             }
         } catch { /* ignore */ }
-    }, []);
+    }, [tenantId]);
 
     const openPanel = async () => {
         setOpen(true);
@@ -261,162 +237,42 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                 </div>
                             ) : settings && (
                                 <>
-                                    {/* Section: Model & Provider */}
+                                    {/* Section: Model */}
                                     <section>
                                         <SectionHeader
                                             icon={<Cpu size={15} className="text-[var(--color-brand-dim)]" />}
-                                            title="Model & Sağlayıcı"
+                                            title="Model"
                                         />
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                                                    Model Profili
-                                                </label>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                                                Aktif Model
+                                            </label>
+                                            {registryModels.length > 0 ? (
                                                 <select
-                                                    value={settings.modelProfile}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        if (val.startsWith("registry:")) {
-                                                            const routerId = val.replace("registry:", "");
-                                                            setSettings({
-                                                                ...settings,
-                                                                modelProfile: "fast" as AiModelProfile,
-                                                                model: routerId,
-                                                            });
-                                                        } else {
-                                                            const preset = AI_MODEL_PRESETS[val as AiModelProfile];
-                                                            setSettings({
-                                                                ...settings,
-                                                                modelProfile: val as AiModelProfile,
-                                                                model: preset.model,
-                                                                providerPriority: [...preset.providerPriority],
-                                                                allowFallbacks: preset.allowFallbacks,
-                                                            });
-                                                        }
-                                                    }}
-                                                    disabled={!canEdit}
-                                                    className="form-select"
-                                                >
-                                                    <optgroup label="Profiller">
-                                                        {(Object.keys(AI_MODEL_PRESETS) as AiModelProfile[]).map((p) => (
-                                                            <option key={p} value={p}>{AI_MODEL_PRESETS[p].label}</option>
-                                                        ))}
-                                                    </optgroup>
-                                                    {registryModels.length > 0 && (
-                                                        <optgroup label="Kayıtlı Modeller">
-                                                            {registryModels.map((m) => (
-                                                                <option key={m.id} value={`registry:${m.openrouter_id}`}>
-                                                                    {m.display_name}
-                                                                </option>
-                                                            ))}
-                                                        </optgroup>
-                                                    )}
-                                                </select>
-                                            </div>
-
-                                            <div className="space-y-1.5">
-                                                <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                                                    Model ID
-                                                </label>
-                                                <input
-                                                    type="text"
                                                     value={settings.model}
                                                     onChange={(e) => setSettings({ ...settings, model: e.target.value })}
                                                     disabled={!canEdit}
-                                                    className="form-input font-mono"
-                                                    placeholder="model/id..."
-                                                />
-                                            </div>
-
-                                            <div className="space-y-1.5 sm:col-span-2">
-                                                <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                                                    Sağlayıcı Stratejisi
-                                                </label>
-                                                <select
-                                                    value={selectedProviderStrategy}
-                                                    onChange={(e) => {
-                                                        const strat = e.target.value as ProviderStrategyKey;
-                                                        if (strat !== "custom") {
-                                                            setSettings({
-                                                                ...settings,
-                                                                providerPriority: PROVIDER_STRATEGIES[strat].providers,
-                                                                allowFallbacks: false,
-                                                            });
-                                                        }
-                                                    }}
-                                                    disabled={!canEdit}
                                                     className="form-select"
                                                 >
-                                                    {(Object.keys(PROVIDER_STRATEGIES) as Array<Exclude<ProviderStrategyKey, "custom">>).map((k) => (
-                                                        <option key={k} value={k}>{PROVIDER_STRATEGIES[k].label}</option>
+                                                    <option value="">— Model seçin —</option>
+                                                    {registryModels.map((m) => (
+                                                        <option key={m.id} value={m.openrouter_id}>
+                                                            {m.display_name}
+                                                        </option>
                                                     ))}
-                                                    <option value="custom">Özel (manuel)</option>
                                                 </select>
-                                                <input
-                                                    type="text"
-                                                    value={settings.providerPriority.join(", ")}
-                                                    onChange={(e) => {
-                                                        const providers = e.target.value
-                                                            .split(",")
-                                                            .map((p) => p.trim())
-                                                            .filter(Boolean);
-                                                        setSettings({
-                                                            ...settings,
-                                                            providerPriority: providers,
-                                                            // When user explicitly types providers, default to strict mode
-                                                            allowFallbacks: providers.length === 0 ? true : settings.allowFallbacks,
-                                                        });
-                                                    }}
-                                                    disabled={!canEdit}
-                                                    className="form-input font-mono text-[12px]"
-                                                    placeholder="groq, deepinfra, together (boş = OpenRouter varsayılan)"
-                                                />
-                                                {settings.providerPriority.length > 0 && (
-                                                    <div className={`flex items-center gap-1.5 mt-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium ${
-                                                        settings.allowFallbacks
-                                                            ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-                                                            : "bg-green-500/10 text-green-400 border border-green-500/20"
-                                                    }`}>
-                                                        <span>{settings.allowFallbacks ? "⚠️" : "🔒"}</span>
-                                                        <span>
-                                                            {settings.allowFallbacks
-                                                                ? `Sadece tercih: ${settings.providerPriority.join(", ")} öncelikli ama başka providerlar da kullanılabilir`
-                                                                : `Zorunlu: Sadece ${settings.providerPriority.join(", ")} kullanılacak`}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <p className="text-[10px] text-[var(--color-text-muted)]">
-                                                    Virgülle ayır · Örnek: <span className="font-mono">groq, deepinfra</span> · Boş bırakırsan OpenRouter otomatik seçer
-                                                </p>
-                                            </div>
+                                            ) : (
+                                                <div className="form-input text-[var(--color-text-muted)] text-[12px] font-mono">
+                                                    {settings.model || "Model henüz atanmadı"}
+                                                </div>
+                                            )}
+                                            <p className="text-[10px] text-[var(--color-text-muted)]">
+                                                Kullanılabilir modeller plan tierınıza göre belirlenir.
+                                            </p>
                                         </div>
 
                                         {/* Toggles */}
                                         <div className="mt-4 space-y-3">
-                                            <div className={`flex items-center justify-between p-3.5 rounded-xl border ${
-                                                settings.providerPriority.length > 0 && settings.allowFallbacks
-                                                    ? "bg-yellow-500/5 border-yellow-500/20"
-                                                    : "bg-[var(--color-surface-hover)] border-[var(--color-border)]"
-                                            }`}>
-                                                <div>
-                                                    <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
-                                                        Diğer Sağlayıcılara İzin Ver
-                                                    </p>
-                                                    <p className="text-[11px] text-[var(--color-text-muted)]">
-                                                        {settings.providerPriority.length > 0
-                                                            ? settings.allowFallbacks
-                                                                ? "AÇIK: Seçtiklerin başarısız olursa başka providerlar da denenebilir"
-                                                                : "KAPALI: Sadece seçtiğin providerlar kullanılacak (önerilen)"
-                                                            : "Provider listesi boş — OpenRouter otomatik seçiyor"}
-                                                    </p>
-                                                </div>
-                                                <Toggle
-                                                    checked={settings.allowFallbacks}
-                                                    onChange={(v) => setSettings({ ...settings, allowFallbacks: v })}
-                                                    disabled={!canEdit}
-                                                />
-                                            </div>
-
                                             <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
                                                 <div>
                                                     <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">Yapılandırılmış Randevu Akışı</p>

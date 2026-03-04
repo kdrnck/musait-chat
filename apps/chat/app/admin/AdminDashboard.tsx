@@ -6,10 +6,11 @@ import GlobalAiSettingsPanel from "./components/GlobalAiSettingsPanel";
 import ModelTestPanel from "./components/ModelTestPanel";
 import TenantSystemPromptPanel from "./components/TenantSystemPromptPanel";
 import ModelRegistryPanel from "./components/ModelRegistryPanel";
+import ModelTiersPanel from "./components/ModelTiersPanel";
 import AdminTenantSettingsModal from "./components/AdminTenantSettingsModal";
 import BusinessManagementPanel from "./components/BusinessManagementPanel";
 import PromptLibraryPanel from "./components/PromptLibraryPanel";
-import { Shield, Activity, Terminal, Network, Globe, LogOut, SlidersHorizontal, Cpu, MessageSquare, Building2, ChevronDown, ChevronRight, FileText, RefreshCw } from "lucide-react";
+import { Shield, Activity, Terminal, Network, Globe, LogOut, SlidersHorizontal, Cpu, MessageSquare, Building2, ChevronDown, ChevronRight, FileText, RefreshCw, Layers } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -19,7 +20,7 @@ interface Tenant {
     logo_url: string | null;
 }
 
-type AdminSection = "chat" | "global" | "routing" | "businesses" | "prompt-library" | "global-prompt" | "tenant-prompt" | "models" | "test-lab";
+type AdminSection = "chat" | "global" | "routing" | "businesses" | "prompt-library" | "global-prompt" | "tenant-prompt" | "models" | "model-tiers" | "test-lab";
 
 export default function AdminDashboard({
     userEmail,
@@ -119,6 +120,12 @@ export default function AdminDashboard({
                     label: "Modeller",
                     icon: <Cpu size={18} />,
                     description: "AI model kayıt defteri",
+                },
+                {
+                    key: "model-tiers" as AdminSection,
+                    label: "Model Tier'ları",
+                    icon: <Layers size={18} />,
+                    description: "Model havuzu ve tier yönetimi",
                 },
                 {
                     key: "test-lab" as AdminSection,
@@ -326,8 +333,13 @@ export default function AdminDashboard({
                                 </div>
                             )}
                             {activeSection === "models" && (
-                                <div className="max-w-4xl mx-auto px-6 md:px-10 py-8">
+                                <div className="max-w-5xl mx-auto px-6 md:px-10 py-8">
                                     <ModelRegistryPanel />
+                                </div>
+                            )}
+                            {activeSection === "model-tiers" && (
+                                <div className="max-w-4xl mx-auto px-6 md:px-10 py-8">
+                                    <ModelTiersPanel />
                                 </div>
                             )}
                             {activeSection === "test-lab" && (

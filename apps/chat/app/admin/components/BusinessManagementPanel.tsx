@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Building2, Search, Settings, MessageSquare, Bot, ChevronDown, ChevronUp, Save, Loader2, Check, AlertCircle, Globe, Phone } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Building2, Search, Settings, MessageSquare, Bot, ChevronDown, ChevronUp, Save, Loader2, Check, AlertCircle, Globe } from "lucide-react";
 
 interface Tenant {
     id: string;
@@ -10,10 +10,7 @@ interface Tenant {
 }
 
 interface TenantSettings {
-    modelProfile: string;
     model: string;
-    providerPriority: string;
-    allowFallbacks: boolean;
     promptText: string;
     businessContext: string;
     outboundNumberMode: string;
@@ -28,10 +25,18 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+    const [registryModels, setRegistryModels] = useState<Array<{ id: string; openrouter_id: string; display_name: string }>>([])
 
     const filteredTenants = tenants.filter(t => 
         t.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const loadRegistryModels = useCallback(async (tenantId: string) => {
+        try {
+            const res = await fetch(`/api/models?tenantId=${encodeURIComponent(tenantId)}`, { cache: "no-store" });
+            if (res.ok) setRegistryModels(await res.json());
+        } catch { /* ignore */ }
+    }, []);
 
     useEffect(() => {
         if (!selectedTenant) {
@@ -46,10 +51,7 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                 if (res.ok) {
                     const data = await res.json();
                     setSettings({
-                        modelProfile: data.modelProfile || "cheap",
                         model: data.model || "",
-                        providerPriority: data.providerPriority || "groq,deepinfra",
-                        allowFallbacks: data.allowFallbacks ?? true,
                         promptText: data.promptText || "",
                         businessContext: data.businessContext || "",
                         outboundNumberMode: data.outboundNumberMode || "inbound",
@@ -64,7 +66,8 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
         };
 
         loadSettings();
-    }, [selectedTenant]);
+        loadRegistryModels(selectedTenant);
+    }, [selectedTenant, loadRegistryModels]);
 
     const handleSave = async () => {
         if (!selectedTenant || !settings) return;
@@ -250,17 +253,16 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                                     <div className="p-5 pt-0 space-y-5 border-t border-[var(--color-border)]">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="form-group !mb-0">
-                                                <label className="form-label">Model Profili</label>
+                                                <label className="form-label">Model</label>
                                                 <select
-                                                    value={settings.modelProfile}
-                                                    onChange={(e) => setSettings({...settings, modelProfile: e.target.value})}
+                                                    value={settings.model}
+                                                    onChange={(e) => setSettings({...settings, model: e.target.value})}
                                                     className="form-select"
                                                 >
-                                                    <option value="cheap">Ekonomik</option>
-                                                    <option value="fast">Hızlı</option>
-                                                    <option value="premium">Premium</option>
-                                                    <option value="oss-deepinfra">OSS (DeepInfra)</option>
-                                                    <option value="oss-groq">OSS (Groq)</option>
+                                                    <option value="">— Model seçin —</option>
+                                                    {registryModels.map((m) => (
+                                                        <option key={m.id} value={m.openrouter_id}>{m.display_name}</option>
+                                                    ))}
                                                 </select>
                                             </div>
                                             
@@ -286,19 +288,6 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                                             <button
                                                 onClick={() => setSettings({...settings, bookingFlowEnabled: !settings.bookingFlowEnabled})}
                                                 className={`toggle-track ${settings.bookingFlowEnabled ? "on" : ""}`}
-                                            >
-                                                <div className="toggle-thumb" />
-                                            </button>
-                                        </div>
-
-                                        <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
-                                            <div>
-                                                <p className="font-medium text-[var(--color-text-primary)]">Fallback İzni</p>
-                                                <p className="text-xs text-[var(--color-text-muted)]">Model başarısız olursa alternatif kullan</p>
-                                            </div>
-                                            <button
-                                                onClick={() => setSettings({...settings, allowFallbacks: !settings.allowFallbacks})}
-                                                className={`toggle-track ${settings.allowFallbacks ? "on" : ""}`}
                                             >
                                                 <div className="toggle-thumb" />
                                             </button>

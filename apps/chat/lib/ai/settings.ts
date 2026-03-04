@@ -10,31 +10,31 @@ export interface AiModelPreset {
 
 export const AI_MODEL_PRESETS: Record<AiModelProfile, AiModelPreset> = {
   cheap: {
-    label: "Ucuz Default (DeepSeek via DeepInfra)",
-    model: "deepseek/deepseek-chat-v3-0324",
-    providerPriority: ["deepinfra"],
+    label: "Ekonomik (Gemini Flash Lite)",
+    model: "google/gemini-3.1-flash-lite-preview",
+    providerPriority: [],
     allowFallbacks: true,
   },
   fast: {
-    label: "Hızlı Default (DeepSeek via DeepInfra)",
-    model: "deepseek/deepseek-chat-v3-0324",
-    providerPriority: ["deepinfra"],
+    label: "Hızlı (Gemini 3 Flash)",
+    model: "google/gemini-3-flash-preview",
+    providerPriority: [],
     allowFallbacks: true,
   },
   premium: {
-    label: "Hızlı Premium (Gemini Fast 3 Preview)",
-    model: "google/gemini-2.5-flash-preview",
+    label: "Premium (Claude Haiku 4.5)",
+    model: "anthropic/claude-haiku-4.5",
     providerPriority: [],
     allowFallbacks: true,
   },
   "oss-deepinfra": {
-    label: "gpt-oss-120b fast (DeepInfra)",
+    label: "GPT-OSS (DeepInfra)",
     model: "openai/gpt-oss-120b",
     providerPriority: ["deepinfra"],
     allowFallbacks: true,
   },
   "oss-groq": {
-    label: "gpt-oss-120b fast (Groq)",
+    label: "GPT-OSS (Groq)",
     model: "openai/gpt-oss-120b",
     providerPriority: ["groq"],
     allowFallbacks: true,
@@ -85,6 +85,7 @@ export interface ResolvedAiSettings {
   model: string;
   providerPriority: string[];
   allowFallbacks: boolean;
+  providerConfig: Record<string, unknown> | null;
   promptText: string;
   outboundNumberMode: OutboundNumberMode;
   bookingFlowEnabled: boolean;
@@ -139,11 +140,21 @@ export function resolveAiSettingsFromIntegrationKeys(
   const maxIterations = asPositiveInt(keys.ai_max_iterations, DEFAULT_MAX_ITERATIONS, 1, 10);
   const llmTimeoutMs = asPositiveInt(keys.ai_llm_timeout_ms, DEFAULT_LLM_TIMEOUT_MS, 3000, 30000);
 
+  // Provider config from ai_models table (JSONB), stored in integration keys
+  const providerConfigRaw = keys.ai_provider_config;
+  const providerConfig: Record<string, unknown> | null =
+    providerConfigRaw && typeof providerConfigRaw === "object" && !Array.isArray(providerConfigRaw)
+      ? (providerConfigRaw as Record<string, unknown>)
+      : typeof providerConfigRaw === "string"
+        ? (() => { try { return JSON.parse(providerConfigRaw as string); } catch { return null; } })()
+        : null;
+
   return {
     modelProfile,
     model,
     providerPriority,
     allowFallbacks,
+    providerConfig,
     promptText,
     outboundNumberMode,
     bookingFlowEnabled,

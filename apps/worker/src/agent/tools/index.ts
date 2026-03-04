@@ -256,7 +256,9 @@ export function getToolDefinitions() {
       function: {
         name: "list_businesses",
         description:
-          "Müsait işletmeleri ve tenant ID'lerini listeler. İşletme seçimi veya değiştirme öncesinde çağır.",
+          "Aktif işletmelerin listesini döndürür. Her işletme için tenantId, tenantName ve code bilgisi içerir. " +
+          "İşletme seçimi veya değiştirme öncesinde MUTLAKA çağır — bind_tenant'a geçerli tenant_id vermek için bu listeye ihtiyacın var. " +
+          "Kullanıcıya işletme adlarını göster, tenant_id'yi asla gösterme.",
         parameters: {
           type: "object",
           properties: {},
@@ -269,13 +271,16 @@ export function getToolDefinitions() {
       function: {
         name: "bind_tenant",
         description:
-          "Konuşmayı bir işletmeye bağlar veya mevcut işletmeyi değiştirir. Önce list_businesses ile tenant_id'yi öğren.",
+          "Konuşmayı belirtilen işletmeye bağlar. İşletme değiştirme, ilk bağlantı veya yeniden bağlantı için kullan. " +
+          "MUTLAKA önce list_businesses çağrılmalı — oradan gelen tenant_id kullanılmalı. " +
+          "Başarılı olursa konuşma artık bu işletme kapsamında çalışır ve tüm randevu/hizmet/personel verileri bu işletmeye ait olur. " +
+          "Önceki işletmenin verileri geçersiz olur. Kullanıcıya tenant_id gösterme, sadece işletme adını kullan.",
         parameters: {
           type: "object",
           properties: {
             tenant_id: {
               type: "string",
-              description: "Bağlanacak işletmenin tenant ID'si",
+              description: "Bağlanacak işletmenin tenant ID'si (list_businesses'tan alınmalı)",
             },
           },
           required: ["tenant_id"],
