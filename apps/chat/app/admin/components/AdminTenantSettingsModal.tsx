@@ -5,7 +5,6 @@ import {
     Settings2, X, Save, RefreshCw, Cpu, Zap, Globe,
 } from "lucide-react";
 import {
-    DEFAULT_AI_SYSTEM_PROMPT,
     type AiModelProfile,
     type OutboundNumberMode,
 } from "@/lib/ai/settings";
@@ -18,6 +17,7 @@ interface TenantAiSettings {
     providerPriority: string[];
     allowFallbacks: boolean;
     promptText: string;
+    globalPromptText: string;
     outboundNumberMode: OutboundNumberMode;
     bookingFlowEnabled: boolean;
     wabaPhoneNumberId: string;
@@ -357,10 +357,15 @@ export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose
                                     </div>
                                     {canEdit && (
                                         <button
-                                            onClick={() => setSettings({ ...settings, promptText: DEFAULT_AI_SYSTEM_PROMPT })}
+                                            onClick={() =>
+                                                setSettings({
+                                                    ...settings,
+                                                    promptText: settings.globalPromptText || "",
+                                                })
+                                            }
                                             className="btn-secondary px-3 py-1.5 text-[11px]"
                                         >
-                                            Varsayılana Sıfırla
+                                            Global Prompt'u Yükle
                                         </button>
                                     )}
                                 </div>

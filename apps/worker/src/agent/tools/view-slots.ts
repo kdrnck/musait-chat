@@ -33,6 +33,30 @@ export async function viewAvailableSlots(
 
   // Call Supabase via service role to get availability
   // This uses the same logic as musait.app's availability calculation
+  // Resolve service duration for the RPC (DB expects p_duration_minutes, not p_service_id)
+  let serviceDurationForRpc: number | undefined;
+  if (serviceId) {
+    try {
+      const svcUrl = new URL(`${SUPABASE_CONFIG.url}/rest/v1/services`);
+      svcUrl.searchParams.set("id", `eq.${serviceId}`);
+      svcUrl.searchParams.set("select", "duration_minutes");
+      const svcRes = await fetch(svcUrl.toString(), {
+        headers: {
+          apikey: SUPABASE_CONFIG.serviceKey,
+          Authorization: `Bearer ${SUPABASE_CONFIG.serviceKey}`,
+        },
+      });
+      if (svcRes.ok) {
+        const svcJson = await svcRes.json();
+        if (Array.isArray(svcJson) && svcJson[0]) {
+          serviceDurationForRpc = svcJson[0].duration_minutes;
+        }
+      }
+    } catch {
+      // ignore — fallback will be used
+    }
+  }
+
   const response = await fetch(
     `${SUPABASE_CONFIG.url}/rest/v1/rpc/get_available_slots`,
     {
@@ -45,7 +69,7 @@ export async function viewAvailableSlots(
       body: JSON.stringify({
         p_tenant_id: ctx.tenantId,
         p_date: date,
-        ...(serviceId ? { p_service_id: serviceId } : {}),
+        ...(serviceDurationForRpc ? { p_duration_minutes: serviceDurationForRpc } : {}),
         ...(staffId ? { p_staff_id: staffId } : {}),
       }),
     }
@@ -57,8 +81,23 @@ export async function viewAvailableSlots(
     return attachRecommendedSlots(fallbackResult);
   }
 
-  const slots = (await response.json()) as unknown;
-  return attachRecommendedSlots({ date, slots });
+  const rpcData = (await response.json()) as Record<string, unknown>;
+
+  // RPC returns: { schemaVersion, date, availableSlots: [{time, startDate, endDate, isAvailable}] }
+  // Normalize to the format the rest of the code expects.
+  const rpcSlots = rpcData.availableSlots;
+  if (Array.isArray(rpcSlots) && rpcSlots.length > 0 && rpcSlots[0]?.time) {
+    const available = rpcSlots
+      .filter((s: any) => s.isAvailable !== false)
+      .map((s: any) => ({ time: String(s.time) }));
+    // Don't just slice first 6 — apply sandwich scoring so the RPC path
+    // also returns smart recommendations (same logic as manual fallback).
+    return attachRecommendedSlots({ date, availableSlots: available });
+  }
+
+  // RPC returned unexpected format — fall through to manual
+  const fallbackResult = await manualSlotQuery(ctx.tenantId, date, serviceId, staffId);
+  return attachRecommendedSlots(fallbackResult);
 }
 
 /**
@@ -226,6 +265,18 @@ function getTopRecommendedSlots(payload: Record<string, unknown>): Array<{ staff
   return unique;
 }
 
+/**
+ * Smart sandwich suggestion algorithm for view-slots (multi-staff).
+ *
+ * Scoring:
+ * -  +10  exact adjacency (slot end == block start, or slot start == block end)
+ * -  +3   close proximity (≤30 min but not exact — no double-count)
+ * -  -4   gap-waste: placing here creates a gap < durationMinutes (unusable)
+ * -  -2   edge-of-day penalty
+ *
+ * When no appointments exist: spread evenly across the working window.
+ * Final pick uses diversity filter (avoid 3+ within 45 min).
+ */
 function calculateSandwichSuggestions(
   available: Array<{ staffId: string; time: string }>,
   appointments: Array<any>,
@@ -234,6 +285,7 @@ function calculateSandwichSuggestions(
   durationMinutes: number
 ): Array<{ staffId: string; time: string }> {
   if (available.length === 0) return [];
+  if (available.length <= 6) return [...available];
 
   const intervalsByStaff = new Map<string, Array<{ start: number; end: number }>>();
   for (const appt of appointments) {
@@ -251,37 +303,119 @@ function calculateSandwichSuggestions(
     intervalsByStaff.get(block.staff_id)!.push({ start, end });
   }
 
+  // Check if day is empty (no occupied intervals)
+  const totalIntervals = Array.from(intervalsByStaff.values()).reduce((sum, arr) => sum + arr.length, 0);
+  if (totalIntervals === 0) {
+    // Empty day — spread evenly
+    return spreadSlots(available, staffWorkingWindows, 6);
+  }
+
   const scored = available.map((slot) => {
     const slotStart = parseTime(slot.time);
     const slotEnd = slotStart + durationMinutes;
-    const intervals = intervalsByStaff.get(slot.staffId) || [];
+    const intervals = (intervalsByStaff.get(slot.staffId) || []).sort((a, b) => a.start - b.start);
     const window = staffWorkingWindows.get(slot.staffId);
     let score = 0;
 
     for (const int of intervals) {
-      if (slotEnd === int.start) score += 10;
-      if (slotStart === int.end) score += 10;
-      if (Math.abs(slotEnd - int.start) <= 30) score += 5;
-      if (Math.abs(slotStart - int.end) <= 30) score += 5;
+      const exactBefore = slotEnd === int.start;
+      const exactAfter = slotStart === int.end;
+      if (exactBefore) score += 10;
+      if (exactAfter) score += 10;
+      if (!exactBefore && Math.abs(slotEnd - int.start) <= 30) score += 3;
+      if (!exactAfter && Math.abs(slotStart - int.end) <= 30) score += 3;
+    }
+
+    // Gap-waste penalty
+    if (window && intervals.length > 0) {
+      let prevEnd = window.start;
+      for (const int of intervals) { if (int.end <= slotStart) prevEnd = Math.max(prevEnd, int.end); }
+      const gapBefore = slotStart - prevEnd;
+      if (gapBefore > 0 && gapBefore < durationMinutes) score -= 4;
+
+      let nextStart = window.end;
+      for (const int of intervals) { if (int.start >= slotEnd) { nextStart = int.start; break; } }
+      const gapAfter = nextStart - slotEnd;
+      if (gapAfter > 0 && gapAfter < durationMinutes) score -= 4;
     }
 
     if (window) {
       if (slotStart === window.start) score -= 2;
-      if (slotEnd >= window.end - 30) score -= 2;
+      if (slotEnd >= window.end - 15) score -= 2;
     }
 
-    return { ...slot, score };
+    return { ...slot, slotStart, score };
   });
 
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return a.time.localeCompare(b.time);
-  });
+  scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.slotStart - b.slotStart));
 
-  const positive = scored.filter((s) => s.score > 0).slice(0, 6);
-  if (positive.length > 0) return positive.map(({ staffId, time }) => ({ staffId, time }));
+  // Diversity pick: avoid 3+ within 45 min
+  const picked: Array<{ staffId: string; time: string; slotStart: number }> = [];
+  for (const item of scored) {
+    if (picked.length >= 6) break;
+    const nearby = picked.filter((p) => p.staffId === item.staffId && Math.abs(p.slotStart - item.slotStart) < 45);
+    if (nearby.length >= 2) continue;
+    picked.push(item);
+  }
+  // Fill if too strict
+  if (picked.length < 6) {
+    const usedKeys = new Set(picked.map((p) => `${p.staffId}|${p.time}`));
+    for (const item of scored) {
+      if (picked.length >= 6) break;
+      const key = `${item.staffId}|${item.time}`;
+      if (!usedKeys.has(key)) { picked.push(item); usedKeys.add(key); }
+    }
+  }
 
-  return scored.slice(0, 6).map(({ staffId, time }) => ({ staffId, time }));
+  return picked
+    .sort((a, b) => a.slotStart - b.slotStart)
+    .map(({ staffId, time }) => ({ staffId, time }));
+}
+
+/** Spread slots evenly across the working window (empty day). */
+function spreadSlots(
+  available: Array<{ staffId: string; time: string }>,
+  staffWorkingWindows: Map<string, { start: number; end: number }>,
+  count: number
+): Array<{ staffId: string; time: string }> {
+  // Use the widest staff window for zone calculation
+  let globalStart = 1440, globalEnd = 0;
+  for (const w of staffWorkingWindows.values()) {
+    globalStart = Math.min(globalStart, w.start);
+    globalEnd = Math.max(globalEnd, w.end);
+  }
+  if (globalStart >= globalEnd) return available.slice(0, count);
+
+  const zoneCount = 3;
+  const zoneSize = Math.floor((globalEnd - globalStart) / zoneCount);
+  const perZone = Math.ceil(count / zoneCount);
+
+  const zones: Array<Array<{ staffId: string; time: string }>> = Array.from({ length: zoneCount }, () => []);
+  for (const slot of available) {
+    const m = parseTime(slot.time);
+    const zoneIdx = Math.min(Math.floor((m - globalStart) / zoneSize), zoneCount - 1);
+    zones[zoneIdx].push(slot);
+  }
+
+  const result: Array<{ staffId: string; time: string }> = [];
+  for (const zone of zones) {
+    if (zone.length === 0) continue;
+    const step = Math.max(1, Math.floor(zone.length / perZone));
+    for (let i = 0; i < zone.length && result.length < count; i += step) {
+      result.push(zone[i]);
+    }
+  }
+
+  if (result.length < count) {
+    const used = new Set(result.map((r) => `${r.staffId}|${r.time}`));
+    for (const slot of available) {
+      if (result.length >= count) break;
+      const key = `${slot.staffId}|${slot.time}`;
+      if (!used.has(key)) { result.push(slot); used.add(key); }
+    }
+  }
+
+  return result.sort((a, b) => a.time.localeCompare(b.time)).slice(0, count);
 }
 
 function extractTurkeyMinutes(iso: string): number {

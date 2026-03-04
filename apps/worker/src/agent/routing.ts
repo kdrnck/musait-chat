@@ -3,7 +3,7 @@ import type { AgentJob } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { LLM_CONFIG } from "../config.js";
-import { LLM_PROMPTS } from "./master-prompts.js";
+import { LLM_PROMPTS } from "./prompts/routing-prompts.js";
 
 interface Conversation {
   _id: any;

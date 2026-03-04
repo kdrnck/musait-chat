@@ -81,7 +81,7 @@ export const CREATE_APPOINTMENT_FIELDS: FieldSpec[] = [
   {
     name: "start_time", type: "string", required: true,
     pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/,
-    patternHint: "ISO 8601: YYYY-MM-DDTHH:MM",
+    patternHint: "ISO 8601: YYYY-MM-DDTHH:MM:SS+03:00 (örnek: 2026-03-05T14:00:00+03:00)",
   },
   { name: "customer_name", type: "string" },
 ];

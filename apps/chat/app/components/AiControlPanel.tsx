@@ -5,10 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Settings2, X, Save, RefreshCw, Sparkles, Cpu, Zap, Globe,
 } from "lucide-react";
-import {
-    DEFAULT_AI_SYSTEM_PROMPT,
-    type OutboundNumberMode,
-} from "@/lib/ai/settings";
+import { type OutboundNumberMode } from "@/lib/ai/settings";
 
 interface TenantAiSettings {
     tenantId: string;
@@ -19,6 +16,7 @@ interface TenantAiSettings {
     bookingFlowEnabled: boolean;
     maxIterations: number;
     llmTimeoutMs: number;
+    globalPromptText: string;
     wabaPhoneNumberId: string;
     wabaAccessToken: string;
     wabaBusinessAccountId: string;
@@ -298,17 +296,17 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                         min={1}
                                                         max={10}
                                                         step={1}
-                                                        value={settings.maxIterations ?? 3}
+                                                        value={settings.maxIterations ?? 5}
                                                         onChange={(e) => setSettings({ ...settings, maxIterations: parseInt(e.target.value, 10) })}
                                                         disabled={!canEdit}
                                                         className="flex-1 accent-[var(--color-brand)]"
                                                     />
                                                     <span className="text-[14px] font-bold text-[var(--color-text-primary)] w-8 text-center tabular-nums">
-                                                        {settings.maxIterations ?? 3}
+                                                        {settings.maxIterations ?? 5}
                                                     </span>
                                                 </div>
                                                 <p className="text-[10px] text-[var(--color-text-muted)]">
-                                                    Tool çağrısı sonrası LLM tekrar çağırma limiti (önerilen: 3)
+                                                    Tool çağrısı sonrası LLM tekrar çağırma limiti (önerilen: 5)
                                                 </p>
                                             </div>
 
@@ -349,10 +347,15 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                             </div>
                                             {canEdit && (
                                                 <button
-                                                    onClick={() => setSettings({ ...settings, promptText: DEFAULT_AI_SYSTEM_PROMPT })}
+                                                    onClick={() =>
+                                                        setSettings({
+                                                            ...settings,
+                                                            promptText: settings.globalPromptText || "",
+                                                        })
+                                                    }
                                                     className="btn-secondary px-3 py-1.5 text-[11px]"
                                                 >
-                                                    Varsayılana Sıfırla
+                                                    Global Prompt'u Yükle
                                                 </button>
                                             )}
                                         </div>

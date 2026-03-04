@@ -3,7 +3,7 @@ import type { AgentJob } from "@musait/shared";
 import { api } from "../lib/convex-api.js";
 import { SUPABASE_CONFIG } from "../config.js";
 import { createAppointment } from "./tools/create-appointment.js";
-import { BOOKING_FLOW_PROMPTS } from "./master-prompts.js";
+import { BOOKING_FLOW_PROMPTS } from "./prompts/booking-flow-prompts.js";
 import { extractPossibleName } from "./customer-name.js";
 
 type FlowStep =
@@ -847,6 +847,16 @@ async function getAvailabilityForDate(args: {
   return { availableTimes, suggestedTimes };
 }
 
+/**
+ * Smart slot suggestion algorithm.
+ *
+ * 1. Score each available slot based on proximity to existing appointments
+ *    (sandwich / adjacency logic) and gap-waste penalty.
+ * 2. When the day is empty (no existing appointments) use a "spread" strategy:
+ *    divide the working window into 3 time zones and pick 2 from each.
+ * 3. Final selection ensures diversity: the 6 returned slots are spread
+ *    across the day, avoiding 3+ consecutive 15-min slots.
+ */
 function calculateSuggestedTimes(
   availableTimes: string[],
   intervals: Array<{ start: number; end: number }>,
@@ -855,29 +865,166 @@ function calculateSuggestedTimes(
   durationMinutes: number
 ): string[] {
   if (availableTimes.length === 0) return [];
-  if (intervals.length === 0) return availableTimes.slice(0, 6);
+
+  // If very few slots (<=6), return all — no need to filter
+  if (availableTimes.length <= 6) return [...availableTimes];
+
+  // --- EMPTY DAY: Smart spread ---
+  if (intervals.length === 0) {
+    return spreadAcrossDay(availableTimes, workingStart, workingEnd, 6);
+  }
+
+  // --- BUSY DAY: Score-based selection ---
+  const sorted = [...intervals].sort((a, b) => a.start - b.start);
 
   const scored = availableTimes.map((time) => {
     const start = timeToMinutes(time);
     const end = start + durationMinutes;
     let score = 0;
 
-    for (const block of intervals) {
-      if (end === block.start) score += 10;
-      if (start === block.end) score += 10;
-      if (Math.abs(end - block.start) <= 30) score += 5;
-      if (Math.abs(start - block.end) <= 30) score += 5;
+    for (const block of sorted) {
+      // Exact adjacency (sandwich) — highest value
+      const exactBefore = end === block.start;
+      const exactAfter = start === block.end;
+
+      if (exactBefore) score += 10;
+      if (exactAfter) score += 10;
+
+      // Close proximity bonus — only if NOT exact (no double-count)
+      if (!exactBefore && Math.abs(end - block.start) <= 30) score += 3;
+      if (!exactAfter && Math.abs(start - block.end) <= 30) score += 3;
     }
 
+    // Gap-waste penalty: would this slot create a tiny unusable gap?
+    score += gapWastePenalty(start, end, sorted, workingStart, workingEnd, durationMinutes);
+
+    // Edge-of-day penalty
     if (start === workingStart) score -= 2;
-    if (end >= workingEnd - 30) score -= 2;
-    return { time, score };
+    if (end >= workingEnd - 15) score -= 2;
+
+    return { time, start, score };
   });
 
-  scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.time.localeCompare(b.time)));
-  const positive = scored.filter((s) => s.score > 0).slice(0, 6).map((s) => s.time);
-  if (positive.length > 0) return positive;
-  return scored.slice(0, 6).map((s) => s.time);
+  // Sort by score desc, then chronological
+  scored.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.start - b.start));
+
+  // Pick top 6 with diversity (avoid clustering)
+  return diversePick(scored, 6, durationMinutes);
+}
+
+/** Spread N slots evenly across the working window when no appointments exist. */
+function spreadAcrossDay(
+  availableTimes: string[],
+  workingStart: number,
+  workingEnd: number,
+  count: number
+): string[] {
+  const totalWindow = workingEnd - workingStart;
+  const zoneCount = Math.min(count, 3); // 3 zones: morning / midday / evening
+  const zoneSize = Math.floor(totalWindow / zoneCount);
+  const perZone = Math.ceil(count / zoneCount);
+
+  const zones: string[][] = Array.from({ length: zoneCount }, () => []);
+  for (const time of availableTimes) {
+    const m = timeToMinutes(time);
+    const zoneIdx = Math.min(Math.floor((m - workingStart) / zoneSize), zoneCount - 1);
+    zones[zoneIdx].push(time);
+  }
+
+  // From each zone pick evenly-spaced slots
+  const result: string[] = [];
+  for (const zone of zones) {
+    if (zone.length === 0) continue;
+    const step = Math.max(1, Math.floor(zone.length / perZone));
+    for (let i = 0; i < zone.length && result.length < count; i += step) {
+      result.push(zone[i]);
+    }
+  }
+
+  // Fill remaining from largest zone if needed
+  if (result.length < count) {
+    const used = new Set(result);
+    for (const time of availableTimes) {
+      if (result.length >= count) break;
+      if (!used.has(time)) {
+        result.push(time);
+        used.add(time);
+      }
+    }
+  }
+
+  return result.sort((a, b) => a.localeCompare(b)).slice(0, count);
+}
+
+/**
+ * Penalize slots that create tiny unusable gaps between themselves and
+ * the nearest occupied block. A gap shorter than durationMinutes can't
+ * fit any appointment → wasted time.
+ */
+function gapWastePenalty(
+  slotStart: number,
+  slotEnd: number,
+  sorted: Array<{ start: number; end: number }>,
+  workingStart: number,
+  workingEnd: number,
+  durationMinutes: number
+): number {
+  let penalty = 0;
+
+  // Gap before this slot (from previous block end or day start)
+  let prevEnd = workingStart;
+  for (const block of sorted) {
+    if (block.end <= slotStart) prevEnd = Math.max(prevEnd, block.end);
+  }
+  const gapBefore = slotStart - prevEnd;
+  if (gapBefore > 0 && gapBefore < durationMinutes) penalty -= 4;
+
+  // Gap after this slot (to next block start or day end)
+  let nextStart = workingEnd;
+  for (const block of sorted) {
+    if (block.start >= slotEnd) { nextStart = block.start; break; }
+  }
+  const gapAfter = nextStart - slotEnd;
+  if (gapAfter > 0 && gapAfter < durationMinutes) penalty -= 4;
+
+  return penalty;
+}
+
+/**
+ * Pick `count` items from a score-sorted list while ensuring diversity.
+ * Avoids selecting 3+ slots within a 45-min window.
+ */
+function diversePick(
+  scored: Array<{ time: string; start: number; score: number }>,
+  count: number,
+  _durationMinutes: number
+): string[] {
+  const picked: Array<{ time: string; start: number }> = [];
+  const MIN_GAP = 45; // minimum gap between any two selected suggestions
+
+  for (const item of scored) {
+    if (picked.length >= count) break;
+    // Check clustering: allow max 2 slots within any MIN_GAP window
+    const nearby = picked.filter((p) => Math.abs(p.start - item.start) < MIN_GAP);
+    if (nearby.length >= 2) continue;
+    picked.push({ time: item.time, start: item.start });
+  }
+
+  // If diversity filter was too strict, fill remaining by score
+  if (picked.length < count) {
+    const usedTimes = new Set(picked.map((p) => p.time));
+    for (const item of scored) {
+      if (picked.length >= count) break;
+      if (!usedTimes.has(item.time)) {
+        picked.push({ time: item.time, start: item.start });
+        usedTimes.add(item.time);
+      }
+    }
+  }
+
+  return picked
+    .sort((a, b) => a.start - b.start)
+    .map((p) => p.time);
 }
 
 function timeToMinutes(time: string): number {

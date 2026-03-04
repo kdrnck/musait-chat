@@ -102,7 +102,7 @@ export default function GlobalAiSettingsPanel() {
                     <div className="text-[12px] leading-relaxed text-blue-900">
                         <p className="font-semibold mb-2">Kullanılabilir Placeholder'lar:</p>
                         <code className="block font-mono text-[11px] bg-white/50 px-2 py-1 rounded mb-1">
-                            {"{"}{"{"} current_date {"}"}{"}"}, {"{"}{"{"} current_day_name {"}"}{"}"}, {"{"}{"{"} tenant_name {"}"}{"}"}, {"{"}{"{"} tenant_id {"}"}{"}"}
+                            {"{"}{"{"} current_date {"}"}{"}"}, {"{"}{"{"} current_day_name {"}"}{"}"}, {"{"}{"{"} current_time {"}"}{"}"}, {"{"}{"{"} tenant_name {"}"}{"}"}, {"{"}{"{"} tenant_id {"}"}{"}"}
                         </code>
                         <code className="block font-mono text-[11px] bg-white/50 px-2 py-1 rounded">
                             {"{"}{"{"} services_list {"}"}{"}"}, {"{"}{"{"} staff_list {"}"}{"}"}, {"{"}{"{"} business_info {"}"}{"}"}, {"{"}{"{"} customer_profile {"}"}{"}"}

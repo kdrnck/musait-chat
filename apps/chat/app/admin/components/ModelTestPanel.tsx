@@ -82,6 +82,11 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [lastMetrics, setLastMetrics] = useState<any>(null);
+    const [resolvedPromptPreview, setResolvedPromptPreview] = useState("");
+    const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
+    const [unresolvedPlaceholders, setUnresolvedPlaceholders] = useState<string[]>([]);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState<string | null>(null);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -197,6 +202,45 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
+
+    useEffect(() => {
+        if (!tenantId) return;
+
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
+            setPreviewLoading(true);
+            setPreviewError(null);
+            try {
+                const response = await fetch("/api/admin/model-test/resolve-context", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        tenantId,
+                        phone,
+                        system,
+                    }),
+                    signal: controller.signal,
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || "Preview çözümlenemedi");
+                }
+                setPlaceholderValues(data.placeholders || {});
+                setResolvedPromptPreview(data.resolvedPrompt || "");
+                setUnresolvedPlaceholders(Array.isArray(data.unresolvedPlaceholders) ? data.unresolvedPlaceholders : []);
+            } catch (err) {
+                if ((err as Error).name === "AbortError") return;
+                setPreviewError(err instanceof Error ? err.message : "Preview hatası");
+            } finally {
+                setPreviewLoading(false);
+            }
+        }, 250);
+
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [tenantId, phone, system]);
 
     const handleSendMessage = async () => {
         if (!input.trim() || isLoading) return;
@@ -640,6 +684,46 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                             onChange={(e) => setSystem(e.target.value)}
                             className="w-full flex-1 bg-[var(--color-surface-base)] border border-[var(--color-border)] rounded-2xl p-4 text-[13px] font-medium leading-[1.6] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-dark)] focus:ring-1 focus:ring-[var(--color-brand-dark)] transition-all resize-none shadow-sm placeholder-[var(--color-text-muted)]"
                             placeholder="Sen yetkin bir asistansın..."
+                        />
+                    </div>
+
+                    <div className="space-y-2.5">
+                        <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider ml-1">
+                            Placeholder Değerleri
+                        </label>
+                        <div className="max-h-[180px] overflow-y-auto bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl p-3 text-[11px]">
+                            {previewLoading ? (
+                                <p className="text-[var(--color-text-muted)]">Çözümleniyor...</p>
+                            ) : previewError ? (
+                                <p className="text-red-400">{previewError}</p>
+                            ) : Object.keys(placeholderValues).length === 0 ? (
+                                <p className="text-[var(--color-text-muted)]">Placeholder bulunamadı.</p>
+                            ) : (
+                                Object.entries(placeholderValues).map(([key, value]) => (
+                                    <div key={key} className="mb-2 last:mb-0">
+                                        <p className="font-semibold text-[var(--color-text-secondary)]">{`{{${key}}}`}</p>
+                                        <p className="text-[var(--color-text-primary)] break-words whitespace-pre-wrap">{value || "(boş)"}</p>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider ml-1">
+                                Resolved Prompt
+                            </label>
+                            {unresolvedPlaceholders.length > 0 && (
+                                <span className="text-[10px] text-amber-400 font-semibold">
+                                    Çözülmeyen: {unresolvedPlaceholders.join(", ")}
+                                </span>
+                            )}
+                        </div>
+                        <textarea
+                            value={resolvedPromptPreview}
+                            readOnly
+                            className="w-full h-40 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl p-3 text-[11px] leading-relaxed text-[var(--color-text-primary)] outline-none resize-y font-mono"
                         />
                     </div>
 

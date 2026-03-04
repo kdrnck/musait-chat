@@ -7,6 +7,7 @@ import { createJobHandler } from "./agent/job-handler.js";
 import { createWebhookRouter } from "./routes/webhook.js";
 import { createHealthRouter } from "./routes/health.js";
 import { createOtpRouter } from "./routes/otp.js";
+import { createDebugRouter } from "./routes/debug.js";
 import { recoverPendingJobs } from "./queue/recovery.js";
 import { DEFAULT_QUEUE_CONFIG } from "./config.js";
 import {
@@ -77,6 +78,11 @@ async function main() {
   app.use("/webhook", createWebhookRouter(convex, queue, supabase));
   app.use("/otp", createOtpRouter(supabase));
   app.use("/health", createHealthRouter(queue));
+  // Debug endpoints (disable in production via DEBUG_SECRET env var)
+  if (process.env.NODE_ENV !== "production" || process.env.DEBUG_SECRET) {
+    app.use("/debug", createDebugRouter());
+    console.log("🔍 Debug routes enabled: /debug/booking, /debug/slots");
+  }
 
   const server = app.listen(PORT, () => {
     console.log(`✅ Worker listening on port ${PORT}`);

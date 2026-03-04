@@ -1,55 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveModelTestPromptContext } from "./prompt-context";
 
 // Allow streaming responses up to 60 seconds
 export const maxDuration = 60;
-
-// =========================================================================
-// PLACEHOLDER RESOLUTION HELPERS
-// =========================================================================
-
-/**
- * Get current date and day name in Istanbul timezone
- */
-function getCurrentDateInfo(): { date: string; dayName: string } {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat("tr-TR", {
-        timeZone: "Europe/Istanbul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        weekday: "long",
-    });
-
-    const parts = formatter.formatToParts(now);
-    const year = parts.find((p) => p.type === "year")?.value;
-    const month = parts.find((p) => p.type === "month")?.value;
-    const day = parts.find((p) => p.type === "day")?.value;
-    const weekday = parts.find((p) => p.type === "weekday")?.value;
-
-    return {
-        date: `${year}-${month}-${day}`,
-        dayName: weekday || "Bilinmiyor",
-    };
-}
-
-/**
- * Resolve placeholders in system prompt
- */
-function resolvePlaceholders(
-    prompt: string,
-    placeholders: Record<string, string>
-): string {
-    let resolved = prompt;
-    for (const [key, value] of Object.entries(placeholders)) {
-        // Support both {{placeholder}} and {placeholder} formats
-        const doubleBrace = `{{${key}}}`;
-        const singleBrace = `{${key}}`;
-        resolved = resolved.replaceAll(doubleBrace, value);
-        resolved = resolved.replaceAll(singleBrace, value);
-    }
-    return resolved;
-}
 
 interface ChatMessage {
     role: "user" | "assistant" | "system";
@@ -74,45 +28,6 @@ interface ToolResult {
 
 function getToolDefinitions() {
     return [
-        {
-            type: "function",
-            function: {
-                name: "list_services",
-                description: "İşletmedeki hizmetleri listeler. service_id bilgisi gerektiğinde önce bunu çağır.",
-                parameters: {
-                    type: "object",
-                    properties: {
-                        query: { type: "string", description: "Hizmet adı filtre metni (opsiyonel)" },
-                        include_inactive: { type: "boolean", description: "Pasif hizmetleri de dahil et (varsayılan: false)" },
-                    },
-                    required: [],
-                },
-            },
-        },
-        {
-            type: "function",
-            function: {
-                name: "list_staff",
-                description: "İşletmedeki personeli listeler. service_id verilirse yalnızca o hizmete uygun personeli döndürür.",
-                parameters: {
-                    type: "object",
-                    properties: {
-                        service_id: { type: "string", description: "Hizmet ID (opsiyonel filtre)" },
-                        query: { type: "string", description: "Personel adı filtre metni (opsiyonel)" },
-                        include_inactive: { type: "boolean", description: "Pasif personeli de dahil et (varsayılan: false)" },
-                    },
-                    required: [],
-                },
-            },
-        },
-        {
-            type: "function",
-            function: {
-                name: "get_business_info",
-                description: "Aktif işletmenin temel bilgilerini döndürür.",
-                parameters: { type: "object", properties: {}, required: [] },
-            },
-        },
         {
             type: "function",
             function: {
@@ -148,14 +63,6 @@ function getToolDefinitions() {
         {
             type: "function",
             function: {
-                name: "get_customer_profile",
-                description: "Konuşmadaki müşterinin profilini, adını ve geçmiş verilerini döndürür. Müşteri adını öğrenmek için bunu kullan.",
-                parameters: { type: "object", properties: {}, required: [] },
-            },
-        },
-        {
-            type: "function",
-            function: {
                 name: "create_appointment",
                 description: "Yeni bir randevu oluşturur. Müşteriden açık onay ALDIKTAN SONRA kullanılmalıdır.",
                 parameters: {
@@ -163,10 +70,34 @@ function getToolDefinitions() {
                     properties: {
                         service_id: { type: "string", description: "Hizmet ID" },
                         staff_id: { type: "string", description: "Personel ID" },
-                        start_time: { type: "string", description: "Başlangıç zamanı (ISO 8601 formatında)" },
+                        start_time: { type: "string", description: "Başlangıç zamanı — YYYY-MM-DDTHH:MM:SS+03:00" },
                         customer_name: { type: "string", description: "Müşteri adı (opsiyonel)" },
                     },
                     required: ["service_id", "staff_id", "start_time"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "create_appointments_batch",
+                description: "Birden fazla hizmet için ardışık randevu planını atomik biçimde oluşturur.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        service_names: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Hizmet isimleri sıralı listesi",
+                        },
+                        date: { type: "string", description: "Tarih (YYYY-MM-DD)" },
+                        start_time: { type: "string", description: "Başlangıç saati (HH:MM)" },
+                        staff_id: { type: "string", description: "Personel ID (opsiyonel)" },
+                        staff_name: { type: "string", description: "Personel adı (opsiyonel)" },
+                        customer_name: { type: "string", description: "Müşteri adı (opsiyonel)" },
+                        require_atomic: { type: "boolean", description: "Varsayılan true" },
+                    },
+                    required: ["service_names", "date", "start_time"],
                 },
             },
         },
@@ -182,6 +113,67 @@ function getToolDefinitions() {
                         reason: { type: "string", description: "İptal sebebi (opsiyonel)" },
                     },
                     required: ["appointment_id"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "suggest_least_busy_staff",
+                description: "Hizmet ve tarih için daha az yoğun personeli önerir.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        date: { type: "string", description: "Tarih (YYYY-MM-DD)" },
+                        service_id: { type: "string", description: "Hizmet ID" },
+                    },
+                    required: ["date", "service_id"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "list_businesses",
+                description: "Aktif işletmeleri listeler.",
+                parameters: { type: "object", properties: {}, required: [] },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "bind_tenant",
+                description: "Konuşmayı tenant_id ile belirtilen işletmeye bağlar.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        tenant_id: { type: "string", description: "İşletme tenant ID" },
+                    },
+                    required: ["tenant_id"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "ask_human",
+                description: "Konuşmayı bir insan operatöre devreder.",
+                parameters: {
+                    type: "object",
+                    properties: { reason: { type: "string" } },
+                    required: ["reason"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "end_session",
+                description: "Oturumu sonlandırır.",
+                parameters: {
+                    type: "object",
+                    properties: { summary: { type: "string" } },
+                    required: [],
                 },
             },
         },
@@ -211,6 +203,55 @@ function getToolDefinitions() {
                         last_name: { type: "string", description: "Müşterinin yeni soyadı (opsiyonel)" },
                     },
                     required: [],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "compose_interactive_message",
+                description: "WhatsApp interaktif liste/buton mesajını şemalı olarak üretir.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        kind: { type: "string", enum: ["buttons", "list"] },
+                        body: { type: "string" },
+                        buttons: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    id: { type: "string" },
+                                    title: { type: "string" },
+                                },
+                                required: ["id", "title"],
+                            },
+                        },
+                        button_text: { type: "string" },
+                        sections: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    title: { type: "string" },
+                                    rows: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                id: { type: "string" },
+                                                title: { type: "string" },
+                                                description: { type: "string" },
+                                            },
+                                            required: ["id", "title"],
+                                        },
+                                    },
+                                },
+                                required: ["title", "rows"],
+                            },
+                        },
+                    },
+                    required: ["kind", "body"],
                 },
             },
         },
@@ -409,11 +450,164 @@ async function executeToolCall(toolName: string, args: any, tenantId: string, cu
                     }))
                 });
             }
+
+            case "create_appointment": {
+                if (!args.service_id || !args.staff_id || !args.start_time) {
+                    return JSON.stringify({
+                        success: false,
+                        code: "validation_error",
+                        error: "service_id, staff_id ve start_time zorunludur.",
+                    });
+                }
+                return JSON.stringify({
+                    success: true,
+                    simulated: true,
+                    appointmentId: "test-single-appointment",
+                    serviceId: args.service_id,
+                    staffId: args.staff_id,
+                    startTime: args.start_time,
+                });
+            }
+
+            case "cancel_appointment": {
+                return JSON.stringify({
+                    success: true,
+                    simulated: true,
+                    appointmentId: args.appointment_id || "test-single-appointment",
+                });
+            }
+
+            case "create_appointments_batch": {
+                const services = Array.isArray(args.service_names)
+                    ? args.service_names.filter((s: unknown) => typeof s === "string" && s.trim().length > 0)
+                    : [];
+                const date = typeof args.date === "string" ? args.date : "";
+                const startTime = typeof args.start_time === "string" ? args.start_time : "";
+
+                if (services.length === 0 || !date || !startTime) {
+                    return JSON.stringify({
+                        success: false,
+                        code: "validation_error",
+                        error: "service_names, date ve start_time zorunludur.",
+                    });
+                }
+
+                const [hh, mm] = startTime.split(":").map((n: string) => parseInt(n, 10));
+                let cursor = (Number.isFinite(hh) ? hh : 9) * 60 + (Number.isFinite(mm) ? mm : 0);
+                const appointments = services.map((serviceName: string, idx: number) => {
+                    const startHour = String(Math.floor(cursor / 60)).padStart(2, "0");
+                    const startMinute = String(cursor % 60).padStart(2, "0");
+                    const start = `${date}T${startHour}:${startMinute}:00+03:00`;
+                    cursor += 30;
+                    const endHour = String(Math.floor(cursor / 60)).padStart(2, "0");
+                    const endMinute = String(cursor % 60).padStart(2, "0");
+                    const end = `${date}T${endHour}:${endMinute}:00+03:00`;
+                    return {
+                        appointment_id: `test-batch-${idx + 1}`,
+                        service_name: serviceName,
+                        start_time: start,
+                        end_time: end,
+                    };
+                });
+
+                return JSON.stringify({
+                    success: true,
+                    simulated: true,
+                    count: appointments.length,
+                    appointments,
+                });
+            }
+
+            case "compose_interactive_message": {
+                const kind = typeof args.kind === "string" ? args.kind : "";
+                const body = typeof args.body === "string" ? args.body : "";
+                if (!body) {
+                    return JSON.stringify({ success: false, error: "'body' zorunludur" });
+                }
+
+                if (kind === "buttons") {
+                    const payload = {
+                        body,
+                        buttons: Array.isArray(args.buttons) ? args.buttons.slice(0, 3) : [],
+                    };
+                    return JSON.stringify({
+                        success: true,
+                        kind,
+                        payload,
+                        renderedMessage: `<<BUTTONS>>\n${JSON.stringify(payload)}\n<</BUTTONS>>`,
+                    });
+                }
+
+                if (kind === "list") {
+                    const payload = {
+                        body,
+                        button: typeof args.button_text === "string" ? args.button_text : "Seçiniz",
+                        sections: Array.isArray(args.sections) ? args.sections : [],
+                    };
+                    return JSON.stringify({
+                        success: true,
+                        kind,
+                        payload,
+                        renderedMessage: `<<LIST>>\n${JSON.stringify(payload)}\n<</LIST>>`,
+                    });
+                }
+
+                return JSON.stringify({
+                    success: false,
+                    error: "kind yalnızca buttons veya list olabilir",
+                });
+            }
+
+            case "suggest_least_busy_staff": {
+                const { data } = await supabase
+                    .from("staff")
+                    .select("id,name")
+                    .eq("tenant_id", tenantId)
+                    .eq("is_active", true)
+                    .order("name")
+                    .limit(3);
+
+                return JSON.stringify({
+                    success: true,
+                    recommendedStaff: data?.[0] || null,
+                    alternatives: (data || []).slice(1),
+                });
+            }
+
+            case "list_businesses":
+                return JSON.stringify({ businesses: [{ tenantId: tenantId, tenantName: "Test İşletmesi" }] });
+            case "bind_tenant":
+                return JSON.stringify({ success: true, tenant_id: args.tenant_id || tenantId });
+            case "ask_human":
+                return JSON.stringify({ success: true, message: "Test ortamında handoff simüle edildi." });
+            case "end_session":
+                return JSON.stringify({ success: true, message: "Test ortamında oturum sonlandırıldı." });
+            case "take_notes_for_user":
+                return JSON.stringify({ success: true, note: args.note || "" });
+            case "update_customer_name":
+                return JSON.stringify({
+                    success: true,
+                    fullName: [args.first_name, args.last_name].filter(Boolean).join(" ").trim(),
+                });
             
             default:
                 return JSON.stringify({
                     error: `Tool '${toolName}' test ortamında desteklenmiyor`,
-                    supported_tools: ["list_services", "list_staff", "get_business_info", "view_available_slots"]
+                    supported_tools: [
+                        "list_customer_appointments",
+                        "view_available_slots",
+                        "create_appointment",
+                        "create_appointments_batch",
+                        "cancel_appointment",
+                        "suggest_least_busy_staff",
+                        "list_businesses",
+                        "bind_tenant",
+                        "ask_human",
+                        "end_session",
+                        "take_notes_for_user",
+                        "update_customer_name",
+                        "compose_interactive_message",
+                    ]
                 });
         }
     } catch (error) {
@@ -437,224 +631,20 @@ export async function POST(req: Request) {
 
         const supabase = await createClient();
         const openRouterModel = model || "google/gemini-flash-1.5";
-
-        // ── Fetch tenant info for placeholder resolution ──
-        let tenantName = "Test İşletmesi";
-        let businessInfoText = "";
-        
-        try {
-            const { data: tenant } = await supabase
-                .from("tenants")
-                .select("name, phone, address, description")
-                .eq("id", tenantId)
-                .single();
-            
-            if (tenant) {
-                tenantName = tenant.name || tenantName;
-                const infoParts: string[] = [];
-                if (tenant.name) infoParts.push(`İşletme: ${tenant.name}`);
-                if (tenant.phone) infoParts.push(`Telefon: ${tenant.phone}`);
-                if (tenant.address) infoParts.push(`Adres: ${tenant.address}`);
-                if (tenant.description) infoParts.push(`Açıklama: ${tenant.description}`);
-                businessInfoText = infoParts.join("\n");
-            }
-        } catch (err) {
-            console.warn("[Model Test Lab] Could not fetch tenant info:", err);
-        }
-
-        // ── Fetch services and staff lists for placeholders ──
-        let servicesListText = "";
-        let staffListText = "";
-        
-        try {
-            // Get services
-            const { data: services, error: svcError } = await supabase
-                .from("services")
-                .select("id, name, duration_minutes, price, is_active")
-                .eq("tenant_id", tenantId)
-                .eq("is_active", true)
-                .order("name");
-            
-            if (svcError) {
-                console.error("[Model Test Lab] Services query error:", svcError);
-                servicesListText = "(Hizmet listesi alınamadı)";
-            } else if (services && services.length > 0) {
-                servicesListText = services
-                    .map((s: any) => `- ${s.name} (${s.duration_minutes} dk, ${s.price} TL)`)
-                    .join("\n");
-                console.log(`[Model Test Lab] Fetched ${services.length} services for placeholder`);
-            } else {
-                servicesListText = "(Henüz hizmet tanımlanmamış)";
-                console.log("[Model Test Lab] No active services found for tenant:", tenantId);
-            }
-
-            // Get staff
-            const { data: staff, error: staffError } = await supabase
-                .from("staff")
-                .select("id, name, is_active")
-                .eq("tenant_id", tenantId)
-                .eq("is_active", true)
-                .order("name");
-            
-            if (staffError) {
-                console.error("[Model Test Lab] Staff query error:", staffError);
-                staffListText = "(Personel listesi alınamadı)";
-            } else if (staff && staff.length > 0) {
-                staffListText = staff.map((s: any) => `- ${s.name}`).join("\n");
-                console.log(`[Model Test Lab] Fetched ${staff.length} staff for placeholder`);
-            } else {
-                staffListText = "(Henüz personel tanımlanmamış)";
-                console.log("[Model Test Lab] No active staff found for tenant:", tenantId);
-            }
-        } catch (err) {
-            console.error("[Model Test Lab] Could not fetch services/staff:", err);
-            servicesListText = "(Hizmet listesi alınamadı)";
-            staffListText = "(Personel listesi alınamadı)";
-        }
-
-        // ── Fetch customer profile for placeholder resolution ──
-        let customerName = "Test Kullanıcısı";
-        let customerProfileText = "";
-        let authUser: any = null;
         const testPhone = phone || "+905550000000";
-        
-        // Normalize phone number — produce all common Turkish mobile formats
-        const rawPhone = testPhone.replace(/[\s\-().]/g, ''); // strip spaces/dashes/parens
-        let canonical = rawPhone;
-        if (/^\+900[0-9]{10}$/.test(rawPhone)) {
-            canonical = '+90' + rawPhone.slice(4);        // +9005XXXXXXXXX → +905XXXXXXXXX (strip extra 0)
-        } else if (/^\+90[0-9]{10}$/.test(rawPhone)) {
-            canonical = rawPhone;                          // +905XXXXXXXXX ✓
-        } else if (/^900[0-9]{10}$/.test(rawPhone)) {
-            canonical = '+90' + rawPhone.slice(3);        // 9005XXXXXXXXX → +905XXXXXXXXX
-        } else if (/^90[0-9]{10}$/.test(rawPhone)) {
-            canonical = '+' + rawPhone;                   // 905XXXXXXXXX → +905XXXXXXXXX
-        } else if (/^0[0-9]{10}$/.test(rawPhone)) {
-            canonical = '+9' + rawPhone;                  // 05XXXXXXXXX  → +905XXXXXXXXX
-        } else if (/^[0-9]{10}$/.test(rawPhone)) {
-            canonical = '+90' + rawPhone;                 // 5XXXXXXXXX   → +905XXXXXXXXX
-        }
-        const phoneVariants = [...new Set([
-            testPhone,
-            canonical,
-            canonical.replace(/^\+90/, '0'),   // +905XXXXXXXXX → 05XXXXXXXXX
-            canonical.replace(/^\+/, ''),       // +905XXXXXXXXX → 905XXXXXXXXX
-            canonical.replace(/^\+90/, ''),     // +905XXXXXXXXX → 5XXXXXXXXX
-        ])];
-        
-        console.log("[Model Test Lab] Looking up customer — raw:", testPhone, "canonical:", canonical, "variants:", phoneVariants);
-        
-        try {
-            // Use the session client — admin users have RLS access via is_master_admin() / has_tenant_access()
-            const { data: { user: fetchedUser } } = await supabase.auth.getUser();
-            authUser = fetchedUser;
-            console.log("[Model Test Lab] Auth user:", authUser?.id, authUser?.email);
-            
-            const { data: customer, error: customerError } = await supabase
-                .from("customers")
-                .select("id, name, phone, created_at")
-                .eq("tenant_id", tenantId)
-                .in("phone", phoneVariants)
-                .limit(1)
-                .maybeSingle();
-            
-            if (customerError) {
-                console.warn("[Model Test Lab] Customer query error:", customerError);
-            }
-            
-            console.log("[Model Test Lab] Customer lookup result:", customer ? `Found: ${customer.name}` : "Not found");
-            
-            if (customer) {
-                if (customer.name) {
-                    customerName = customer.name;
-                }
-
-                // Build customer profile text
-                const profileParts: string[] = [];
-                profileParts.push(`Telefon: ${customer.phone}`);
-                if (customer.name) profileParts.push(`Ad: ${customer.name}`);
-                if (customer.created_at) {
-                    const createdDate = new Date(customer.created_at).toLocaleDateString('tr-TR');
-                    profileParts.push(`Kayıt Tarihi: ${createdDate}`);
-                }
-
-                // Get customer's last 3 appointments for profile
-                const { data: appointments, error: aptError } = await supabase
-                    .from("appointments")
-                    .select(`
-                        id,
-                        start_time,
-                        end_time,
-                        status,
-                        services (name),
-                        staff (name)
-                    `)
-                    .eq("customer_id", customer.id)
-                    .eq("tenant_id", tenantId)
-                    .order("start_time", { ascending: false })
-                    .limit(3);
-
-                if (aptError) {
-                    console.error("[Model Test Lab] Appointments query error:", aptError);
-                }
-
-                if (appointments && appointments.length > 0) {
-                    profileParts.push(`Son ${appointments.length} Randevu:`);
-                    appointments.forEach((apt: any, idx: number) => {
-                        const aptDate = new Date(apt.start_time).toLocaleString("tr-TR", {
-                            timeZone: "Europe/Istanbul",
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                        });
-                        const service = apt.services?.name || "Bilinmiyor";
-                        const staff = apt.staff?.name || "Bilinmiyor";
-                        const status = apt.status || "Bilinmiyor";
-                        profileParts.push(`  ${idx + 1}. ${aptDate} - ${service} (Personel: ${staff}, Durum: ${status})`);
-                    });
-                } else {
-                    profileParts.push("Son Randevu: (Henüz randevu yok)");
-                }
-
-                customerProfileText = profileParts.join("\n");
-            } else {
-                // No customer found
-                customerProfileText = `Telefon: ${testPhone}\n(Yeni müşteri - henüz randevu kaydı yok)`;
-            }
-        } catch (err) {
-            console.warn("[Model Test Lab] Could not fetch customer info:", err);
-            customerProfileText = `Telefon: ${testPhone}\n(Profil bilgisi alınamadı)`;
-        }
-
-        console.log("[Model Test Lab] Resolved customerProfileText:", customerProfileText);
-
-        // ── Resolve placeholders in system prompt ──
-        const dateInfo = getCurrentDateInfo();
-        
-        const placeholders: Record<string, string> = {
-            current_date: dateInfo.date,
-            current_day_name: dateInfo.dayName,
-            tenant_name: tenantName,
-            tenant_id: tenantId,
-            business_name: tenantName,
-            business_info: businessInfoText || "Bilgi mevcut değil",
-            services_list: servicesListText || "Hizmet listesi yok",
-            staff_list: staffListText || "Personel listesi yok",
-            customer_first_name: customerName.split(" ")[0] || customerName,
-            customer_name: customerName,
-            customer_profile: customerProfileText || "Profil bilgisi yok",
-            test_phone: testPhone,
-        };
-
-        const resolvedSystemPrompt = resolvePlaceholders(system, placeholders);
-        const finalSystemPrompt = `${resolvedSystemPrompt}\n\nTest Numarası: ${testPhone}\nTenant ID: ${tenantId}`;
+        const resolved = await resolveModelTestPromptContext({
+            supabase,
+            tenantId,
+            phone: testPhone,
+            systemPrompt: system || "",
+        });
+        const placeholders = resolved.placeholders;
+        const finalSystemPrompt = resolved.resolvedPrompt;
+        const unresolvedPlaceholders = resolved.unresolvedPlaceholders;
 
         console.log("[Model Test Lab] Using model:", openRouterModel);
         console.log("[Model Test Lab] Resolved placeholders:", Object.keys(placeholders).length);
-        console.log("[Model Test Lab] Customer name:", customerName);
-        console.log("[Model Test Lab] Customer profile:", customerProfileText.substring(0, 500));
+        console.log("[Model Test Lab] Unresolved placeholders:", unresolvedPlaceholders.join(", "));
         console.log("[Model Test Lab] Final system prompt (first 500 chars):", finalSystemPrompt.substring(0, 500));
 
         // Build initial conversation
@@ -851,11 +841,10 @@ export async function POST(req: Request) {
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                             type: 'debug',
                             debug: {
-                                authUser: authUser?.email || 'NO_AUTH',
+                                tenantId,
                                 phone: testPhone,
-                                canonical: canonical,
-                                customerName,
-                                customerProfileText: customerProfileText.substring(0, 300),
+                                unresolvedPlaceholders,
+                                placeholderPreview: Object.fromEntries(Object.entries(placeholders).slice(0, 8)),
                                 resolvedSystemPromptPreview: finalSystemPrompt.substring(0, 400),
                             }
                         })}\n\n`));

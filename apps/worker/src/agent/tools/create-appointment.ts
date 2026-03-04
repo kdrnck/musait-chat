@@ -30,7 +30,18 @@ export async function createAppointment(
 
   const serviceId = validation.data.service_id as string;
   const staffId = validation.data.staff_id as string;
-  const startTime = validation.data.start_time as string;
+  const rawStartTime = validation.data.start_time as string;
+
+  // Timezone guard: if LLM sends start_time without TZ offset (e.g. "2026-03-05T14:00")
+  // the production Railway server (UTC) would store it 3 hours AHEAD of Istanbul time.
+  // Always coerce to Istanbul time (+03:00) when no TZ is present.
+  let startTime = rawStartTime;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(rawStartTime)) {
+    startTime = `${rawStartTime}:00+03:00`;
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(rawStartTime)) {
+    startTime = `${rawStartTime}+03:00`;
+  }
+
   const customerName =
     (validation.data.customer_name as string | undefined)?.trim() || ctx.customerName;
 

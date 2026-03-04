@@ -12,7 +12,7 @@ import {
 import { routeIncomingMessage } from "../services/router/message-router.js";
 import { verifyOtp, normalizePhoneToE164 } from "../services/otp/index.js";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
-import { OTP_PROMPTS } from "../agent/master-prompts.js";
+import { OTP_PROMPTS } from "../agent/prompts/otp-prompts.js";
 import { resolveOutboundRoute } from "../services/outbound-route.js";
 
 // ── Wamid dedup cache ──────────────────────────────────────────────────────────

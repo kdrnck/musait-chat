@@ -5,3 +5,4 @@ export * from "./types/queue";
 export * from "./types/whatsapp";
 export * from "./types/agent";
 export * from "./types/conversation";
+export * from "./prompt/placeholders";

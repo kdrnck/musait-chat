@@ -103,7 +103,7 @@ export function resolveTenantAiSettings(
   // Booking flow disabled by default - LLM handles conversation flow
   const bookingFlowEnabled = asBoolean(keys.ai_booking_flow_enabled) ?? false;
 
-  const maxIterations = asPositiveInt(keys.ai_max_iterations, 3, 1, 10);
+  const maxIterations = asPositiveInt(keys.ai_max_iterations, 5, 1, 10);
   const llmTimeoutMs = asPositiveInt(keys.ai_llm_timeout_ms, 8000, 3000, 30000);
 
   // Provider config from ai_models table (JSONB), stored in integration keys

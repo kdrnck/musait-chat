@@ -44,42 +44,6 @@ export const AI_MODEL_PRESETS: Record<AiModelProfile, AiModelPreset> = {
 export const DEFAULT_AI_MODEL_PROFILE: AiModelProfile = "fast";
 export const DEFAULT_OUTBOUND_NUMBER_MODE: OutboundNumberMode = "inbound";
 
-export const DEFAULT_AI_SYSTEM_PROMPT = `Sen Musait asistanısın. Müşterilere randevu alma, iptal etme ve bilgi verme konularında yardımcı oluyorsun.
-
-## Kurallar
-- Her zaman Türkçe konuş.
-- Kibar, profesyonel ve yardımsever ol.
-- Kısa ve öz cevaplar ver.
-- Müşterinin ihtiyacını anla ve doğru aracı (tool) kullan.
-- Randevu oluştururken MUTLAKA müşteriden onay al.
-- Onay almadan asla randevu oluşturma.
-- Kalın metin oluşturmak için *metin* kullan. iki adet yıldız (*) kullanma. Bir adet yıldız (*) kullan.
-- Müşteri adı biliniyorsa adı sadece selamlaşma ve randevu onay/özet mesajlarında doğal şekilde kullan.
-- Müşteri adı kesin değilse konuşmanın başında zorla sorma; randevu tamamlanmaya yakın adını nazikçe iste.
-- İlk greeting cevabında mümkünse hizmetler linkini paylaş: "[Hizmetlerimize buradan göz atabilirsiniz](...)".
-
-## Randevu Onay Akışı
-1. Müşteri randevu istediğinde, önce uygun slotları göster (view_available_slots).
-2. Müşteri bir slot seçtiğinde, detayları tekrarla ve onay iste:
-   "X tarihinde saat Y'de Z hizmeti için randevu oluşturuyorum, onaylıyor musunuz?"
-3. Müşteri "evet", "onaylıyorum" gibi olumlu yanıt verirse -> create_appointment kullan.
-4. Müşteri "hayır" derse -> alternatif öner veya iptal et.
-
-## İptal Akışı
-1. Müşteri randevu iptal etmek istediğinde, randevu detaylarını doğrula.
-2. İptal sebebini sor.
-3. Onay al -> cancel_appointment kullan.
-
-## İnsan Desteği
-- Yanıt veremediğin veya karmaşık durumlar için ask_human aracını kullan.
-- Müşteriye "Sizi bir yetkiliye bağlıyorum" de.
-
-## Oturum Sonlandırma
-- Müşteri "teşekkürler", "başka bir şey yok" gibi ifadeler kullanırsa -> end_session kullan.
-- Oturum sonlandırırken nazik bir kapanış mesajı ver.
-
-Aktif İşletme ID: {{tenant_id}}`;
-
 export interface ResolvedAiSettings {
   modelProfile: AiModelProfile;
   model: string;
@@ -93,7 +57,7 @@ export interface ResolvedAiSettings {
   llmTimeoutMs: number;
 }
 
-export const DEFAULT_MAX_ITERATIONS = 3;
+export const DEFAULT_MAX_ITERATIONS = 5;
 export const DEFAULT_LLM_TIMEOUT_MS = 8000;
 
 export function resolveAiSettingsFromIntegrationKeys(
@@ -120,11 +84,12 @@ export function resolveAiSettingsFromIntegrationKeys(
   const promptOverride = asString(keys.ai_system_prompt_text);
   const legacyExtraPrompt = asString(keys.ai_extra_system_prompt);
 
-  const promptText =
-    promptOverride ||
-    (legacyExtraPrompt
-      ? `${globalSystemPrompt || DEFAULT_AI_SYSTEM_PROMPT}\n\n## Tenant Ek Talimatlar\n${legacyExtraPrompt}`
-      : (globalSystemPrompt || DEFAULT_AI_SYSTEM_PROMPT));
+  const basePrompt = promptOverride || globalSystemPrompt || "";
+  const promptText = legacyExtraPrompt
+    ? [basePrompt, "## Tenant Ek Talimatlar", legacyExtraPrompt]
+      .filter((item) => !!item)
+      .join("\n\n")
+    : basePrompt;
 
   const outboundModeRaw = asString(keys.ai_outbound_number_mode)?.toLowerCase();
   const outboundNumberMode: OutboundNumberMode =

@@ -8,6 +8,7 @@ export type AgentToolName =
   | "list_customer_appointments"
   | "view_available_slots"
   | "create_appointment"
+  | "create_appointments_batch"
   | "cancel_appointment"
   | "suggest_least_busy_staff"
   | "ask_human"
@@ -16,7 +17,8 @@ export type AgentToolName =
   | "bind_tenant"
   | "list_businesses"
   | "take_notes_for_user"
-  | "update_customer_name";
+  | "update_customer_name"
+  | "compose_interactive_message";
 
 /** Base tool call request from LLM */
 export interface ToolCallRequest {
@@ -48,6 +50,16 @@ export interface CreateAppointmentParams {
   staffId: string;
   startTime: string; // ISO datetime
   customerName?: string;
+}
+
+export interface CreateAppointmentsBatchParams {
+  serviceNames: string[];
+  date: string; // ISO date string (YYYY-MM-DD)
+  startTime: string; // HH:mm
+  staffId?: string;
+  staffName?: string;
+  customerName?: string;
+  requireAtomic?: boolean;
 }
 
 export interface CancelAppointmentParams {

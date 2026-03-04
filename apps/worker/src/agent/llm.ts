@@ -6,7 +6,8 @@ import {
   resolveTenantAiSettings,
   type TenantAiSettings,
 } from "./tenant-ai-settings.js";
-import { ADMIN_MODE } from "./master-prompts.js";
+import { ADMIN_MODE } from "./prompts/admin-mode.js";
+import { askHuman } from "./tools/ask-human.js";
 import { listServices, listStaff, getBusinessInfo } from "./tools/list-business-data.js";
 import type { PerfTimer } from "../lib/perf-timer.js";
 
@@ -96,7 +97,24 @@ export async function runAgentLoop(
 
   const messages = context.messages;
   const tenantAiSettings = context.tenantAiSettings;
-  const MAX_ITERATIONS = tenantAiSettings.maxIterations || 3;
+  const MAX_ITERATIONS = tenantAiSettings.maxIterations || 5;
+
+  if (context.promptMissingForBoundTenant && conversation.tenantId && !conversation.adminMode) {
+    const reason = "Prompt missing for bound tenant (Tenant > Global > Fail Closed)";
+    try {
+      await askHuman(convex, { reason }, {
+        tenantId: conversation.tenantId,
+        conversationId: conversation._id,
+        customerPhone: job.customerPhone,
+      });
+    } catch (err) {
+      console.error("❌ Failed to trigger handoff on prompt-missing fail-closed:", err);
+    }
+    return {
+      response:
+        "Sistem tarafında bu işletme için AI prompt yapılandırması eksik görünüyor. Sizi hemen bir yetkiliye bağlıyorum.",
+    };
+  }
 
   // Context-aware tool filtering: unbound conversations only need routing tools
   const toolDefs = !conversation.tenantId && !conversation.adminMode
@@ -198,6 +216,7 @@ export async function runAgentLoop(
       }
 
       // Add results to context in original order
+      let forcedInteractiveMessage: string | null = null;
       for (const { toolCall, result } of toolResults) {
         toolCallsExecuted.add(toolCall.name);
         const resultStr = JSON.stringify(result.result ?? result.error);
@@ -206,12 +225,43 @@ export async function runAgentLoop(
           `  ${result.error ? `❌ HATA: ${result.error}` : `✅ ${resultStr.slice(0, 300)}${resultStr.length > 300 ? "..." : ""}`}`
         );
 
+        if (
+          toolCall.name === "compose_interactive_message" &&
+          !result.error &&
+          typeof (result.result as Record<string, unknown> | null)?.renderedMessage === "string"
+        ) {
+          forcedInteractiveMessage = (
+            result.result as Record<string, unknown>
+          ).renderedMessage as string;
+        }
+
         messages.push({
           role: "tool",
           content: resultStr,
           tool_call_id: toolCall.id,
           name: toolCall.name,
         });
+      }
+
+      if (forcedInteractiveMessage) {
+        const responseTimeMs = Date.now() - loopStartTime;
+        const debugInfo: AgentDebugInfo = {
+          responseTimeMs,
+          model: lastResponse?.model || tenantAiSettings.model,
+          promptTokens: accPromptTokens || undefined,
+          completionTokens: accCompletionTokens || undefined,
+          totalTokens: accTotalTokens || undefined,
+          cacheReadTokens: accCacheReadTokens || undefined,
+          cacheCreationTokens: accCacheCreationTokens || undefined,
+          thinkingContent:
+            thinkingParts.length > 0 ? thinkingParts.join("\n\n---\n\n") : undefined,
+          toolCallTrace:
+            toolTraceLines.length > 0 ? toolTraceLines.join("\n\n") : undefined,
+        };
+        return {
+          response: forcedInteractiveMessage,
+          debugInfo,
+        };
       }
 
       // Continue loop — LLM will process tool results
@@ -222,6 +272,7 @@ export async function runAgentLoop(
     if (
       !conversation.adminMode &&
       !toolCallsExecuted.has("create_appointment") &&
+      !toolCallsExecuted.has("create_appointments_batch") &&
       response.content &&
       detectBookingSuccessHallucination(response.content)
     ) {
@@ -269,7 +320,11 @@ async function buildContext(
   job: AgentJob,
   conversation: Conversation,
   preloadedProfile?: any
-): Promise<{ messages: LLMMessage[]; tenantAiSettings: TenantAiSettings }> {
+): Promise<{
+  messages: LLMMessage[];
+  tenantAiSettings: TenantAiSettings;
+  promptMissingForBoundTenant: boolean;
+}> {
   const messages: LLMMessage[] = [];
 
   // ========== STEP 1: FETCH SETTINGS (parallelized) ==========
@@ -341,6 +396,7 @@ async function buildContext(
   // Priority: Admin Mode > Unbound routing > Dashboard (tenant) > Global Settings > None
   let systemPromptContent: string | null = null;
   let promptSource: string;
+  let promptMissingForBoundTenant = false;
 
   if (conversation.adminMode) {
     systemPromptContent = ADMIN_MODE.systemPrompt;
@@ -412,6 +468,7 @@ async function buildContext(
     } else {
       systemPromptContent = null;
       promptSource = 'NONE';
+      promptMissingForBoundTenant = true;
     }
   }
 
@@ -442,5 +499,5 @@ async function buildContext(
 
   console.log(`📋 Context built: ${messages.length} messages (tenant=${conversation.tenantId || 'unbound'})`);
 
-  return { messages, tenantAiSettings };
+  return { messages, tenantAiSettings, promptMissingForBoundTenant };
 }

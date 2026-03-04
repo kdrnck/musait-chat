@@ -2,6 +2,7 @@ import type { ConvexHttpClient } from "convex/browser";
 import type { ToolCallRequest, ToolCallResult, AgentToolName } from "@musait/shared";
 import { viewAvailableSlots } from "./view-slots.js";
 import { createAppointment } from "./create-appointment.js";
+import { createAppointmentsBatch } from "./create-appointments-batch.js";
 import { cancelAppointment } from "./cancel-appointment.js";
 import { askHuman } from "./ask-human.js";
 import { endSession } from "./end-session.js";
@@ -12,6 +13,7 @@ import { listCustomerAppointments } from "./list-customer-appointments.js";
 import { listBusinesses } from "./list-businesses.js";
 import { takeNotesForUser } from "./take-notes.js";
 import { updateCustomerName } from "./update-customer-name.js";
+import { composeInteractiveMessage } from "./compose-interactive-message.js";
 
 const TOOL_TIMEOUT_MS = 10_000;
 
@@ -62,9 +64,11 @@ async function executeToolCallInner(
       "list_customer_appointments",
       "view_available_slots",
       "create_appointment",
+      "create_appointments_batch",
       "cancel_appointment",
       "suggest_least_busy_staff",
       "take_notes_for_user",
+      "update_customer_name",
     ]);
 
     if (tenantRequiredTools.has(toolCall.name) && !ctx.tenantId) {
@@ -97,6 +101,12 @@ async function executeToolCallInner(
         break;
       case "create_appointment":
         result = await createAppointment(toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
+        break;
+      case "create_appointments_batch":
+        result = await createAppointmentsBatch(toolCall.arguments, {
+          ...ctx,
+          tenantId: ctx.tenantId!,
+        });
         break;
       case "cancel_appointment":
         result = await cancelAppointment(toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
@@ -134,6 +144,9 @@ async function executeToolCallInner(
           customerPhone: ctx.customerPhone,
         });
         break;
+      case "compose_interactive_message":
+        result = await composeInteractiveMessage(toolCall.arguments);
+        break;
       default:
         return {
           toolCallId: toolCall.id,
@@ -165,66 +178,6 @@ async function executeToolCallInner(
  */
 export function getToolDefinitions() {
   return [
-    {
-      type: "function",
-      function: {
-        name: "list_services",
-        description:
-          "İşletmedeki hizmetleri listeler. service_id bilgisi gerektiğinde önce bunu çağır.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: {
-              type: "string",
-              description: "Hizmet adı filtre metni (opsiyonel)",
-            },
-            include_inactive: {
-              type: "boolean",
-              description: "Pasif hizmetleri de dahil et (varsayılan: false)",
-            },
-          },
-          required: [],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "list_staff",
-        description:
-          "İşletmedeki personeli listeler. service_id verilirse yalnızca o hizmete uygun personeli döndürür.",
-        parameters: {
-          type: "object",
-          properties: {
-            service_id: {
-              type: "string",
-              description: "Hizmet ID (opsiyonel filtre)",
-            },
-            query: {
-              type: "string",
-              description: "Personel adı filtre metni (opsiyonel)",
-            },
-            include_inactive: {
-              type: "boolean",
-              description: "Pasif personeli de dahil et (varsayılan: false)",
-            },
-          },
-          required: [],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "get_business_info",
-        description: "Aktif işletmenin temel bilgilerini döndürür.",
-        parameters: {
-          type: "object",
-          properties: {},
-          required: [],
-        },
-      },
-    },
     {
       type: "function",
       function: {
@@ -332,7 +285,7 @@ export function getToolDefinitions() {
             },
             start_time: {
               type: "string",
-              description: "Başlangıç zamanı (ISO 8601 formatında)",
+              description: "Başlangıç zamanı — ISO 8601, İstanbul timezone ile: YYYY-MM-DDTHH:MM:SS+03:00 (örnek: 2026-03-05T14:00:00+03:00). Timezone suffix (+03:00) ZORUNLUDUR, eksik bırakma.",
             },
             customer_name: {
               type: "string",
@@ -340,6 +293,49 @@ export function getToolDefinitions() {
             },
           },
           required: ["service_id", "staff_id", "start_time"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "create_appointments_batch",
+        description:
+          "Birden fazla hizmet için tek personel ve tek başlangıç saatine göre ardışık randevuları atomik biçimde oluşturur.",
+        parameters: {
+          type: "object",
+          properties: {
+            service_names: {
+              type: "array",
+              items: { type: "string" },
+              description: "Hizmet isimleri listesi (sıraya göre uygulanır)",
+            },
+            date: {
+              type: "string",
+              description: "Tarih (YYYY-MM-DD)",
+            },
+            start_time: {
+              type: "string",
+              description: "Başlangıç saati (HH:MM)",
+            },
+            staff_id: {
+              type: "string",
+              description: "Personel ID (opsiyonel)",
+            },
+            staff_name: {
+              type: "string",
+              description: "Personel adı (staff_id yoksa kullanılabilir)",
+            },
+            customer_name: {
+              type: "string",
+              description: "Müşteri adı (opsiyonel)",
+            },
+            require_atomic: {
+              type: "boolean",
+              description: "Varsayılan true. Bir adım hata verirse tamamını geri al.",
+            },
+          },
+          required: ["service_names", "date", "start_time"],
         },
       },
     },
@@ -459,6 +455,68 @@ export function getToolDefinitions() {
             },
           },
           required: [],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "compose_interactive_message",
+        description:
+          "WhatsApp interaktif liste veya buton mesajı üretir. Dönüşte renderedMessage alanını aynen kullanıcıya ilet.",
+        parameters: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["buttons", "list"],
+              description: "Mesaj türü",
+            },
+            body: {
+              type: "string",
+              description: "Mesaj gövde metni",
+            },
+            buttons: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  title: { type: "string" },
+                },
+                required: ["id", "title"],
+              },
+              description: "kind=buttons için butonlar (max 3)",
+            },
+            button_text: {
+              type: "string",
+              description: "kind=list için açılır liste buton yazısı",
+            },
+            sections: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  rows: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        title: { type: "string" },
+                        description: { type: "string" },
+                      },
+                      required: ["id", "title"],
+                    },
+                  },
+                },
+                required: ["title", "rows"],
+              },
+              description: "kind=list için bölüm ve satırlar",
+            },
+          },
+          required: ["kind", "body"],
         },
       },
     },

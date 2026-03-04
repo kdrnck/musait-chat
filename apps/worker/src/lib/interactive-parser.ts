@@ -75,6 +75,10 @@ export function parseInteractiveResponse(response: string): ParsedMessage {
     if (parsed) return parsed;
   }
 
+  // Try raw JSON (tool-first fallback hardening)
+  const rawParsed = tryParseRawInteractiveJson(response);
+  if (rawParsed) return rawParsed;
+
   // Plain text fallback
   return { type: "text", body: response };
 }
@@ -171,6 +175,63 @@ function tryParseListJson(raw: string): ParsedListMessage | null {
     console.warn("⚠️ Interactive parser: Failed to parse LIST JSON:", err);
     return null;
   }
+}
+
+function tryParseRawInteractiveJson(response: string): ParsedMessage | null {
+  const candidates = new Set<string>();
+  const trimmed = response.trim();
+  if (trimmed) candidates.add(trimmed);
+
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fenceMatch?.[1]) candidates.add(fenceMatch[1].trim());
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.add(trimmed.slice(firstBrace, lastBrace + 1).trim());
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (!parsed || typeof parsed !== "object") continue;
+
+      const data = parsed as Record<string, unknown>;
+      const explicitKind =
+        typeof data.kind === "string" ? data.kind.toLowerCase() : "";
+
+      if (
+        explicitKind === "buttons" ||
+        (Array.isArray(data.buttons) && typeof data.body === "string")
+      ) {
+        return tryParseButtonsJson(
+          JSON.stringify({
+            body: data.body,
+            buttons: data.buttons,
+          })
+        );
+      }
+
+      if (
+        explicitKind === "list" ||
+        (Array.isArray(data.sections) &&
+          typeof data.body === "string" &&
+          (typeof data.button === "string" || typeof data.button_text === "string"))
+      ) {
+        return tryParseListJson(
+          JSON.stringify({
+            body: data.body,
+            button: typeof data.button === "string" ? data.button : data.button_text,
+            sections: data.sections,
+          })
+        );
+      }
+    } catch {
+      // ignore candidate parse errors
+    }
+  }
+
+  return null;
 }
 
 // ── Content for storage ────────────────────────────────────────────────────────

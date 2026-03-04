@@ -23,6 +23,7 @@ interface TenantAiResponse {
   bookingFlowEnabled: boolean;
   maxIterations: number;
   llmTimeoutMs: number;
+  globalPromptText: string;
   wabaPhoneNumberId: string;
   wabaAccessToken: string;
   wabaBusinessAccountId: string;
@@ -361,6 +362,7 @@ function buildResponse(args: {
     bookingFlowEnabled: resolved.bookingFlowEnabled,
     maxIterations: resolved.maxIterations,
     llmTimeoutMs: resolved.llmTimeoutMs,
+    globalPromptText: args.globalPrompt || "",
     wabaPhoneNumberId: args.canEdit ? wabaPhoneNumberId : "",
     wabaAccessToken: args.canEdit ? wabaAccessToken : "",
     wabaBusinessAccountId: args.canEdit ? wabaBusinessAccountId : "",

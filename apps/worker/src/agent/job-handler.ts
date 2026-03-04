@@ -5,7 +5,8 @@ import { routeMessage } from "./routing.js";
 import { runAgentLoop } from "./llm.js";
 import { sendWhatsAppMessage, sendWhatsAppInteractive, sendWhatsAppListMessage } from "../lib/whatsapp.js";
 import { parseInteractiveResponse, buildStorageContent } from "../lib/interactive-parser.js";
-import { SESSION_PROMPTS, ADMIN_MODE } from "./master-prompts.js";
+import { SESSION_PROMPTS } from "./prompts/session-prompts.js";
+import { ADMIN_MODE } from "./prompts/admin-mode.js";
 import { SUPABASE_CONFIG } from "../config.js";
 import {
   extractNameUpdateIntent,
