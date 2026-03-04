@@ -20,11 +20,12 @@ RUN pnpm install --no-frozen-lockfile
 
 # 5) Copy shared package source & build
 COPY packages/shared/ ./packages/shared/
+RUN pnpm --filter @musait/shared build
 
 # 6) Copy worker source & build
 COPY apps/worker/ ./apps/worker/
 
-# 7) Build worker (shared exports raw TS, no build needed)
+# 7) Build worker
 RUN pnpm --filter worker build
 
 # ── Stage 2: Production Image ───────────────────────────────────────
