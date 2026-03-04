@@ -192,7 +192,10 @@ export default function PromptLibraryPanel() {
                     body: JSON.stringify(body),
                 });
                 
-                if (!res.ok) throw new Error("Oluşturma başarısız");
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.details || errData.error || `HTTP ${res.status}`);
+                }
                 
                 const created = await res.json();
                 setPrompts((prev) => [created, ...prev]);
@@ -201,7 +204,7 @@ export default function PromptLibraryPanel() {
             handleCancel();
         } catch (err) {
             console.error("Kaydetme hatası:", err);
-            alert("İşlem başarısız oldu");
+            alert(`İşlem başarısız: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`);
         } finally {
             setSaving(false);
         }
