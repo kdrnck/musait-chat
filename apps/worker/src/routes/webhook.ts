@@ -316,11 +316,23 @@ async function handleAgentMessage(params: {
   }
 
   // 2. Find or create conversation
-  let conversation = await getActiveConversationWithBackwardCompatibility(
-    convex,
-    customerPhone,
-    phoneNumberId
-  );
+  let conversation: any = null;
+  
+  if (!numberMapping.isMasterNumber && numberMapping.tenantId) {
+    // Dedicated number — try to find tenant-scoped conversation
+    conversation = await convex.query(api.conversations.getActiveByPhoneAndTenant, {
+      customerPhone,
+      tenantId: numberMapping.tenantId,
+      inboundPhoneNumberId: phoneNumberId,
+    });
+  } else {
+    // Master number or backward compat — use old lookup
+    conversation = await getActiveConversationWithBackwardCompatibility(
+      convex,
+      customerPhone,
+      phoneNumberId
+    );
+  }
 
   if (!conversation) {
     // Determine initial tenant_id based on routing
@@ -345,20 +357,21 @@ async function handleAgentMessage(params: {
     }
   }
 
-  // 3. Persist incoming message (status=pending)
-  const messageId = await convex.mutation(api.messages.create, {
-    conversationId: conversation._id,
-    role: "customer",
-    content: messageContent,
-    status: "pending",
-  });
-
-  const outboundRoute = await resolveOutboundRoute({
-    supabase,
-    tenantId: conversation.tenantId,
-    inboundPhoneNumberId: phoneNumberId,
-    inboundAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
-  });
+  // 3. Persist incoming message (status=pending) and resolve outbound route in PARALLEL
+  const [messageId, outboundRoute] = await Promise.all([
+    convex.mutation(api.messages.create, {
+      conversationId: conversation._id,
+      role: "customer",
+      content: messageContent,
+      status: "pending",
+    }),
+    resolveOutboundRoute({
+      supabase,
+      tenantId: conversation.tenantId,
+      inboundPhoneNumberId: phoneNumberId,
+      inboundAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+    }),
+  ]);
 
   // 4. Enqueue job — NEVER call LLM here
   await queue.enqueue({

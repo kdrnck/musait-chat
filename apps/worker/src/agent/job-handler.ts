@@ -76,9 +76,10 @@ export function createJobHandler(convex: ConvexHttpClient) {
 
       const normalizedMessage = job.messageContent.trim().toLocaleLowerCase("tr-TR");
       if (normalizedMessage === "/bitir") {
-        // Reset session without archiving — agent state cleared (tenantId null, fresh routing)
-        // but conversation stays visible in admin panel with all messages intact.
-        await convex.mutation(api.conversations.resetSession, {
+        // UPDATED: Archive conversation instead of resetting tenant binding.
+        // New architecture: /bitir ends the session by archiving.
+        // Next message creates a new lobby conversation (or tenant-scoped if remembered).
+        await convex.mutation(api.conversations.archiveAndReset, {
           id: conversation._id,
         });
 
@@ -136,6 +137,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
       // 4. Route message (handle unbound/master number flow)
       // Uses job.isMasterNumber to avoid duplicate Convex query
       timer.start("routing");
+      const originalConversationId = conversation._id;
       const routingResult = await routeMessage(convex, job, conversation);
       timer.end("routing");
 
@@ -148,13 +150,15 @@ export function createJobHandler(convex: ConvexHttpClient) {
         return;
       }
 
-      // SAFETY: Refresh conversation ONLY if routing might have bound a tenant
-      if (!conversation.tenantId) {
+      // UPDATED: Refresh conversation if routing changed it (warm-start creates new conversation)
+      // or if it was unbound before (tenant binding might have occurred)
+      if (!conversation.tenantId || (job.conversationId as any) !== originalConversationId) {
+        const conversationIdToUse = (job.conversationId as any) || originalConversationId;
         const refreshedConversation = await convex.query(api.conversations.getById, {
-          id: job.conversationId as any,
+          id: conversationIdToUse,
         });
         if (!refreshedConversation) {
-          console.error(`[${correlationId}] ❌ Conversation ${job.conversationId} disappeared`);
+          console.error(`[${correlationId}] ❌ Conversation ${conversationIdToUse} disappeared`);
           return;
         }
         conversation = refreshedConversation;

@@ -72,18 +72,34 @@ export async function routeMessage(
   }
 
   const activeTenants = await getActiveTenants(convex);
-
-  // Warm-start: if customer has a preferred tenant from a previous session, bind
-  // immediately and confirm. Agent will take over for subsequent messages.
+  // Warm-start: if customer has a preferred tenant from a previous session,
+  // create new tenant-scoped conversation and copy the triggering message.
   const rememberedTenant = activeTenants.length > 0
     ? await getRememberedTenant(convex, job.customerPhone, activeTenants)
     : null;
 
   if (rememberedTenant) {
-    await convex.mutation(api.conversations.bindToTenant, {
-      id: conversation._id,
-      tenantId: rememberedTenant.tenantId,
+    // Use new bindToTenantAndCreateNew: archives lobby, creates tenant-scoped conversation
+    const newConversationId = await convex.mutation(
+      api.conversations.bindToTenantAndCreateNew,
+      {
+        oldConversationId: conversation._id,
+        tenantId: rememberedTenant.tenantId,
+        customerPhone: job.customerPhone,
+        inboundPhoneNumberId: conversation.inboundPhoneNumberId || job.phoneNumberId,
+      }
+    );
+
+    // Copy the incoming message to the new conversation
+    await convex.mutation(api.messages.create, {
+      conversationId: newConversationId as any,
+      role: "customer",
+      content: job.messageContent,
+      status: "done",
     });
+
+    // Update the job to use the new conversation
+    (job as any).conversationId = newConversationId;
 
     await convex.mutation(api.customerMemories.upsertPreferredTenant, {
       customerPhone: job.customerPhone,

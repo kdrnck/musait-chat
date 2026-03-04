@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 
 // ===== QUERIES =====
 
-/** Get active conversation by customer phone */
+/** Get active conversation by customer phone (lobby or by inbound number) */
 export const getActiveByPhone = query({
   args: {
     customerPhone: v.string(),
@@ -22,6 +22,27 @@ export const getActiveByPhone = query({
   },
 });
 
+/** NEW: Get active conversation for a specific customer+tenant combo (tenant-scoped immutable binding) */
+export const getActiveByPhoneAndTenant = query({
+  args: {
+    customerPhone: v.string(),
+    tenantId: v.string(),
+    inboundPhoneNumberId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("conversations")
+      .withIndex("by_customer_phone_tenant", (q) =>
+        q
+          .eq("customerPhone", args.customerPhone)
+          .eq("tenantId", args.tenantId)
+          .eq("inboundPhoneNumberId", args.inboundPhoneNumberId)
+          .eq("status", "active")
+      )
+      .first();
+  },
+});
+
 /** Get conversation by ID */
 export const getById = query({
   args: { id: v.id("conversations") },
@@ -30,7 +51,7 @@ export const getById = query({
   },
 });
 
-/** List conversations for a tenant with last message */
+/** List conversations for a tenant (denormalized lastMessage, no N+1 queries) */
 export const listByTenant = query({
   args: {
     tenantId: v.string(),
@@ -52,33 +73,18 @@ export const listByTenant = query({
       })
       .collect();
     
-    // Filter out archived by default
+    // Filter out archived by default (if no status provided)
     const filtered = args.status 
       ? conversations 
       : conversations.filter(c => c.status !== "archived");
     
-    // Enrich with last message for each conversation
-    const enriched = await Promise.all(
-      filtered.map(async (conv) => {
-        const lastMessage = await ctx.db
-          .query("messages")
-          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
-          .order("desc")
-          .first();
-        return {
-          ...conv,
-          lastMessage: lastMessage?.content ?? null,
-          lastMessageRole: lastMessage?.role ?? null,
-        };
-      })
-    );
-    
     // Sort by lastMessageAt descending (newest first)
-    return enriched.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+    // No N+1 queries — use denormalized lastMessageContent/lastMessageRole
+    return filtered.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
   },
 });
 
-/** List all conversations (admin/master view) with last message */
+/** List all conversations (admin/master view) - no N+1 queries */
 export const listAll = query({
   args: {
     status: v.optional(
@@ -109,28 +115,13 @@ export const listAll = query({
       conversations = [...active, ...handoff];
     }
     
-    // Enrich with last message for each conversation
-    const enriched = await Promise.all(
-      conversations.map(async (conv) => {
-        const lastMessage = await ctx.db
-          .query("messages")
-          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
-          .order("desc")
-          .first();
-        return {
-          ...conv,
-          lastMessage: lastMessage?.content ?? null,
-          lastMessageRole: lastMessage?.role ?? null,
-        };
-      })
-    );
-    
     // Sort by lastMessageAt descending (newest first)
-    return enriched.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+    // Use denormalized lastMessageContent/lastMessageRole - no N+1 queries
+    return conversations.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
   },
 });
 
-/** List unbound conversations (tenantId=null) - routing agent admin view */
+/** List unbound conversations (tenantId=null) - routing agent admin view, no N+1 */
 export const listUnbound = query({
   args: {},
   handler: async (ctx) => {
@@ -145,26 +136,13 @@ export const listUnbound = query({
 
     const conversations = [...active, ...handoff];
 
-    const enriched = await Promise.all(
-      conversations.map(async (conv) => {
-        const lastMessage = await ctx.db
-          .query("messages")
-          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
-          .order("desc")
-          .first();
-        return {
-          ...conv,
-          lastMessage: lastMessage?.content ?? null,
-          lastMessageRole: lastMessage?.role ?? null,
-        };
-      })
-    );
-
-    return enriched.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+    // Sort by lastMessageAt descending (newest first)
+    // Use denormalized fields - no N+1 queries
+    return conversations.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
   },
 });
 
-/** List ALL conversations for a specific tenant (admin view — includes archived) */
+/** List ALL conversations for a specific tenant (admin view — includes archived), no N+1 */
 export const listByTenantAdmin = query({
   args: { tenantId: v.string() },
   handler: async (ctx, args) => {
@@ -173,22 +151,9 @@ export const listByTenantAdmin = query({
       .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
       .collect();
 
-    const enriched = await Promise.all(
-      conversations.map(async (conv) => {
-        const lastMessage = await ctx.db
-          .query("messages")
-          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
-          .order("desc")
-          .first();
-        return {
-          ...conv,
-          lastMessage: lastMessage?.content ?? null,
-          lastMessageRole: lastMessage?.role ?? null,
-        };
-      })
-    );
-
-    return enriched.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+    // Sort by lastMessageAt descending (newest first)
+    // Use denormalized lastMessageContent/lastMessageRole - no N+1 queries
+    return conversations.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
   },
 });
 
@@ -226,6 +191,8 @@ export const create = mutation({
       inboundPhoneNumberId: args.inboundPhoneNumberId,
       status: "active",
       lastMessageAt: now,
+      lastMessageContent: undefined, // Denormalized field for efficient listing
+      lastMessageRole: undefined,    // Denormalized field for efficient listing
       rollingSummary: "",
       personNotes: "",
       retryState: { count: 0, lastAttempt: null },
@@ -235,14 +202,47 @@ export const create = mutation({
   },
 });
 
-/** Bind an unbound conversation to a tenant */
+/** DEPRECATED: Use bindToTenantAndCreateNew instead - Bind an unbound conversation to a tenant */
 export const bindToTenant = mutation({
   args: {
     id: v.id("conversations"),
     tenantId: v.string(),
   },
   handler: async (ctx, args) => {
+    // DEPRECATED - this violates immutability. Use bindToTenantAndCreateNew instead.
+    // Kept for backward compatibility only.
     await ctx.db.patch(args.id, { tenantId: args.tenantId });
+  },
+});
+
+/** NEW: Bind unbound conversation to tenant by archiving lobby and creating new tenant-scoped conversation */
+export const bindToTenantAndCreateNew = mutation({
+  args: {
+    oldConversationId: v.id("conversations"),
+    tenantId: v.string(),
+    customerPhone: v.string(),
+    inboundPhoneNumberId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // 1. Archive the old lobby conversation
+    await ctx.db.patch(args.oldConversationId, { status: "archived" });
+
+    // 2. Create new tenant-scoped conversation
+    const now = Date.now();
+    return await ctx.db.insert("conversations", {
+      tenantId: args.tenantId,
+      customerPhone: args.customerPhone,
+      inboundPhoneNumberId: args.inboundPhoneNumberId,
+      status: "active",
+      lastMessageAt: now,
+      lastMessageContent: undefined,
+      lastMessageRole: undefined,
+      rollingSummary: "",
+      personNotes: "",
+      retryState: { count: 0, lastAttempt: null },
+      agentDisabledUntil: null,
+      createdAt: now,
+    });
   },
 });
 
@@ -336,22 +336,22 @@ export const archiveAndReset = mutation({
 });
 
 /**
- * Reset session without archiving (for /bitir command).
- * Clears tenant binding and resets agent state so the next message
- * starts a fresh routing flow - but keeps the conversation visible
- * in the admin panel with all its messages intact.
+ * Reset session (for /bitir command) - NOW JUST ARCHIVES.
+ * With tenant-scoped-immutable conversations, session reset means
+ * archiving the current conversation. Next message starts a new lobby conversation.
+ * DEPRECATED: Use archiveAndReset directly instead.
  */
 export const resetSession = mutation({
   args: { id: v.id("conversations") },
   handler: async (ctx, args) => {
+    // Archive the conversation - this ends the session
     await ctx.db.patch(args.id, {
-      tenantId: null,
-      status: "active",
+      status: "archived",
       agentDisabledUntil: null,
       adminMode: false,
       retryState: { count: 0, lastAttempt: null },
       rollingSummary: "",
-      // Mark session boundary - agent will only see messages after this timestamp
+      // DEPRECATED: sessionStartedAt no longer used in new architecture
       sessionStartedAt: Date.now(),
     });
   },

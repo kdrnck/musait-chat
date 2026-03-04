@@ -19,11 +19,13 @@ function ref(path: string): Ref {
 export const api = {
   conversations: {
     getActiveByPhone: ref("conversations:getActiveByPhone"),
+    getActiveByPhoneAndTenant: ref("conversations:getActiveByPhoneAndTenant"), // NEW: tenant-scoped lookup
     getById: ref("conversations:getById"),
     listByTenant: ref("conversations:listByTenant"),
     listHandoffs: ref("conversations:listHandoffs"),
     create: ref("conversations:create"),
-    bindToTenant: ref("conversations:bindToTenant"),
+    bindToTenant: ref("conversations:bindToTenant"), // DEPRECATED: use bindToTenantAndCreateNew
+    bindToTenantAndCreateNew: ref("conversations:bindToTenantAndCreateNew"), // NEW: immutable tenant binding
     update: ref("conversations:update"),
     updateStatus: ref("conversations:updateStatus"),
     updateSummary: ref("conversations:updateSummary"),
