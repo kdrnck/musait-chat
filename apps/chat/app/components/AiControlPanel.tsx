@@ -11,6 +11,7 @@ interface TenantAiSettings {
     tenantId: string;
     canEdit: boolean;
     model: string;
+    fallbackModel: string | null;
     promptText: string;
     outboundNumberMode: OutboundNumberMode;
     bookingFlowEnabled: boolean;
@@ -269,6 +270,34 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                             </p>
                                         </div>
 
+                                        <div className="space-y-1.5 mt-3">
+                                            <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                                                Hata Durumunda Güçlü Fallback Model (Tek Sefer)
+                                            </label>
+                                            {registryModels.length > 0 ? (
+                                                <select
+                                                    value={settings.fallbackModel ?? ""}
+                                                    onChange={(e) => setSettings({ ...settings, fallbackModel: e.target.value || null })}
+                                                    disabled={!canEdit}
+                                                    className="form-select"
+                                                >
+                                                    <option value="">— Kapalı —</option>
+                                                    {registryModels.map((m) => (
+                                                        <option key={`fallback-${m.id}`} value={m.openrouter_id}>
+                                                            {m.display_name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <div className="form-input text-[var(--color-text-muted)] text-[12px] font-mono">
+                                                    {settings.fallbackModel || "Kapalı"}
+                                                </div>
+                                            )}
+                                            <p className="text-[10px] text-[var(--color-text-muted)]">
+                                                LLM hata verirse veya iterasyon limiti dolarsa bir kez bu modele düşer.
+                                            </p>
+                                        </div>
+
                                         {/* Toggles */}
                                         <div className="mt-4 space-y-3">
                                             <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
@@ -320,17 +349,17 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
                                                         min={3000}
                                                         max={30000}
                                                         step={1000}
-                                                        value={settings.llmTimeoutMs ?? 8000}
+                                                        value={settings.llmTimeoutMs ?? 15000}
                                                         onChange={(e) => setSettings({ ...settings, llmTimeoutMs: parseInt(e.target.value, 10) })}
                                                         disabled={!canEdit}
                                                         className="flex-1 accent-[var(--color-brand)]"
                                                     />
                                                     <span className="text-[14px] font-bold text-[var(--color-text-primary)] w-12 text-right tabular-nums">
-                                                        {((settings.llmTimeoutMs ?? 8000) / 1000).toFixed(0)}s
+                                                        {((settings.llmTimeoutMs ?? 15000) / 1000).toFixed(0)}s
                                                     </span>
                                                 </div>
                                                 <p className="text-[10px] text-[var(--color-text-muted)]">
-                                                    Her LLM isteği için maks bekleme süresi (önerilen: 8s)
+                                                    Her LLM isteği için maks bekleme süresi (önerilen: 15s)
                                                 </p>
                                             </div>
                                         </div>

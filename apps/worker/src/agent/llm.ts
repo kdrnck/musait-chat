@@ -28,6 +28,35 @@ export { fetchTenantContext, fetchActiveTenants, fetchGlobalSettings } from "./c
 export { getCurrentDateInfo, resolvePlaceholders } from "./prompt-resolver.js";
 export { detectBookingSuccessHallucination } from "./hallucination-guard.js";
 
+// ===== CONVERSATION-LEVEL CONTEXT CACHE =====
+// Caches services/staff/businessInfo per conversation for 5 minutes.
+// Reduces redundant Supabase calls within a conversation.
+interface ContextCacheEntry {
+  services: string;
+  staff: string;
+  businessInfo: string;
+  builtAt: number;
+}
+const CONTEXT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const contextCache = new Map<string, ContextCacheEntry>();
+
+function getCachedContext(conversationId: string): ContextCacheEntry | null {
+  const entry = contextCache.get(conversationId);
+  if (!entry) return null;
+  if (Date.now() - entry.builtAt > CONTEXT_CACHE_TTL) {
+    contextCache.delete(conversationId);
+    return null;
+  }
+  return entry;
+}
+
+function setCachedContext(
+  conversationId: string,
+  entry: ContextCacheEntry
+): void {
+  contextCache.set(conversationId, entry);
+}
+
 interface Conversation {
   _id: any;
   tenantId: string | null;
@@ -126,6 +155,7 @@ export async function runAgentLoop(
 
   const loopStartTime = Date.now();
   let lastResponse: OpenRouterResponse | null = null;
+  let strongFallbackUsed = false;
 
   // Accumulators for debug info across all iterations
   let accPromptTokens = 0;
@@ -137,16 +167,74 @@ export async function runAgentLoop(
   const toolTraceLines: string[] = [];
   const toolCallsExecuted = new Set<string>();
 
+  const buildStrongFallbackSettings = (): TenantAiSettings | null => {
+    if (!tenantAiSettings.fallbackModel || strongFallbackUsed) {
+      return null;
+    }
+    return {
+      ...tenantAiSettings,
+      model: tenantAiSettings.fallbackModel,
+      providerConfig: tenantAiSettings.fallbackProviderConfig,
+      providerPriority: [],
+      allowFallbacks: true,
+    };
+  };
+
+  const runSingleStrongFallback = async (
+    reason: string,
+    includeTools: boolean
+  ): Promise<OpenRouterResponse | null> => {
+    const fallbackSettings = buildStrongFallbackSettings();
+    if (!fallbackSettings) return null;
+    strongFallbackUsed = true;
+    console.warn(
+      `⚠️ Strong fallback engaged (reason=${reason}) model=${fallbackSettings.model}`
+    );
+    toolTraceLines.push(
+      `⚠️ strong_fallback(reason=${reason}, model=${fallbackSettings.model})`
+    );
+    const fallbackMessages: LLMMessage[] = includeTools
+      ? messages
+      : [
+          ...messages,
+          {
+            role: "system",
+            content:
+              "[FALLBACK MODE] Tool çağırmadan tek mesajda Türkçe net yanıt ver. Gerekirse kullanıcıdan tek bir kısa adım iste.",
+          },
+        ];
+
+    return await callOpenRouter(fallbackMessages, {
+      useReasoning: false,
+      tenantAiSettings: fallbackSettings,
+      isAdminMode: conversation.adminMode,
+      isSuperThink: false,
+      toolDefinitions: includeTools ? toolDefs : null,
+    });
+  };
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // 2. Call LLM
     timer?.start("llmCall");
-    const response = await callOpenRouter(messages, {
-      useReasoning: i === 0 && useReasoning,
-      tenantAiSettings,
-      isAdminMode: conversation.adminMode,
-      isSuperThink: isSuperUltraThink,
-      toolDefinitions: toolDefs,
-    });
+    let response: OpenRouterResponse;
+    try {
+      response = await callOpenRouter(messages, {
+        useReasoning: i === 0 && useReasoning,
+        tenantAiSettings,
+        isAdminMode: conversation.adminMode,
+        isSuperThink: isSuperUltraThink,
+        toolDefinitions: toolDefs,
+      });
+    } catch (llmErr) {
+      const fallbackResponse = await runSingleStrongFallback(
+        `llm_error_iteration_${i + 1}`,
+        true
+      );
+      if (!fallbackResponse) {
+        throw llmErr;
+      }
+      response = fallbackResponse;
+    }
     timer?.end("llmCall");
     lastResponse = response;
 
@@ -310,6 +398,36 @@ export async function runAgentLoop(
     };
   }
 
+  const fallbackAtLimit = await runSingleStrongFallback(
+    "max_iterations_reached",
+    false
+  );
+  if (fallbackAtLimit?.content) {
+    accPromptTokens += fallbackAtLimit.usage?.prompt_tokens ?? 0;
+    accCompletionTokens += fallbackAtLimit.usage?.completion_tokens ?? 0;
+    accTotalTokens += fallbackAtLimit.usage?.total_tokens ?? 0;
+    accCacheReadTokens +=
+      fallbackAtLimit.usage?.cache_read_tokens ??
+      fallbackAtLimit.usage?.prompt_tokens_cached ??
+      0;
+    accCacheCreationTokens += fallbackAtLimit.usage?.cache_creation_tokens ?? 0;
+    const responseTimeMs = Date.now() - loopStartTime;
+    const debugInfo: AgentDebugInfo = {
+      responseTimeMs,
+      model: fallbackAtLimit.model || tenantAiSettings.fallbackModel || tenantAiSettings.model,
+      promptTokens: accPromptTokens || undefined,
+      completionTokens: accCompletionTokens || undefined,
+      totalTokens: accTotalTokens || undefined,
+      cacheReadTokens: accCacheReadTokens || undefined,
+      cacheCreationTokens: accCacheCreationTokens || undefined,
+      thinkingContent:
+        thinkingParts.length > 0 ? thinkingParts.join("\n\n---\n\n") : undefined,
+      toolCallTrace:
+        toolTraceLines.length > 0 ? toolTraceLines.join("\n\n") : undefined,
+    };
+    return { response: fallbackAtLimit.content, debugInfo };
+  }
+
   return { response: "Üzgünüm, işleminizi tamamlayamadım. Lütfen tekrar deneyin." };
 }
 
@@ -343,49 +461,69 @@ async function buildContext(
     dashboardPrompt = tenantAiSettings.systemPromptText;
   }
 
-  // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT (parallelized) ==========
+  // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT (with conversation-level cache) ==========
   let servicesListText = "";
   let staffListText = "";
   let businessInfoText = "";
 
   if (conversation.tenantId) {
     try {
-      const [servicesResult, staffResult, businessResult] = await Promise.all([
-        listServices({}, { tenantId: conversation.tenantId }),
-        listStaff({}, { tenantId: conversation.tenantId }),
-        getBusinessInfo({}, { tenantId: conversation.tenantId }),
-      ]);
+      // Check conversation-level cache first (5-minute TTL)
+      const cached = getCachedContext(conversation._id);
+      
+      if (cached) {
+        servicesListText = cached.services;
+        staffListText = cached.staff;
+        businessInfoText = cached.businessInfo;
+        console.log(`📦 Using cached context for conversation ${conversation._id}`);
+      } else {
+        // Cache miss — fetch from Supabase (parallelized)
+        const [servicesResult, staffResult, businessResult] = await Promise.all([
+          listServices({}, { tenantId: conversation.tenantId }),
+          listStaff({}, { tenantId: conversation.tenantId }),
+          getBusinessInfo({}, { tenantId: conversation.tenantId }),
+        ]);
 
-      if (servicesResult && !(servicesResult as Record<string, unknown>).error) {
-        const services = (servicesResult as any).services || [];
-        servicesListText = services
-          .map((svc: any) => {
-            const staffNames = svc.staff?.map((s: any) => s.name).join(", ") || "Yok";
-            return `- ${svc.name} (${svc.duration_minutes} dk${svc.price ? `, ${svc.price} TL` : ""})\n  ID: ${svc.id}\n  Çalışanlar: ${staffNames}`;
-          })
-          .join("\n\n");
-      }
+        if (servicesResult && !(servicesResult as Record<string, unknown>).error) {
+          const services = (servicesResult as any).services || [];
+          servicesListText = services
+            .map((svc: any) => {
+              const staffNames = svc.staff?.map((s: any) => s.name).join(", ") || "Yok";
+              return `- ${svc.name} (${svc.duration_minutes} dk${svc.price ? `, ${svc.price} TL` : ""})\n  ID: ${svc.id}\n  Çalışanlar: ${staffNames}`;
+            })
+            .join("\n\n");
+        }
 
-      if (staffResult && !(staffResult as Record<string, unknown>).error) {
-        const staff = (staffResult as any).staff || [];
-        staffListText = staff
+        if (staffResult && !(staffResult as Record<string, unknown>).error) {
+          const staff = (staffResult as any).staff || [];
+          staffListText = staff
           .map((s: any) => `- ${s.name}${s.title ? ` (${s.title})` : ""}\n  ID: ${s.id}`)
           .join("\n");
-      }
+        }
 
-      if (businessResult && !(businessResult as Record<string, unknown>).error) {
-        const tenant = (businessResult as any).tenant;
-        const infoParts: string[] = [
-          `Business Name: ${tenant.name || "N/A"}`,
-          `Business ID: ${tenant.id}`,
-        ];
-        if (tenant.address) infoParts.push(`Address: ${tenant.address}`);
-        if (tenant.phone) infoParts.push(`Phone: ${tenant.phone}`);
-        if (tenant.maps_link) infoParts.push(`Maps Link: ${tenant.maps_link}`);
-        if (tenant.working_days) infoParts.push(`Working Days: ${tenant.working_days}`);
-        if (tenant.working_hours) infoParts.push(`Working Hours: ${tenant.working_hours}`);
-        if (tenant.description) infoParts.push(`Description: ${tenant.description}`);
-        businessInfoText = infoParts.join("\n");
+        if (businessResult && !(businessResult as Record<string, unknown>).error) {
+          const tenant = (businessResult as any).tenant;
+          const infoParts: string[] = [
+            `Business Name: ${tenant.name || "N/A"}`,
+            `Business ID: ${tenant.id}`,
+          ];
+          if (tenant.address) infoParts.push(`Address: ${tenant.address}`);
+          if (tenant.phone) infoParts.push(`Phone: ${tenant.phone}`);
+          if (tenant.maps_link) infoParts.push(`Maps Link: ${tenant.maps_link}`);
+          if (tenant.working_days) infoParts.push(`Working Days: ${tenant.working_days}`);
+          if (tenant.working_hours) infoParts.push(`Working Hours: ${tenant.working_hours}`);
+          if (tenant.description) infoParts.push(`Description: ${tenant.description}`);
+          businessInfoText = infoParts.join("\n");
+        }
+
+        // Store in conversation-level cache for future messages in this conversation
+        setCachedContext(conversation._id, {
+          services: servicesListText,
+          staff: staffListText,
+          businessInfo: businessInfoText,
+          builtAt: Date.now(),
+        });
+        console.log(`💾 Cached context for conversation ${conversation._id}`);
       }
     } catch (err) {
       console.warn(`⚠️ Failed to fetch embedded data:`, err);
@@ -480,12 +618,23 @@ async function buildContext(
     console.warn(`⚠️ No system prompt (source: ${promptSource})`);
   }
 
-  // ========== STEP 3: MESSAGE HISTORY ==========
+  // ========== STEP 3: MESSAGE HISTORY (with rolling summary) ==========
+  // UPDATED: Reduced limit to 10 (rolling summary provides older context)
+  // DEPRECATED: sessionStartedAt no longer used - new architecture has immutable conversations
   const recentMessages = await convex.query(api.messages.getContextWindow, {
     conversationId: conversation._id,
-    limit: 20,
-    sessionStartedAt: conversation.sessionStartedAt || undefined,
+    limit: 10, // Reduced from 20 — rolling summary provides older context
+    sessionStartedAt: undefined, // DEPRECATED: not used anymore
   });
+
+  // Integrate rolling summary if available
+  if (conversation.rollingSummary && conversation.rollingSummary.trim()) {
+    messages.push({
+      role: "user",
+      content: `[SUMMARY FROM PREVIOUS SESSION]\n${conversation.rollingSummary}`,
+    });
+    console.log(`📝 Added rolling summary (${conversation.rollingSummary.length} chars)`);
+  }
 
   if (recentMessages.length > 0) {
     for (const msg of recentMessages) {
@@ -497,7 +646,7 @@ async function buildContext(
     }
   }
 
-  console.log(`📋 Context built: ${messages.length} messages (tenant=${conversation.tenantId || 'unbound'})`);
+  console.log(`📋 Context built: ${messages.length} messages (tenant=${conversation.tenantId || 'unbound'}, summary=${conversation.rollingSummary ? 'yes' : 'no'})`);
 
   return { messages, tenantAiSettings, promptMissingForBoundTenant };
 }

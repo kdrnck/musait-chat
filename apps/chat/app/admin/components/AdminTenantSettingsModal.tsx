@@ -14,6 +14,7 @@ interface TenantAiSettings {
     canEdit: boolean;
     modelProfile: AiModelProfile;
     model: string;
+    fallbackModel: string | null;
     providerPriority: string[];
     allowFallbacks: boolean;
     promptText: string;
@@ -327,6 +328,34 @@ export default function AdminTenantSettingsModal({ tenantId, tenantName, onClose
                                     )}
                                     <p className="text-[10px] text-[var(--color-text-muted)]">
                                         Provider ayarları seçilen modele göre otomatik uygulanır.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-1.5 mt-3">
+                                    <label className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                                        Hata Durumunda Güçlü Fallback Model (Tek Sefer)
+                                    </label>
+                                    {registryModels.length > 0 ? (
+                                        <select
+                                            value={settings.fallbackModel ?? ""}
+                                            onChange={(e) => setSettings({ ...settings, fallbackModel: e.target.value || null })}
+                                            disabled={!canEdit}
+                                            className="form-select"
+                                        >
+                                            <option value="">— Kapalı —</option>
+                                            {registryModels.map((m) => (
+                                                <option key={`admin-fallback-${m.id}`} value={m.openrouter_id}>
+                                                    {m.display_name}{m.supports_reasoning ? " 🧠" : ""}{m.supports_tools ? " 🔧" : ""}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <div className="form-input font-mono text-[12px] text-[var(--color-text-muted)] cursor-default">
+                                            {settings.fallbackModel || "Kapalı"}
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-[var(--color-text-muted)]">
+                                        LLM hata verirse veya iterasyon limiti dolarsa bir kez bu modele düşer.
                                     </p>
                                 </div>
 

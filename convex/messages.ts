@@ -48,34 +48,32 @@ export const listByConversation = query({
   },
 });
 
-/** Get recent messages for agent context window */
+/** Get recent messages for agent context window (simplified - no session filtering needed) */
 export const getContextWindow = query({
   args: {
     conversationId: v.id("conversations"),
     limit: v.optional(v.number()),
+    // sessionStartedAt DEPRECATED: kept for backward compat, not used in new architecture
     sessionStartedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 20; // Last 20 messages for context
+    const limit = args.limit ?? 10; // Reduced to 10 since rolling summary will provide context
     
-    // If sessionStartedAt is provided, only get messages after that timestamp
-    // This ensures agent only sees current session messages, not old history
+    // Simplified: just fetch the last N messages in chronological order
+    // No session filtering needed because each conversation is already tenant-scoped and complete
     let messages = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId)
       )
       .order("desc")
-      .take(limit * 2) // Fetch more to filter
+      .take(limit)
       .then((msgs) => msgs.reverse());
     
-    // Filter by session boundary if provided
-    if (args.sessionStartedAt) {
-      messages = messages.filter(msg => msg.createdAt >= args.sessionStartedAt!);
-    }
+    // DEPRECATED: sessionStartedAt filtering no longer needed
+    // The conversation architecture ensures message visibility naturally
     
-    // Return only the limit count
-    return messages.slice(-limit);
+    return messages;
   },
 });
 
@@ -112,7 +110,7 @@ export const getPendingHumanMessages = query({
 
 // ===== MUTATIONS =====
 
-/** Create a new message */
+/** Create a new message and denormalize to conversation */
 export const create = mutation({
   args: {
     conversationId: v.id("conversations"),
@@ -134,7 +132,12 @@ export const create = mutation({
       promptTokens: v.optional(v.number()),
       completionTokens: v.optional(v.number()),
       totalTokens: v.optional(v.number()),
+      cacheReadTokens: v.optional(v.number()),
+      cacheCreationTokens: v.optional(v.number()),
       thinkingContent: v.optional(v.string()),
+      toolCallTrace: v.optional(v.string()),
+      correlationId: v.optional(v.string()),
+      timingBreakdown: v.optional(v.any()),
       errorMessage: v.optional(v.string()),
       errorType: v.optional(v.string()),
       errorStack: v.optional(v.string()),
@@ -152,8 +155,12 @@ export const create = mutation({
       ...(args.debugInfo ? { debugInfo: args.debugInfo } : {}),
     });
 
-    // Touch conversation last message timestamp
-    await ctx.db.patch(args.conversationId, { lastMessageAt: now });
+    // Denormalize: update conversation's last message fields for efficient listing
+    await ctx.db.patch(args.conversationId, { 
+      lastMessageAt: now,
+      lastMessageContent: args.content,
+      lastMessageRole: args.role,
+    });
 
     return messageId;
   },
@@ -205,7 +212,12 @@ export const updateDebugInfo = mutation({
       promptTokens: v.optional(v.number()),
       completionTokens: v.optional(v.number()),
       totalTokens: v.optional(v.number()),
+      cacheReadTokens: v.optional(v.number()),
+      cacheCreationTokens: v.optional(v.number()),
       thinkingContent: v.optional(v.string()),
+      toolCallTrace: v.optional(v.string()),
+      correlationId: v.optional(v.string()),
+      timingBreakdown: v.optional(v.any()),
       errorMessage: v.optional(v.string()),
       errorType: v.optional(v.string()),
       errorStack: v.optional(v.string()),

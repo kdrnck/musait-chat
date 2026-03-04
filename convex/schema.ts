@@ -3,10 +3,11 @@ import { v } from "convex/values";
 
 export default defineSchema({
   // ===== CONVERSATIONS =====
-  // Core conversation entity. One per customer phone per active session.
-  // tenant_id is nullable for master number unbound state.
+  // Core conversation entity. One per customer+tenant+inbound-number.
+  // tenantId is immutable after binding (no more in-conversation switching).
+  // tenantId is nullable only for lobby conversations (unbound state on master numbers).
   conversations: defineTable({
-    tenantId: v.union(v.string(), v.null()),
+    tenantId: v.union(v.string(), v.null()), // null = lobby, string = bound to tenant (immutable)
     customerPhone: v.string(),
     inboundPhoneNumberId: v.optional(v.string()),
     status: v.union(
@@ -15,6 +16,9 @@ export default defineSchema({
       v.literal("handoff")
     ),
     lastMessageAt: v.number(),
+    // Denormalized last message for efficient listing without N+1 queries
+    lastMessageContent: v.optional(v.string()),
+    lastMessageRole: v.optional(v.union(v.literal("customer"), v.literal("agent"), v.literal("human"))),
     rollingSummary: v.string(),
     personNotes: v.string(),
     retryState: v.object({
@@ -25,14 +29,21 @@ export default defineSchema({
     agentDisabledUntil: v.union(v.number(), v.null()),
     // 🔓 Admin mode flag (secret code: 1773)
     adminMode: v.optional(v.boolean()),
-    // Session started at timestamp - used to filter messages for agent context
-    // When session resets (/bitir), this is set to current time so agent only sees new messages
+    // Session started at timestamp - DEPRECATED: kept for backward compat, no longer used
+    // New architecture uses immutable tenant-scoped conversations instead
     sessionStartedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_customer_phone", ["customerPhone", "status"])
     .index("by_customer_phone_inbound", [
       "customerPhone",
+      "inboundPhoneNumberId",
+      "status",
+    ])
+    // NEW: Tenant-scoped index for immutable tenant binding
+    .index("by_customer_phone_tenant", [
+      "customerPhone",
+      "tenantId",
       "inboundPhoneNumberId",
       "status",
     ])
@@ -65,9 +76,15 @@ export default defineSchema({
       promptTokens: v.optional(v.number()),
       completionTokens: v.optional(v.number()),
       totalTokens: v.optional(v.number()),
+      cacheReadTokens: v.optional(v.number()),
+      cacheCreationTokens: v.optional(v.number()),
       thinkingContent: v.optional(v.string()),
       /** Step-by-step trace of every tool call in the agent loop */
       toolCallTrace: v.optional(v.string()),
+      /** Per-request correlation id for cross service tracing */
+      correlationId: v.optional(v.string()),
+      /** Timing breakdown object from PerfTimer */
+      timingBreakdown: v.optional(v.any()),
       // Error details for debugging (tool call errors, LLM errors, etc.)
       errorMessage: v.optional(v.string()),
       errorType: v.optional(v.string()),

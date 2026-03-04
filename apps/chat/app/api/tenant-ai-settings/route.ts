@@ -16,6 +16,7 @@ interface TenantAiResponse {
   canEdit: boolean;
   modelProfile: AiModelProfile;
   model: string;
+  fallbackModel: string | null;
   providerPriority: string[];
   allowFallbacks: boolean;
   promptText: string;
@@ -111,6 +112,7 @@ export async function GET(request: NextRequest) {
 interface UpdateBody {
   modelProfile?: AiModelProfile;
   model?: string;
+  fallbackModel?: string | null;
   providerPriority?: string[];
   allowFallbacks?: boolean;
   promptText?: string;
@@ -172,6 +174,7 @@ export async function PUT(request: NextRequest) {
   const preset = AI_MODEL_PRESETS[modelProfile];
 
   const model = normalizeModel(body.model) || preset.model;
+  const fallbackModel = normalizeModel(body.fallbackModel);
   const providerPriority = normalizeProviderPriority(body.providerPriority);
   const allowFallbacks =
     typeof body.allowFallbacks === "boolean"
@@ -190,7 +193,7 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  const [tenantResult, globalResult, modelRegistryResult] = await Promise.all([
+  const [tenantResult, globalResult, modelRegistryResult, fallbackModelRegistryResult] = await Promise.all([
     supabase
       .from("tenants")
       .select("integration_keys")
@@ -207,6 +210,15 @@ export async function PUT(request: NextRequest) {
           .from("ai_models")
           .select("provider_config")
           .eq("openrouter_id", model)
+          .eq("is_enabled", true)
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    fallbackModel
+      ? supabase
+          .from("ai_models")
+          .select("provider_config")
+          .eq("openrouter_id", fallbackModel)
           .eq("is_enabled", true)
           .limit(1)
           .maybeSingle()
@@ -228,11 +240,14 @@ export async function PUT(request: NextRequest) {
 
   // Get provider_config from model registry (if model matched)
   const registryProviderConfig = modelRegistryResult?.data?.provider_config ?? null;
+  const registryFallbackProviderConfig =
+    fallbackModelRegistryResult?.data?.provider_config ?? null;
 
   const integrationKeys = {
     ...currentIntegrationKeys,
     ai_model_profile: modelProfile,
     ai_model: model,
+    ai_fallback_model: fallbackModel,
     ai_provider_priority: providerPriority.join(","),
     ai_allow_fallbacks: String(allowFallbacks),
     ai_system_prompt_text: promptText,
@@ -242,6 +257,7 @@ export async function PUT(request: NextRequest) {
     ai_llm_timeout_ms: String(llmTimeoutMs),
     // Write provider_config from model registry — worker uses this for OpenRouter routing
     ai_provider_config: registryProviderConfig,
+    ai_fallback_provider_config: registryFallbackProviderConfig,
   } as Record<string, unknown>;
 
   const payload = {
@@ -352,6 +368,7 @@ function buildResponse(args: {
     canEdit: args.canEdit,
     modelProfile: resolved.modelProfile,
     model: resolved.model,
+    fallbackModel: resolved.fallbackModel,
     providerPriority: resolved.providerPriority,
     allowFallbacks: resolved.allowFallbacks,
     promptText: resolved.promptText.replace(

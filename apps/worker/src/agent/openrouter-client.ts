@@ -4,7 +4,7 @@ import { getToolDefinitions } from "./tools/index.js";
 import type { TenantAiSettings } from "./tenant-ai-settings.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
 const OPENROUTER_HEADERS = {
   "Content-Type": "application/json",
@@ -183,16 +183,21 @@ export async function callOpenRouter(
   // Attempt 2: transient/provider error → retry with relaxed fallback strategy
   if (!response.ok) {
     const errorBody = await response.text();
-    const isTransientOrProvider =
-      response.status === 502 ||
-      response.status === 503 ||
-      response.status === 429 ||
-      response.status === 404 ||
+    const errorBodyLower = errorBody.toLowerCase();
+    const isModelMissing =
+      errorBodyLower.includes("does not exist") ||
+      errorBodyLower.includes("model not found");
+    const hasTransientProviderHint =
       errorBody.includes("Provider returned error") ||
-      errorBody.includes("503") ||
-      errorBody.includes("404") ||
-      errorBody.includes("无可用渠道") ||
-      errorBody.includes("does not exist");
+      errorBody.includes("无可用渠道");
+    const isTransientOrProvider =
+      response.status === 429 ||
+      response.status >= 500 ||
+      (!isModelMissing && response.status === 400 && hasTransientProviderHint);
+
+    console.warn(
+      `⚠️ OpenRouter non-OK response status=${response.status} body=${errorBody.slice(0, 600)}`
+    );
 
     if (isTransientOrProvider) {
       console.warn(

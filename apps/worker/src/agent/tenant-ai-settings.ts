@@ -43,9 +43,11 @@ const DEFAULT_PROFILE: AiModelProfile = "fast";
 export interface TenantAiSettings {
   modelProfile: AiModelProfile;
   model: string;
+  fallbackModel: string | null;
   providerPriority: string[];
   allowFallbacks: boolean;
   providerConfig: Record<string, unknown> | null;
+  fallbackProviderConfig: Record<string, unknown> | null;
   systemPromptText: string | null;
   legacyExtraSystemPrompt: string | null;
   outboundNumberMode: OutboundNumberMode;
@@ -79,6 +81,7 @@ export function resolveTenantAiSettings(
   // Model önceliği: 1) DB'deki ai_model  2) Preset model  3) Hardcoded default
   // .env KULLANILMAZ — model her zaman panelden yönetilir
   const model = normalizedModel || preset.model || DEFAULT_MODEL;
+  const fallbackModel = asString(keys.ai_fallback_model);
 
   const providerPriority =
     parseProviderPriority(keys.ai_provider_priority) ||
@@ -104,7 +107,7 @@ export function resolveTenantAiSettings(
   const bookingFlowEnabled = asBoolean(keys.ai_booking_flow_enabled) ?? false;
 
   const maxIterations = asPositiveInt(keys.ai_max_iterations, 5, 1, 10);
-  const llmTimeoutMs = asPositiveInt(keys.ai_llm_timeout_ms, 8000, 3000, 30000);
+  const llmTimeoutMs = asPositiveInt(keys.ai_llm_timeout_ms, 15000, 3000, 30000);
 
   // Provider config from ai_models table (JSONB), stored in integration keys
   const providerConfigRaw = keys.ai_provider_config;
@@ -114,13 +117,22 @@ export function resolveTenantAiSettings(
       : typeof providerConfigRaw === "string"
         ? (() => { try { return JSON.parse(providerConfigRaw); } catch { return null; } })()
         : null;
+  const fallbackProviderConfigRaw = keys.ai_fallback_provider_config;
+  const fallbackProviderConfig: Record<string, unknown> | null =
+    fallbackProviderConfigRaw && typeof fallbackProviderConfigRaw === "object" && !Array.isArray(fallbackProviderConfigRaw)
+      ? (fallbackProviderConfigRaw as Record<string, unknown>)
+      : typeof fallbackProviderConfigRaw === "string"
+        ? (() => { try { return JSON.parse(fallbackProviderConfigRaw); } catch { return null; } })()
+        : null;
 
   return {
     modelProfile,
     model,
+    fallbackModel,
     providerPriority,
     allowFallbacks,
     providerConfig,
+    fallbackProviderConfig,
     systemPromptText,
     legacyExtraSystemPrompt,
     outboundNumberMode,

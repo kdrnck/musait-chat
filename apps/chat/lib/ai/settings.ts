@@ -47,9 +47,11 @@ export const DEFAULT_OUTBOUND_NUMBER_MODE: OutboundNumberMode = "inbound";
 export interface ResolvedAiSettings {
   modelProfile: AiModelProfile;
   model: string;
+  fallbackModel: string | null;
   providerPriority: string[];
   allowFallbacks: boolean;
   providerConfig: Record<string, unknown> | null;
+  fallbackProviderConfig: Record<string, unknown> | null;
   promptText: string;
   outboundNumberMode: OutboundNumberMode;
   bookingFlowEnabled: boolean;
@@ -58,7 +60,7 @@ export interface ResolvedAiSettings {
 }
 
 export const DEFAULT_MAX_ITERATIONS = 5;
-export const DEFAULT_LLM_TIMEOUT_MS = 8000;
+export const DEFAULT_LLM_TIMEOUT_MS = 15000;
 
 export function resolveAiSettingsFromIntegrationKeys(
   integrationKeys: unknown,
@@ -75,6 +77,7 @@ export function resolveAiSettingsFromIntegrationKeys(
   const preset = AI_MODEL_PRESETS[modelProfile];
 
   const model = asString(keys.ai_model) || preset.model;
+  const fallbackModel = asString(keys.ai_fallback_model);
   const providerPriority =
     parseProviderPriority(keys.ai_provider_priority) || preset.providerPriority;
 
@@ -113,13 +116,22 @@ export function resolveAiSettingsFromIntegrationKeys(
       : typeof providerConfigRaw === "string"
         ? (() => { try { return JSON.parse(providerConfigRaw as string); } catch { return null; } })()
         : null;
+  const fallbackProviderConfigRaw = keys.ai_fallback_provider_config;
+  const fallbackProviderConfig: Record<string, unknown> | null =
+    fallbackProviderConfigRaw && typeof fallbackProviderConfigRaw === "object" && !Array.isArray(fallbackProviderConfigRaw)
+      ? (fallbackProviderConfigRaw as Record<string, unknown>)
+      : typeof fallbackProviderConfigRaw === "string"
+        ? (() => { try { return JSON.parse(fallbackProviderConfigRaw as string); } catch { return null; } })()
+        : null;
 
   return {
     modelProfile,
     model,
+    fallbackModel,
     providerPriority,
     allowFallbacks,
     providerConfig,
+    fallbackProviderConfig,
     promptText,
     outboundNumberMode,
     bookingFlowEnabled,
