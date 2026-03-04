@@ -99,12 +99,32 @@ export async function GET(request: NextRequest) {
 
   const tenant = tenantData as unknown as TenantSettingsRow;
 
+  // Fetch model-level runtime settings — these override any tenant-level values
+  const tenantIntegrationKeys = asObject(tenant.integration_keys);
+  const registeredModelId = typeof tenantIntegrationKeys.ai_model === "string" ? tenantIntegrationKeys.ai_model.trim() : null;
+  let modelMaxIterations: number | null = null;
+  let modelLlmTimeoutMs: number | null = null;
+  if (registeredModelId) {
+    const { data: modelRow } = await supabase
+      .from("ai_models")
+      .select("max_iterations, llm_timeout_ms")
+      .eq("openrouter_id", registeredModelId)
+      .eq("is_enabled", true)
+      .maybeSingle();
+    if (modelRow) {
+      modelMaxIterations = typeof modelRow.max_iterations === "number" ? modelRow.max_iterations : null;
+      modelLlmTimeoutMs = typeof modelRow.llm_timeout_ms === "number" ? modelRow.llm_timeout_ms : null;
+    }
+  }
+
   return NextResponse.json(
     buildResponse({
       tenantId: context.tenantId,
       canEdit: context.canEdit,
       tenant,
       globalPrompt,
+      modelMaxIterations,
+      modelLlmTimeoutMs,
     })
   );
 }
@@ -351,6 +371,8 @@ function buildResponse(args: {
   canEdit: boolean;
   tenant: TenantSettingsRow;
   globalPrompt?: string | null;
+  modelMaxIterations?: number | null;
+  modelLlmTimeoutMs?: number | null;
 }): TenantAiResponse {
   const resolved = resolveAiSettingsFromIntegrationKeys(
     args.tenant.integration_keys,
@@ -377,8 +399,8 @@ function buildResponse(args: {
     ),
     outboundNumberMode: resolved.outboundNumberMode,
     bookingFlowEnabled: resolved.bookingFlowEnabled,
-    maxIterations: resolved.maxIterations,
-    llmTimeoutMs: resolved.llmTimeoutMs,
+    maxIterations: args.modelMaxIterations ?? resolved.maxIterations,
+    llmTimeoutMs: args.modelLlmTimeoutMs ?? resolved.llmTimeoutMs,
     globalPromptText: args.globalPrompt || "",
     wabaPhoneNumberId: args.canEdit ? wabaPhoneNumberId : "",
     wabaAccessToken: args.canEdit ? wabaAccessToken : "",

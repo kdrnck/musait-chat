@@ -2,13 +2,23 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Settings, Activity, Clock, Zap, Bot, User, Code2, RefreshCw, Cpu, Save, Trash2, Wrench, Brain, Pencil } from "lucide-react";
+import { Send, Settings, Activity, Clock, Zap, Bot, User, Code2, RefreshCw, Cpu, Save, Trash2, Wrench, Brain, Pencil, ChevronDown, ChevronRight, List, CheckSquare } from "lucide-react";
 
 interface AiModel {
     id: string;
     openrouter_id: string;
     display_name: string;
     is_enabled: boolean;
+    pricing_input: number | null;
+    pricing_output: number | null;
+    supports_tools: boolean;
+    supports_reasoning: boolean;
+    context_window: number | null;
+    max_output_tokens: number | null;
+    max_iterations: number | null;
+    llm_timeout_ms: number | null;
+    tier: string | null;
+    description: string | null;
 }
 
 interface Tenant {
@@ -31,29 +41,108 @@ interface SavedPrompt {
     updated_at?: string;
 }
 
-interface ToolCall {
+interface ToolEvent {
     id: string;
-    type: "function";
-    function: {
-        name: string;
-        arguments: string;
-    };
+    name: string;
+    arguments: Record<string, unknown>;
+    result?: unknown;
+    durationMs?: number;
+}
+
+interface ChatMetrics {
+    totalMs: number;
+    tokensPerSec: number;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    iterations?: number;
+    estimatedCost?: number;
 }
 
 interface ChatMessage {
     id: string;
     role: "user" | "assistant";
     content: string;
-    tool_calls?: ToolCall[];
     reasoning?: string;
-    metrics?: {
-        totalMs: number;
-        tokensPerSec: number;
-        promptTokens: number;
-        completionTokens: number;
-        totalTokens: number;
-        iterations?: number;
-    };
+    toolEvents?: ToolEvent[];
+    metrics?: ChatMetrics;
+    modelOpenRouterId?: string;
+}
+
+/* ─── WhatsApp interactive message renderer ─── */
+
+function WAInteractivePreview({ result }: { result: Record<string, unknown> }) {
+    const kind = result.kind as string | undefined;
+    const payload = result.payload as Record<string, unknown> | undefined;
+    if (!payload) return <pre className="text-[10px] text-blue-200 font-mono">{JSON.stringify(result, null, 2)}</pre>;
+
+    const body = payload.body as string || "";
+
+    if (kind === "buttons") {
+        const buttons = (payload.buttons as Array<{ id: string; title: string }>) || [];
+        return (
+            <div className="rounded-xl bg-white/5 border border-white/10 overflow-hidden text-[12px] max-w-[280px]">
+                <div className="px-3 py-2.5 text-[var(--color-text-primary)] leading-snug">{body}</div>
+                <div className="border-t border-white/10">
+                    {buttons.map((btn) => (
+                        <div key={btn.id} className="px-3 py-2 flex items-center justify-center gap-2 border-b border-white/5 last:border-0 text-blue-400 font-semibold hover:bg-white/5 cursor-default">
+                            <CheckSquare size={12} />
+                            {btn.title}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    if (kind === "list") {
+        const sections = (payload.sections as Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>) || [];
+        const buttonText = (payload.button as string) || "Seçiniz";
+        return (
+            <div className="rounded-xl bg-white/5 border border-white/10 overflow-hidden text-[12px] max-w-[280px]">
+                <div className="px-3 py-2.5 text-[var(--color-text-primary)] leading-snug">{body}</div>
+                <div className="border-t border-white/10 px-3 py-1.5 flex items-center gap-1.5 text-blue-400 font-semibold">
+                    <List size={12} /> {buttonText}
+                </div>
+                {sections.map((sec, si) => (
+                    <div key={si} className="border-t border-white/10">
+                        {sec.title && <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">{sec.title}</div>}
+                        {sec.rows.map((row) => (
+                            <div key={row.id} className="px-3 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-default">
+                                <div className="text-[var(--color-text-primary)] font-medium">{row.title}</div>
+                                {row.description && <div className="text-[11px] text-[var(--color-text-muted)]">{row.description}</div>}
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    return <pre className="text-[10px] text-blue-200 font-mono">{JSON.stringify(result, null, 2)}</pre>;
+}
+
+function WAContentRenderer({ content }: { content: string }) {
+    // Detect <<BUTTONS>>...<</ BUTTONS>> or <<LIST>>...</ LIST>> patterns emitted by server
+    const buttonMatch = content.match(/<<BUTTONS>>\s*([\s\S]*?)\s*<<\/BUTTONS>>/);
+    const listMatch = content.match(/<<LIST>>\s*([\s\S]*?)\s*<<\/LIST>>/);
+    const match = buttonMatch || listMatch;
+    if (match) {
+        try {
+            const parsed = JSON.parse(match[1]);
+            const kind = buttonMatch ? "buttons" : "list";
+            const preText = content.slice(0, content.indexOf(match[0])).trim();
+            const postText = content.slice(content.indexOf(match[0]) + match[0].length).trim();
+            return (
+                <div className="space-y-2">
+                    {preText && <p className="whitespace-pre-wrap">{preText}</p>}
+                    <WAInteractivePreview result={{ kind, payload: parsed }} />
+                    {postText && <p className="whitespace-pre-wrap">{postText}</p>}
+                </div>
+            );
+        } catch { /* not valid json, fall through */ }
+    }
+    return <span className="whitespace-pre-wrap">{content}</span>;
 }
 
 export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
@@ -82,6 +171,8 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [lastMetrics, setLastMetrics] = useState<any>(null);
+    const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
+    const [expandedReasoning, setExpandedReasoning] = useState<Set<string>>(new Set());
     const [resolvedPromptPreview, setResolvedPromptPreview] = useState("");
     const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
     const [unresolvedPlaceholders, setUnresolvedPlaceholders] = useState<string[]>([]);
@@ -89,6 +180,7 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
     const [previewError, setPreviewError] = useState<string | null>(null);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const selectedModelInfo = models.find((m) => m.openrouter_id === model) ?? null;
 
     // Load settings from localStorage (phone and system only - model and tenant loaded after lists)
     useEffect(() => {
@@ -271,7 +363,8 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
             id: assistantMessageId,
             role: "assistant",
             content: "",
-            tool_calls: [],
+            toolEvents: [],
+            modelOpenRouterId: model,
         };
         
         setMessages((prev) => [...prev, assistantMessage]);
@@ -313,86 +406,117 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                 let accumulatedContent = "";
                 let accumulatedReasoning = "";
                 let finalMetrics = null;
+                // local mutable copy of tool events for this stream
+                const streamToolEvents: ToolEvent[] = [];
+                let partial = "";
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                    partial += decoder.decode(value, { stream: true });
+                    const lines = partial.split("\n");
+                    partial = lines.pop() ?? "";
 
                     for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = line.slice(6);
-                            
-                            if (data === '[DONE]') {
-                                break;
+                        const trimmed = line.trim();
+                        if (!trimmed.startsWith("data: ")) continue;
+                        const data = trimmed.slice(6);
+                        if (data === "[DONE]") continue;
+
+                        try {
+                            const parsed = JSON.parse(data);
+
+                            if (parsed.type === "debug") {
+                                console.log("[Model Test Lab] DEBUG:", parsed.debug);
                             }
 
-                            try {
-                                const parsed = JSON.parse(data);
-                                
-                                if (parsed.type === 'debug') {
-                                    console.log('[Model Test Lab] 🔍 DEBUG from server:', parsed.debug);
-                                }
-
-                                if (parsed.type === 'content' && parsed.content) {
-                                    accumulatedContent += parsed.content;
-                                    
-                                    // Update the assistant message in real-time
-                                    setMessages((prev) =>
-                                        prev.map((m) =>
-                                            m.id === assistantMessageId
-                                                ? { ...m, content: accumulatedContent }
-                                                : m
-                                        )
-                                    );
-                                }
-                                
-                                if (parsed.type === 'reasoning' && parsed.reasoning) {
-                                    accumulatedReasoning += parsed.reasoning;
-                                    
-                                    setMessages((prev) =>
-                                        prev.map((m) =>
-                                            m.id === assistantMessageId
-                                                ? { ...m, reasoning: accumulatedReasoning }
-                                                : m
-                                        )
-                                    );
-                                }
-                                
-                                if (parsed.type === 'metrics' && parsed.metrics) {
-                                    finalMetrics = parsed.metrics;
-                                    setLastMetrics(parsed.metrics);
-                                    
-                                    setMessages((prev) =>
-                                        prev.map((m) =>
-                                            m.id === assistantMessageId
-                                                ? { ...m, metrics: parsed.metrics }
-                                                : m
-                                        )
-                                    );
-                                }
-                            } catch (e) {
-                                // Skip invalid JSON
+                            if (parsed.type === "error") {
+                                accumulatedContent = `❌ ${parsed.error}`;
+                                setMessages((prev) =>
+                                    prev.map((m) =>
+                                        m.id === assistantMessageId ? { ...m, content: accumulatedContent } : m
+                                    )
+                                );
                             }
+
+                            if (parsed.type === "content" && parsed.content) {
+                                accumulatedContent += parsed.content;
+                                setMessages((prev) =>
+                                    prev.map((m) =>
+                                        m.id === assistantMessageId ? { ...m, content: accumulatedContent } : m
+                                    )
+                                );
+                            }
+
+                            if (parsed.type === "reasoning" && parsed.reasoning) {
+                                accumulatedReasoning += parsed.reasoning;
+                                setMessages((prev) =>
+                                    prev.map((m) =>
+                                        m.id === assistantMessageId ? { ...m, reasoning: accumulatedReasoning } : m
+                                    )
+                                );
+                            }
+
+                            if (parsed.type === "tool_call") {
+                                const ev: ToolEvent = {
+                                    id: parsed.id || `tc-${Date.now()}`,
+                                    name: parsed.name,
+                                    arguments: parsed.arguments || {},
+                                };
+                                streamToolEvents.push(ev);
+                                setMessages((prev) =>
+                                    prev.map((m) =>
+                                        m.id === assistantMessageId
+                                            ? { ...m, toolEvents: [...streamToolEvents] }
+                                            : m
+                                    )
+                                );
+                            }
+
+                            if (parsed.type === "tool_result") {
+                                const existing = streamToolEvents.find((t) => t.id === parsed.tool_call_id);
+                                if (existing) {
+                                    existing.result = parsed.result;
+                                    existing.durationMs = parsed.durationMs ?? null;
+                                } else {
+                                    // fallback — match by name if id missing
+                                    const last = streamToolEvents[streamToolEvents.length - 1];
+                                    if (last && !last.result) {
+                                        last.result = parsed.result;
+                                        last.durationMs = parsed.durationMs ?? null;
+                                    }
+                                }
+                                setMessages((prev) =>
+                                    prev.map((m) =>
+                                        m.id === assistantMessageId
+                                            ? { ...m, toolEvents: [...streamToolEvents] }
+                                            : m
+                                    )
+                                );
+                            }
+
+                            if (parsed.type === "metrics" && parsed.metrics) {
+                                finalMetrics = parsed.metrics;
+                                setLastMetrics(parsed.metrics);
+                                setMessages((prev) =>
+                                    prev.map((m) =>
+                                        m.id === assistantMessageId ? { ...m, metrics: parsed.metrics } : m
+                                    )
+                                );
+                            }
+                        } catch {
+                            // skip invalid JSON
                         }
                     }
                 }
             } else {
-                // Handle non-streaming response (for tool calls)
+                // Handle non-streaming response (fallback)
                 const data = await res.json();
-
                 setMessages((prev) =>
                     prev.map((m) =>
                         m.id === assistantMessageId
-                            ? {
-                                ...m,
-                                content: data.content || "",
-                                tool_calls: data.tool_calls || [],
-                                reasoning: data.reasoning || null,
-                                metrics: data.metrics || null,
-                            }
+                            ? { ...m, content: data.content || "", reasoning: data.reasoning || undefined, metrics: data.metrics || undefined }
                             : m
                     )
                 );
@@ -549,6 +673,85 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                                 ))
                             )}
                         </select>
+
+                        {/* Model spec table */}
+                        {selectedModelInfo && (
+                            <div className="mt-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] overflow-hidden text-[11px]">
+                                <table className="w-full">
+                                    <tbody>
+                                        <tr className="border-b border-[var(--color-border)]">
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold w-[45%]">Giriş fiyatı</td>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-primary)] font-mono">
+                                                {selectedModelInfo.pricing_input != null
+                                                    ? `$${selectedModelInfo.pricing_input}/M token`
+                                                    : "—"}
+                                            </td>
+                                        </tr>
+                                        <tr className="border-b border-[var(--color-border)]">
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold">Çıkış fiyatı</td>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-primary)] font-mono">
+                                                {selectedModelInfo.pricing_output != null
+                                                    ? `$${selectedModelInfo.pricing_output}/M token`
+                                                    : "—"}
+                                            </td>
+                                        </tr>
+                                        <tr className="border-b border-[var(--color-border)]">
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold">Max iterasyon</td>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-primary)] font-mono">
+                                                {selectedModelInfo.max_iterations ?? "5"}
+                                            </td>
+                                        </tr>
+                                        <tr className="border-b border-[var(--color-border)]">
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold">Timeout</td>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-primary)] font-mono">
+                                                {selectedModelInfo.llm_timeout_ms != null
+                                                    ? `${selectedModelInfo.llm_timeout_ms / 1000}s`
+                                                    : "—"}
+                                            </td>
+                                        </tr>
+                                        <tr className="border-b border-[var(--color-border)]">
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold">Context</td>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-primary)] font-mono">
+                                                {selectedModelInfo.context_window != null
+                                                    ? `${(selectedModelInfo.context_window / 1000).toFixed(0)}K`
+                                                    : "—"}
+                                            </td>
+                                        </tr>
+                                        <tr className="border-b border-[var(--color-border)]">
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold">Max çıkış</td>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-primary)] font-mono">
+                                                {selectedModelInfo.max_output_tokens != null
+                                                    ? `${(selectedModelInfo.max_output_tokens / 1000).toFixed(0)}K`
+                                                    : "—"}
+                                            </td>
+                                        </tr>
+                                        <tr className="border-b border-[var(--color-border)]">
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold">Tier</td>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-primary)]"
+                                            >{selectedModelInfo.tier ?? "—"}</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="px-3 py-1.5 text-[var(--color-text-muted)] font-semibold">Yetenekler</td>
+                                            <td className="px-3 py-1.5 flex flex-wrap gap-1">
+                                                {selectedModelInfo.supports_tools && (
+                                                    <span className="inline-flex items-center gap-1 bg-blue-900/30 border border-blue-800/40 text-blue-300 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+                                                        <Wrench size={9} /> Tools
+                                                    </span>
+                                                )}
+                                                {selectedModelInfo.supports_reasoning && (
+                                                    <span className="inline-flex items-center gap-1 bg-purple-900/30 border border-purple-800/40 text-purple-300 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+                                                        <Brain size={9} /> Reasoning
+                                                    </span>
+                                                )}
+                                                {!selectedModelInfo.supports_tools && !selectedModelInfo.supports_reasoning && (
+                                                    <span className="text-[var(--color-text-muted)]">—</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
 
                     {/* Tenant Selection */}
@@ -727,53 +930,6 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                         />
                     </div>
 
-                    {/* Metrics Section */}
-                    {lastMetrics && (
-                        <div className="p-4 border border-[var(--color-border)] bg-[var(--color-surface-hover)] rounded-xl">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Activity size={14} className="text-[var(--color-status-success)]" />
-                                <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">Son Yanıt Metrikleri</h3>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2.5">
-                                <div className="bg-[var(--color-surface-pure)] border border-[var(--color-border)] rounded-lg p-2.5">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-[var(--color-text-muted)] uppercase mb-1">
-                                        <Clock size={11} /> Latency
-                                    </div>
-                                    <div className="text-[14px] font-semibold text-[var(--color-text-primary)] font-mono">
-                                        {(lastMetrics.totalMs / 1000).toFixed(2)}s
-                                    </div>
-                                </div>
-                                <div className="bg-[var(--color-surface-pure)] border border-[var(--color-border)] rounded-lg p-2.5">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-[var(--color-text-muted)] uppercase mb-1">
-                                        <Zap size={11} /> Speed
-                                    </div>
-                                    <div className="text-[14px] font-semibold text-[var(--color-text-primary)] font-mono">
-                                        {lastMetrics.tokensPerSec}<span className="text-[10px] ml-0.5 font-medium text-[var(--color-text-muted)]">T/s</span>
-                                    </div>
-                                </div>
-                                <div className="bg-[var(--color-surface-pure)] border border-[var(--color-border)] rounded-lg p-2.5">
-                                    <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase mb-1">Prompt</div>
-                                    <div className="text-[14px] font-semibold text-[var(--color-text-primary)] font-mono">
-                                        {lastMetrics.promptTokens}
-                                    </div>
-                                </div>
-                                <div className="bg-[var(--color-surface-pure)] border border-[var(--color-border)] rounded-lg p-2.5">
-                                    <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase mb-1">Completion</div>
-                                    <div className="text-[14px] font-semibold text-[var(--color-text-primary)] font-mono">
-                                        {lastMetrics.completionTokens}
-                                    </div>
-                                </div>
-                                {lastMetrics.iterations && (
-                                    <div className="col-span-2 bg-[var(--color-surface-pure)] border border-[var(--color-border)] rounded-lg p-2.5">
-                                        <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase mb-1">Tool Iterations</div>
-                                        <div className="text-[14px] font-semibold text-[var(--color-text-primary)] font-mono">
-                                            {lastMetrics.iterations}x {lastMetrics.iterations > 1 ? "(multi-turn)" : ""}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -813,67 +969,184 @@ export default function ModelTestPanel({ debugMode }: { debugMode: boolean }) {
                             </div>
                         </div>
                     ) : (
-                        messages.map((m) => (
-                            <div key={m.id} className="space-y-3">
-                                {/* Reasoning Block - Shows BEFORE content */}
-                                {m.role === 'assistant' && m.reasoning && (
-                                    <div className="flex justify-start animate-fade-in">
-                                        <div className="max-w-[85%] sm:max-w-[75%] bg-purple-900/20 border border-purple-800/50 rounded-xl p-4">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Brain size={14} className="text-purple-400" />
-                                                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">Düşünme Süreci</span>
-                                            </div>
-                                            <pre className="text-[12px] leading-relaxed text-purple-200 whitespace-pre-wrap font-mono">
-                                                {m.reasoning}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                )}
+                        messages.map((m) => {
+                            const isAssistant = m.role === "assistant";
+                            const reasoningOpen = expandedReasoning.has(m.id);
+                            const metricsOpen = expandedMetrics.has(m.id);
 
-                                {/* Main Message */}
-                                <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                                    <div
-                                        className={`px-5 py-3.5 max-w-[85%] sm:max-w-[75%] rounded-2xl text-[14px] leading-relaxed break-words border ${
-                                            m.role === 'user'
-                                                ? 'bg-[var(--color-customer-bg)] border-[var(--color-customer-border)] text-[var(--color-text-primary)] rounded-tr-sm shadow-sm'
-                                                : 'bg-[var(--color-agent-bg)] border-[var(--color-agent-border)] text-[var(--color-text-primary)] rounded-tl-sm shadow-sm'
-                                        }`}
-                                    >
-                                        {m.content || (m.role === 'assistant' && isLoading ? "" : "(boş yanıt)")}
-                                    </div>
-                                </div>
+                            // cost estimate
+                            const msgModel = models.find((x) => x.openrouter_id === m.modelOpenRouterId);
+                            const estimatedCost =
+                                m.metrics && msgModel?.pricing_input != null && msgModel?.pricing_output != null
+                                    ? (m.metrics.promptTokens * msgModel.pricing_input) / 1_000_000 +
+                                      (m.metrics.completionTokens * msgModel.pricing_output) / 1_000_000
+                                    : null;
 
-                                {/* Tool Calls */}
-                                {m.tool_calls && m.tool_calls.length > 0 && (
-                                    <div className="flex justify-start">
-                                        <div className="max-w-[85%] sm:max-w-[75%] space-y-2">
-                                            {m.tool_calls.map((tool, idx) => {
-                                                let args: any = {};
-                                                try {
-                                                    args = JSON.parse(tool.function.arguments);
-                                                } catch (e) {
-                                                    args = { raw: tool.function.arguments };
-                                                }
-                                                
-                                                return (
-                                                    <div key={idx} className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-4">
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <Wrench size={14} className="text-blue-400" />
-                                                            <span className="text-[12px] font-bold text-blue-300 font-mono">
-                                                                {tool.function.name}
-                                                            </span>
-                                                        </div>
-                                                        <pre className="text-[11px] leading-relaxed text-blue-200 whitespace-pre-wrap font-mono">
-                                                            {JSON.stringify(args, null, 2)}
+                            return (
+                                <div key={m.id} className="space-y-2">
+                                    {/* ── Reasoning block (streams live) ── */}
+                                    {isAssistant && m.reasoning && (
+                                        <div className="flex justify-start animate-fade-in">
+                                            <div className="max-w-[90%] w-full bg-purple-900/20 border border-purple-800/40 rounded-xl overflow-hidden">
+                                                <button
+                                                    onClick={() =>
+                                                        setExpandedReasoning((prev) => {
+                                                            const next = new Set(prev);
+                                                            next.has(m.id) ? next.delete(m.id) : next.add(m.id);
+                                                            return next;
+                                                        })
+                                                    }
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-900/10 transition-colors"
+                                                >
+                                                    {reasoningOpen ? <ChevronDown size={13} className="text-purple-400 shrink-0" /> : <ChevronRight size={13} className="text-purple-400 shrink-0" />}
+                                                    <Brain size={13} className="text-purple-400 shrink-0" />
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300">Düşünce süreci</span>
+                                                    <span className="ml-auto text-[10px] text-purple-500">{m.reasoning.length} karakter</span>
+                                                </button>
+                                                {reasoningOpen && (
+                                                    <div className="px-4 pb-3 border-t border-purple-800/30">
+                                                        <pre className="text-[11px] leading-relaxed text-purple-200 whitespace-pre-wrap font-mono pt-2 max-h-64 overflow-y-auto">
+                                                            {m.reasoning}
                                                         </pre>
                                                     </div>
-                                                );
-                                            })}
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ── Tool events (stream live: call then result) ── */}
+                                    {isAssistant && m.toolEvents && m.toolEvents.length > 0 && (
+                                        <div className="flex justify-start">
+                                            <div className="max-w-[90%] w-full space-y-1.5">
+                                                {m.toolEvents.map((ev, idx) => {
+                                                    const isCompose = ev.name === "compose_interactive_message";
+                                                    return (
+                                                        <div key={idx} className="bg-blue-900/15 border border-blue-800/40 rounded-xl overflow-hidden text-[12px]">
+                                                            {/* call header */}
+                                                            <div className="flex items-center gap-2 px-3 py-2 border-b border-blue-800/20">
+                                                                <Wrench size={12} className="text-blue-400 shrink-0" />
+                                                                <span className="font-bold text-blue-300 font-mono">{ev.name}</span>
+                                                                {ev.durationMs != null && (
+                                                                    <span className="ml-auto text-[10px] text-blue-500 font-mono">{ev.durationMs}ms</span>
+                                                                )}
+                                                                {ev.result == null && (
+                                                                    <span className="ml-auto text-[10px] text-blue-500 animate-pulse">çalışıyor…</span>
+                                                                )}
+                                                            </div>
+                                                            {/* arguments */}
+                                                            <details className="group">
+                                                                <summary className="px-3 py-1.5 text-[10px] text-blue-400 cursor-pointer list-none flex items-center gap-1 hover:text-blue-300">
+                                                                    <ChevronRight size={10} className="group-open:rotate-90 transition-transform" /> Argümanlar
+                                                                </summary>
+                                                                <pre className="px-3 pb-2 text-[10px] text-blue-200 font-mono whitespace-pre-wrap">
+                                                                    {JSON.stringify(ev.arguments, null, 2)}
+                                                                </pre>
+                                                            </details>
+                                                            {/* result */}
+                                                            {ev.result != null && (
+                                                                <div className="border-t border-blue-800/20">
+                                                                    {isCompose ? (
+                                                                        <div className="px-3 py-2">
+                                                                            <WAInteractivePreview result={ev.result as Record<string, unknown>} />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <details className="group">
+                                                                            <summary className="px-3 py-1.5 text-[10px] text-emerald-400 cursor-pointer list-none flex items-center gap-1 hover:text-emerald-300">
+                                                                                <ChevronRight size={10} className="group-open:rotate-90 transition-transform" /> Sonuç
+                                                                            </summary>
+                                                                            <pre className="px-3 pb-2 text-[10px] text-emerald-200 font-mono whitespace-pre-wrap">
+                                                                                {typeof ev.result === "string"
+                                                                                    ? ev.result
+                                                                                    : JSON.stringify(ev.result, null, 2)}
+                                                                            </pre>
+                                                                        </details>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ── Main message bubble ── */}
+                                    <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}>
+                                        <div
+                                            className={`px-5 py-3.5 max-w-[85%] sm:max-w-[75%] rounded-2xl text-[14px] leading-relaxed break-words border ${
+                                                m.role === "user"
+                                                    ? "bg-[var(--color-customer-bg)] border-[var(--color-customer-border)] text-[var(--color-text-primary)] rounded-tr-sm shadow-sm"
+                                                    : "bg-[var(--color-agent-bg)] border-[var(--color-agent-border)] text-[var(--color-text-primary)] rounded-tl-sm shadow-sm"
+                                            }`}
+                                        >
+                                            {/* Check if content is a WhatsApp interactive message */}
+                                            {isAssistant && m.content ? (
+                                                <WAContentRenderer content={m.content} />
+                                            ) : (
+                                                m.content || (isAssistant && isLoading ? "​" : "(boş yanıt)")
+                                            )}
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        ))
+
+                                    {/* ── Metrics toggle ── */}
+                                    {isAssistant && m.metrics && (
+                                        <div className="flex justify-start pl-1">
+                                            <div className="max-w-[85%] sm:max-w-[75%] w-full">
+                                                <button
+                                                    onClick={() =>
+                                                        setExpandedMetrics((prev) => {
+                                                            const next = new Set(prev);
+                                                            next.has(m.id) ? next.delete(m.id) : next.add(m.id);
+                                                            return next;
+                                                        })
+                                                    }
+                                                    className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
+                                                >
+                                                    {metricsOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                                                    detay gör
+                                                </button>
+                                                {metricsOpen && (
+                                                    <div className="mt-1.5 p-3 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl">
+                                                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                                                            <div>
+                                                                <div className="text-[var(--color-text-muted)] font-semibold mb-0.5 flex items-center gap-1"><Clock size={10} /> Süre</div>
+                                                                <div className="font-mono text-[var(--color-text-primary)]">{(m.metrics.totalMs / 1000).toFixed(2)}s</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-[var(--color-text-muted)] font-semibold mb-0.5 flex items-center gap-1"><Zap size={10} /> Hız</div>
+                                                                <div className="font-mono text-[var(--color-text-primary)]">{m.metrics.tokensPerSec} T/s</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-[var(--color-text-muted)] font-semibold mb-0.5">Iterasyon</div>
+                                                                <div className="font-mono text-[var(--color-text-primary)]">{m.metrics.iterations ?? 1}x</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-[var(--color-text-muted)] font-semibold mb-0.5">Prompt tk.</div>
+                                                                <div className="font-mono text-[var(--color-text-primary)]">{m.metrics.promptTokens}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-[var(--color-text-muted)] font-semibold mb-0.5">Comp. tk.</div>
+                                                                <div className="font-mono text-[var(--color-text-primary)]">{m.metrics.completionTokens}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-[var(--color-text-muted)] font-semibold mb-0.5">Toplam tk.</div>
+                                                                <div className="font-mono text-[var(--color-text-primary)]">{m.metrics.totalTokens}</div>
+                                                            </div>
+                                                            {estimatedCost != null && (
+                                                                <div className="col-span-3 mt-0.5 pt-1.5 border-t border-[var(--color-border)]">
+                                                                    <div className="text-[var(--color-text-muted)] font-semibold mb-0.5 flex items-center gap-1"><Activity size={10} /> Tahmini maliyet</div>
+                                                                    <div className="font-mono text-amber-400">${estimatedCost.toFixed(6)}</div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                     {isLoading && (
                         <div className="flex justify-start animate-fade-in px-1">

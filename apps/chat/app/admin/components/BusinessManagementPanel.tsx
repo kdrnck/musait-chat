@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Building2, Search, Settings, MessageSquare, Bot, ChevronDown, ChevronUp, Save, Loader2, Check, AlertCircle, Globe, Layers } from "lucide-react";
+import { Building2, Search, Settings, MessageSquare, Bot, Save, Loader2, Check, AlertCircle, FileText, Layers } from "lucide-react";
 import PromptPickerModal from "./PromptPickerModal";
 
 interface Tenant {
@@ -13,30 +13,40 @@ interface Tenant {
 interface TenantSettings {
     model: string;
     promptText: string;
-    businessContext: string;
-    outboundNumberMode: string;
-    bookingFlowEnabled: boolean;
+    [key: string]: unknown;
+}
+
+interface PromptTemplate {
+    id: string;
+    name: string;
+    description?: string;
+    category: string;
+    prompt_text: string;
 }
 
 interface ModelTier {
     id: string;
     name: string;
     display_name: string;
+    description?: string;
     is_default: boolean;
 }
 
 export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[] }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
-    const [expandedSection, setExpandedSection] = useState<string | null>("ai");
     const [settings, setSettings] = useState<TenantSettings | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
     const [registryModels, setRegistryModels] = useState<Array<{ id: string; openrouter_id: string; display_name: string }>>([]);
     const [showPromptPicker, setShowPromptPicker] = useState(false);
+    const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
+    const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+    // Tier state
     const [tiers, setTiers] = useState<ModelTier[]>([]);
-    const [selectedTierName, setSelectedTierName] = useState<string>("");
+    const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
+    const [tierSaving, setTierSaving] = useState(false);
 
     const filteredTenants = tenants.filter(t => 
         t.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -49,48 +59,34 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
         } catch { /* ignore */ }
     }, []);
 
-    // Load tiers on mount
+    // Load all tiers once
     useEffect(() => {
         const loadTiers = async () => {
             try {
                 const res = await fetch("/api/admin/model-tiers", { cache: "no-store" });
-                if (res.ok) {
-                    const data = await res.json();
-                    setTiers(data);
-                }
+                if (res.ok) setTiers(await res.json());
             } catch { /* ignore */ }
         };
         void loadTiers();
     }, []);
 
-    // Load tenant tier when tenant changes
+    // Load prompt templates once
     useEffect(() => {
-        if (!selectedTenant) return;
-        const loadTenantTier = async () => {
+        const loadTemplates = async () => {
             try {
-                const res = await fetch(`/api/admin/tenant-tier?tenantId=${encodeURIComponent(selectedTenant)}`, { cache: "no-store" });
-                if (res.ok) {
-                    const data = await res.json();
-                    setSelectedTierName(data.tierName || "default");
-                }
+                const res = await fetch("/api/admin/prompt-templates?category=system", { cache: "no-store" });
+                if (res.ok) setPromptTemplates(await res.json());
             } catch { /* ignore */ }
         };
-        void loadTenantTier();
-    }, [selectedTenant]);
+        void loadTemplates();
+    }, []);
 
-    const handleTierChange = async (tierName: string) => {
-        if (!selectedTenant) return;
-        setSelectedTierName(tierName);
-        try {
-            await fetch("/api/admin/tenant-tier", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tenantId: selectedTenant, tierName }),
-            });
-            // Refresh models for new tier
-            loadRegistryModels(selectedTenant);
-        } catch { /* ignore */ }
-    };
+    // Match prompt text to a library template
+    useEffect(() => {
+        if (!settings || promptTemplates.length === 0) return;
+        const matched = promptTemplates.find(t => t.prompt_text.trim() === (settings.promptText as string)?.trim());
+        setSelectedPromptId(matched?.id ?? null);
+    }, [settings, promptTemplates]);
 
     useEffect(() => {
         if (!selectedTenant) {
@@ -105,11 +101,9 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                 if (res.ok) {
                     const data = await res.json();
                     setSettings({
+                        ...data,
                         model: data.model || "",
                         promptText: data.promptText || "",
-                        businessContext: data.businessContext || "",
-                        outboundNumberMode: data.outboundNumberMode || "inbound",
-                        bookingFlowEnabled: data.bookingFlowEnabled ?? true,
                     });
                 }
             } catch (err) {
@@ -121,6 +115,18 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
 
         loadSettings();
         loadRegistryModels(selectedTenant);
+
+        // Load tenant's current tier
+        const loadTenantTier = async () => {
+            try {
+                const res = await fetch(`/api/admin/tenant-tier?tenantId=${encodeURIComponent(selectedTenant)}`, { cache: "no-store" });
+                if (res.ok) {
+                    const data = await res.json();
+                    setSelectedTierId(data.tier?.id ?? null);
+                }
+            } catch { /* ignore */ }
+        };
+        void loadTenantTier();
     }, [selectedTenant, loadRegistryModels]);
 
     const handleSave = async () => {
@@ -153,9 +159,26 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
         }
     };
 
-    const toggleSection = (section: string) => {
-        setExpandedSection(expandedSection === section ? null : section);
+    const handleTierChange = async (tierId: string) => {
+        if (!selectedTenant || tierSaving) return;
+        setSelectedTierId(tierId);
+        setTierSaving(true);
+        try {
+            await fetch("/api/admin/tenant-tier", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tenant_id: selectedTenant, tier_id: tierId }),
+            });
+            // Reload models for new tier
+            await loadRegistryModels(selectedTenant);
+            // Clear selected model so user picks a valid one for the new tier
+            setSettings((prev) => prev ? { ...prev, model: "" } : prev);
+        } catch { /* ignore */ } finally {
+            setTierSaving(false);
+        }
     };
+
+    const selectedPromptName = promptTemplates.find(p => p.id === selectedPromptId)?.name;
 
     return (
         <div className="space-y-6">
@@ -287,142 +310,110 @@ export default function BusinessManagementPanel({ tenants }: { tenants: Tenant[]
                                 </div>
                             </div>
 
-                            {/* AI Settings Section */}
-                            <div className="panel-card !p-0">
-                                <button
-                                    onClick={() => toggleSection("ai")}
-                                    className="w-full flex items-center justify-between p-5 hover:bg-[var(--color-surface-hover)] transition-colors rounded-t-2xl"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <Bot size={20} className="text-[var(--color-brand)]" />
-                                        <div className="text-left">
-                                            <h3 className="font-semibold text-[var(--color-text-primary)]">AI Ayarları</h3>
-                                            <p className="text-xs text-[var(--color-text-muted)]">Model, prompt ve davranış ayarları</p>
+                            {/* Tier Seçimi */}
+                            {tiers.length > 0 && (
+                                <div className="panel-card space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <Layers size={18} className="text-purple-400" />
+                                            <h3 className="font-semibold text-[var(--color-text-primary)]">Model Erişim Seviyesi</h3>
                                         </div>
+                                        {tierSaving && <Loader2 size={14} className="animate-spin text-[var(--color-text-muted)]" />}
                                     </div>
-                                    {expandedSection === "ai" ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                </button>
-                                
-                                {expandedSection === "ai" && (
-                                    <div className="p-5 pt-0 space-y-5 border-t border-[var(--color-border)]">
-                                        {/* Tier Selection */}
-                                        {tiers.length > 0 && (
-                                            <div className="form-group !mb-0">
-                                                <label className="form-label flex items-center gap-2">
-                                                    <Layers size={14} className="text-purple-400" />
-                                                    Tier
-                                                </label>
-                                                <select
-                                                    value={selectedTierName}
-                                                    onChange={(e) => handleTierChange(e.target.value)}
-                                                    className="form-select"
-                                                >
-                                                    {tiers.map((t) => (
-                                                        <option key={t.name} value={t.name}>{t.display_name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        )}
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="form-group !mb-0">
-                                                <label className="form-label">Model</label>
-                                                <select
-                                                    value={settings.model}
-                                                    onChange={(e) => setSettings({...settings, model: e.target.value})}
-                                                    className="form-select"
-                                                >
-                                                    <option value="">— Model seçin —</option>
-                                                    {registryModels.map((m) => (
-                                                        <option key={m.id} value={m.openrouter_id}>{m.display_name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            
-                                            <div className="form-group !mb-0">
-                                                <label className="form-label">Giden Numara Modu</label>
-                                                <select
-                                                    value={settings.outboundNumberMode}
-                                                    onChange={(e) => setSettings({...settings, outboundNumberMode: e.target.value})}
-                                                    className="form-select"
-                                                >
-                                                    <option value="inbound">Gelen Numara</option>
-                                                    <option value="musait">Musait Numarası</option>
-                                                    <option value="tenant">İşletme Numarası</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
-                                            <div>
-                                                <p className="font-medium text-[var(--color-text-primary)]">Randevu Akışı</p>
-                                                <p className="text-xs text-[var(--color-text-muted)]">AI randevu oluşturabilsin mi?</p>
-                                            </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {tiers.map((tier) => (
                                             <button
-                                                onClick={() => setSettings({...settings, bookingFlowEnabled: !settings.bookingFlowEnabled})}
-                                                className={`toggle-track ${settings.bookingFlowEnabled ? "on" : ""}`}
+                                                key={tier.id}
+                                                onClick={() => handleTierChange(tier.id)}
+                                                disabled={tierSaving}
+                                                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                                                    selectedTierId === tier.id
+                                                        ? "border-[var(--color-brand)] bg-[var(--color-brand-light)]"
+                                                        : "border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]"
+                                                } disabled:opacity-60`}
                                             >
-                                                <div className="toggle-thumb" />
+                                                <div className={`w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${
+                                                    selectedTierId === tier.id
+                                                        ? "border-[var(--color-brand)] bg-[var(--color-brand)]"
+                                                        : "border-[var(--color-border)]"
+                                                }`}>
+                                                    {selectedTierId === tier.id && <Check size={9} className="text-black" />}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className={`text-[13px] font-semibold truncate ${
+                                                        selectedTierId === tier.id ? "text-[var(--color-brand-dark)]" : "text-[var(--color-text-primary)]"
+                                                    }`}>{tier.display_name}</p>
+                                                    {tier.description && (
+                                                        <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5 line-clamp-2">{tier.description}</p>
+                                                    )}
+                                                    {tier.is_default && (
+                                                        <span className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">varsayılan</span>
+                                                    )}
+                                                </div>
                                             </button>
-                                        </div>
+                                        ))}
                                     </div>
-                                )}
+                                    <p className="text-[11px] text-[var(--color-text-muted)]">Tier değişince işletme için görünür modeller güncellenir.</p>
+                                </div>
+                            )}
+
+                            {/* Model Selection */}
+                            <div className="panel-card space-y-4">
+                                <div className="flex items-center gap-3 mb-1">
+                                    <Bot size={18} className="text-[var(--color-brand)]" />
+                                    <h3 className="font-semibold text-[var(--color-text-primary)]">Model Seçimi</h3>
+                                </div>
+                                <div className="form-group !mb-0">
+                                    <label className="form-label">AI Model</label>
+                                    <select
+                                        value={settings.model as string}
+                                        onChange={(e) => setSettings({...settings, model: e.target.value})}
+                                        className="form-select"
+                                    >
+                                        <option value="">— Model seçin —</option>
+                                        {registryModels.map((m) => (
+                                            <option key={m.id} value={m.openrouter_id}>{m.display_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
 
-                            {/* Prompt Section */}
-                            <div className="panel-card !p-0">
-                                <button
-                                    onClick={() => toggleSection("prompt")}
-                                    className="w-full flex items-center justify-between p-5 hover:bg-[var(--color-surface-hover)] transition-colors rounded-t-2xl"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <MessageSquare size={20} className="text-purple-400" />
-                                        <div className="text-left">
-                                            <h3 className="font-semibold text-[var(--color-text-primary)]">Prompt Ayarları</h3>
-                                            <p className="text-xs text-[var(--color-text-muted)]">Özel sistem promptu ve işletme bilgileri</p>
-                                        </div>
-                                    </div>
-                                    {expandedSection === "prompt" ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                </button>
-                                
-                                {expandedSection === "prompt" && (
-                                    <div className="p-5 pt-0 space-y-5 border-t border-[var(--color-border)]">
-                                        <div className="form-group !mb-0">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <label className="form-label !mb-0">Özel Sistem Promptu (Opsiyonel)</label>
-                                                <button
-                                                    onClick={() => setShowPromptPicker(true)}
-                                                    className="text-[12px] font-semibold text-[var(--color-brand-dark)] hover:text-[var(--color-brand)] transition-colors"
-                                                >
-                                                    Kütüphaneden Seç
-                                                </button>
+                            {/* Prompt Library Selection */}
+                            <div className="panel-card space-y-4">
+                                <div className="flex items-center gap-3 mb-1">
+                                    <MessageSquare size={18} className="text-purple-400" />
+                                    <h3 className="font-semibold text-[var(--color-text-primary)]">Sistem Promptu</h3>
+                                </div>
+                                {selectedPromptId && selectedPromptName ? (
+                                    <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <FileText size={16} className="text-purple-400 shrink-0" />
+                                            <div className="min-w-0">
+                                                <p className="font-semibold text-[var(--color-text-primary)] truncate">{selectedPromptName}</p>
+                                                <p className="text-xs text-[var(--color-text-muted)]">Prompt kütüphanesinden seçildi</p>
                                             </div>
-                                            <p className="text-xs text-[var(--color-text-muted)] mb-2">
-                                                Boş bırakılırsa global prompt kullanılır
-                                            </p>
-                                            <textarea
-                                                value={settings.promptText}
-                                                onChange={(e) => setSettings({...settings, promptText: e.target.value})}
-                                                className="form-textarea min-h-[200px] font-mono text-sm"
-                                                placeholder="Özel prompt yazın veya boş bırakın..."
-                                            />
                                         </div>
-
-                                        <div className="form-group !mb-0">
-                                            <label className="form-label flex items-center gap-2">
-                                                <Globe size={14} className="text-[var(--color-brand)]" />
-                                                İşletme Hakkında Bilgiler
-                                            </label>
-                                            <p className="text-xs text-[var(--color-text-muted)] mb-2">
-                                                Adres, çalışma saatleri, özel notlar gibi bilgiler. AI bu bilgileri müşteri sorularını yanıtlarken kullanacak.
-                                            </p>
-                                            <textarea
-                                                value={settings.businessContext}
-                                                onChange={(e) => setSettings({...settings, businessContext: e.target.value})}
-                                                className="form-textarea min-h-[150px]"
-                                                placeholder="Örnek:&#10;Adres: Bağdat Caddesi No:123, Kadıköy&#10;Çalışma Saatleri: Hafta içi 09:00-18:00&#10;Telefon: 0216 123 45 67&#10;Özel notlar: Pazar günleri kapalıyız..."
-                                            />
+                                        <button
+                                            onClick={() => setShowPromptPicker(true)}
+                                            className="shrink-0 ml-3 text-sm font-semibold text-[var(--color-brand-dark)] hover:text-[var(--color-brand)] transition-colors"
+                                        >
+                                            Değiştir
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center gap-3 py-6 rounded-xl border-2 border-dashed border-[var(--color-border)]">
+                                        <FileText size={24} className="text-[var(--color-text-muted)]" />
+                                        <div className="text-center">
+                                            <p className="text-sm font-medium text-[var(--color-text-primary)]">Prompt seçilmedi</p>
+                                            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Kütüphaneden bir prompt seçin</p>
                                         </div>
+                                        <button
+                                            onClick={() => setShowPromptPicker(true)}
+                                            className="btn-chunky !py-2 !px-4 text-sm"
+                                        >
+                                            <FileText size={14} />
+                                            Kütüphaneden Seç
+                                        </button>
                                     </div>
                                 )}
                             </div>

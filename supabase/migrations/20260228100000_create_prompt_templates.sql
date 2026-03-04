@@ -38,9 +38,9 @@ CREATE POLICY "Allow read tenant prompt_templates"
     TO authenticated
     USING (
         EXISTS (
-            SELECT 1 FROM public.staff s
-            WHERE s.tenant_id = prompt_templates.tenant_id
-            AND s.user_id = auth.uid()
+            SELECT 1 FROM public.tenant_users tu
+            WHERE tu.tenant_id = prompt_templates.tenant_id
+            AND tu.user_id = auth.uid()
         )
     );
 
@@ -78,18 +78,18 @@ CREATE POLICY "Allow write tenant templates for owners"
     TO authenticated
     USING (
         EXISTS (
-            SELECT 1 FROM public.staff s
-            WHERE s.tenant_id = prompt_templates.tenant_id
-            AND s.user_id = auth.uid()
-            AND s.role IN ('owner', 'admin')
+            SELECT 1 FROM public.tenant_users tu
+            WHERE tu.tenant_id = prompt_templates.tenant_id
+            AND tu.user_id = auth.uid()
+            AND tu.role IN ('owner', 'admin')
         )
     )
     WITH CHECK (
         EXISTS (
-            SELECT 1 FROM public.staff s
-            WHERE s.tenant_id = prompt_templates.tenant_id
-            AND s.user_id = auth.uid()
-            AND s.role IN ('owner', 'admin')
+            SELECT 1 FROM public.tenant_users tu
+            WHERE tu.tenant_id = prompt_templates.tenant_id
+            AND tu.user_id = auth.uid()
+            AND tu.role IN ('owner', 'admin')
         )
     );
 

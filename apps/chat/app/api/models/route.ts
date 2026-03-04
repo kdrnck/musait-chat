@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
     let query = supabase
         .from("ai_models")
-        .select("id, openrouter_id, display_name, provider_hint, provider_config, pricing_input, pricing_output, tier, supports_tools, supports_reasoning, context_window, max_output_tokens, description")
+        .select("id, openrouter_id, display_name, provider_hint, provider_config, pricing_input, pricing_output, tier, supports_tools, supports_reasoning, context_window, max_output_tokens, description, max_iterations, llm_timeout_ms")
         .eq("is_enabled", true)
         .order("sort_order", { ascending: true })
         .order("display_name", { ascending: true });

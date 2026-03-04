@@ -78,6 +78,8 @@ export async function POST(request: Request) {
                 description: description ?? null,
                 sort_order: sort_order ?? 0,
                 is_enabled: true,
+                max_iterations: body.max_iterations ?? 5,
+                llm_timeout_ms: body.llm_timeout_ms ?? 15000,
             })
             .select()
             .single();
@@ -125,6 +127,8 @@ export async function PUT(request: Request) {
             max_output_tokens: true,
             description: true,
             sort_order: true,
+            max_iterations: true,
+            llm_timeout_ms: true,
         };
 
         const sanitized: Record<string, any> = {};

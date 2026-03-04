@@ -55,6 +55,8 @@ interface AiModel {
     description: string | null;
     sort_order: number;
     created_at: string;
+    max_iterations: number;
+    llm_timeout_ms: number;
 }
 
 interface ModelTier {
@@ -90,6 +92,8 @@ interface ModelFormState {
     providerMaxLatency: string;
     providerMaxPricePrompt: string;
     providerMaxPriceCompletion: string;
+    maxIterations: string;
+    llmTimeoutMs: string;
 }
 
 const EMPTY_FORM: ModelFormState = {
@@ -117,6 +121,8 @@ const EMPTY_FORM: ModelFormState = {
     providerMaxLatency: "",
     providerMaxPricePrompt: "",
     providerMaxPriceCompletion: "",
+    maxIterations: "5",
+    llmTimeoutMs: "15000",
 };
 
 const QUANTIZATION_OPTIONS = ["int4", "int8", "fp4", "fp6", "fp8", "fp16", "bf16", "fp32"];
@@ -205,6 +211,8 @@ function modelToForm(model: AiModel): ModelFormState {
         max_output_tokens: model.max_output_tokens != null ? String(model.max_output_tokens) : "",
         description: model.description || "",
         sort_order: String(model.sort_order || 0),
+        maxIterations: String(model.max_iterations ?? 5),
+        llmTimeoutMs: String(model.llm_timeout_ms ?? 15000),
         ...providerParts,
     };
 }
@@ -284,6 +292,8 @@ export default function ModelRegistryPanel() {
                 max_output_tokens: form.max_output_tokens ? parseInt(form.max_output_tokens) : null,
                 description: form.description.trim() || null,
                 sort_order: parseInt(form.sort_order) || 0,
+                max_iterations: Math.min(10, Math.max(1, parseInt(form.maxIterations) || 5)),
+                llm_timeout_ms: Math.min(30000, Math.max(3000, parseInt(form.llmTimeoutMs) || 15000)),
             };
             const isEdit = !!editingModel;
             if (isEdit) payload.id = editingModel!.id;
@@ -530,6 +540,20 @@ export default function ModelRegistryPanel() {
                                     <Brain size={13} className="text-purple-400" />
                                     <span className="text-[12px] text-[var(--color-text-secondary)]">Düşünme modu</span>
                                 </label>
+                            </div>
+
+                            {/* ── Runtime Settings ── */}
+                            <div className="grid grid-cols-2 gap-3 p-4 rounded-xl bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
+                                <div>
+                                    <label className="block text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-1">Max Tool İterasyon <span className="normal-case font-normal">(1–10)</span></label>
+                                    <input type="number" min={1} max={10} value={form.maxIterations} onChange={(e) => updateForm({ maxIterations: e.target.value })} className="form-input text-[13px] font-mono w-full" />
+                                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Tek yanıtta kaç tool çağrısı yapılabilir</p>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-1">LLM Zaman Aşımı <span className="normal-case font-normal">(ms)</span></label>
+                                    <input type="number" min={3000} max={30000} step={1000} value={form.llmTimeoutMs} onChange={(e) => updateForm({ llmTimeoutMs: e.target.value })} className="form-input text-[13px] font-mono w-full" />
+                                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Bu modeli kullanan tüm işletmeler için geçerlidir</p>
+                                </div>
                             </div>
 
                             {/* ── Provider Config ── */}
