@@ -34,14 +34,7 @@ async function main() {
   // --- Initialize Supabase admin client ---
   const supabase = getSupabaseAdmin();
 
-  // --- Bootstrap: register WhatsApp number & sync tenants ---
-  await bootstrapWhatsAppNumber(convex);
-  await syncTenantsToConvex(supabase, convex);
-
-  // --- Validate OTP magic-link base URL early ---
-  getAppBaseUrl();
-
-  // --- Initialize Queue ---
+  // --- Initialize Queue (synchronous) ---
   const queue = new InMemoryQueue(DEFAULT_QUEUE_CONFIG);
   const jobHandler = createJobHandler(convex);
   queue.startWorker(jobHandler);
@@ -49,20 +42,8 @@ async function main() {
     `✅ Queue started (concurrency: ${DEFAULT_QUEUE_CONFIG.concurrency})`
   );
 
-  // --- Recover pending jobs from Convex ---
-  await recoverPendingJobs(convex, queue);
-
-  // --- Start OTP cleanup job (daily) ---
-  startOtpCleanupJob(supabase);
-
-  // --- Express Server ---
+  // --- Express Server — start FIRST so Railway healthcheck passes immediately ---
   const app = express();
-
-  // --- Handoff human message dispatcher ---
-  const stopHandoffDispatcher = startHandoffHumanDispatcher({
-    convex,
-    supabase,
-  });
 
   // Capture raw body for webhook signature verification
   // Meta signs the original bytes — we must verify against those, not re-serialized JSON
@@ -91,20 +72,47 @@ async function main() {
     console.log(`💚 Health check: http://localhost:${PORT}/health`);
   });
 
-  // --- Graceful shutdown ---
-  const shutdown = async (signal: string) => {
-    console.log(`\n⏳ ${signal} received. Shutting down gracefully...`);
-    // Close Express server first to stop accepting new webhooks
-    server.close();
-    stopHandoffDispatcher();
-    stopOtpCleanupJob();
-    await queue.stop();
-    console.log("👋 Worker stopped.");
-    process.exit(0);
-  };
+  // --- Async bootstrap — runs after server is up so healthcheck never times out ---
+  (async () => {
+    try {
+      // Bootstrap: register WhatsApp number & sync tenants
+      await bootstrapWhatsAppNumber(convex);
+      await syncTenantsToConvex(supabase, convex);
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+      // Validate OTP magic-link base URL
+      getAppBaseUrl();
+
+      // Recover pending jobs from Convex
+      await recoverPendingJobs(convex, queue);
+
+      // Start OTP cleanup job (daily)
+      startOtpCleanupJob(supabase);
+
+      // Handoff human message dispatcher
+      const stopHandoffDispatcher = startHandoffHumanDispatcher({
+        convex,
+        supabase,
+      });
+
+      // Re-register graceful shutdown with stopHandoffDispatcher in scope
+      const shutdown = async (signal: string) => {
+        console.log(`\n⏳ ${signal} received. Shutting down gracefully...`);
+        server.close();
+        stopHandoffDispatcher();
+        stopOtpCleanupJob();
+        await queue.stop();
+        console.log("👋 Worker stopped.");
+        process.exit(0);
+      };
+      process.on("SIGTERM", () => shutdown("SIGTERM"));
+      process.on("SIGINT", () => shutdown("SIGINT"));
+
+      console.log("✅ Bootstrap complete — worker fully ready.");
+    } catch (err) {
+      console.error("❌ Bootstrap failed:", err);
+      process.exit(1);
+    }
+  })();
 }
 
 main().catch((err) => {
