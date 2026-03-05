@@ -170,6 +170,8 @@ export async function runAgentLoop(
   const thinkingParts: string[] = [];
   const toolTraceLines: string[] = [];
   const toolCallsExecuted = new Set<string>();
+  // Set after a successful bind_tenant — used to enrich the tool result with the tenant name
+  let tenantSwitchName: string | null = null;
 
   const buildStrongFallbackSettings = (): TenantAiSettings | null => {
     if (!tenantAiSettings.fallbackModel || strongFallbackUsed) {
@@ -337,8 +339,12 @@ export async function runAgentLoop(
           // 5. Unlock all tools now that we have a tenant
           toolDefs = getToolDefinitions();
 
+          // 6. Fetch tenant name for welcome message instruction (hits cache from buildContext)
+          const switchedTenantCtx = await fetchTenantContext(conversation.tenantId as string);
+          tenantSwitchName = switchedTenantCtx?.name || null;
+
           console.log(
-            `🔗 bind_tenant: full context rebuild — old=${oldConvId} new=${newConvId || oldConvId} tenant=${conversation.tenantId}`
+            `🔗 bind_tenant: full context rebuild — old=${oldConvId} new=${newConvId || oldConvId} tenant=${conversation.tenantId} name=${tenantSwitchName}`
           );
         }
       }
@@ -363,9 +369,19 @@ export async function runAgentLoop(
           ).renderedMessage as string;
         }
 
+        // For bind_tenant success: enrich the tool result so the LLM generates a proper welcome message
+        let enrichedResultStr = resultStr;
+        if (toolCall.name === "bind_tenant" && tenantSwitchName && !result.error) {
+          const enriched = {
+            ...(result.result as any),
+            tenantName: tenantSwitchName,
+            instruction: `Müşteriyi "${tenantSwitchName}" işletmesine başarıyla bağladın. Müşteriye "${tenantSwitchName}" işletmesine bağlandığını kısa ve samimi bir şekilde bildir. Geçmiş konuşma kaydının temizlendiğini söyle ve ne istediğini tekrar sor.`,
+          };
+          enrichedResultStr = JSON.stringify(enriched);
+        }
         messages.push({
           role: "tool",
-          content: resultStr,
+          content: enrichedResultStr,
           tool_call_id: toolCall.id,
           name: toolCall.name,
         });
