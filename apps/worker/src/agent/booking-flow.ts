@@ -229,6 +229,7 @@ export async function handleStructuredBookingFlow(
 
     const startTime = `${state.date}T${parsedTime}:00+03:00`;
     const appointmentResult = (await createAppointment(
+      SUPABASE_CONFIG,
       {
         service_id: state.serviceId!,
         staff_id: state.staffId,
@@ -303,6 +304,7 @@ export async function handleStructuredBookingFlow(
 
     const startTime = `${state.date}T${state.pendingTime}:00+03:00`;
     const appointmentResult = (await createAppointment(
+      SUPABASE_CONFIG,
       {
         service_id: state.serviceId!,
         staff_id: state.staffId,

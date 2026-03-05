@@ -72,12 +72,12 @@ export const listByTenant = query({
         return args.status ? base.eq("status", args.status) : base;
       })
       .collect();
-    
+
     // Filter out archived by default (if no status provided)
-    const filtered = args.status 
-      ? conversations 
+    const filtered = args.status
+      ? conversations
       : conversations.filter(c => c.status !== "archived");
-    
+
     // Sort by lastMessageAt descending (newest first)
     // No N+1 queries — use denormalized lastMessageContent/lastMessageRole
     return filtered.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
@@ -114,7 +114,7 @@ export const listAll = query({
         .collect();
       conversations = [...active, ...handoff];
     }
-    
+
     // Sort by lastMessageAt descending (newest first)
     // Use denormalized lastMessageContent/lastMessageRole - no N+1 queries
     return conversations.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
@@ -154,6 +154,49 @@ export const listByTenantAdmin = query({
     // Sort by lastMessageAt descending (newest first)
     // Use denormalized lastMessageContent/lastMessageRole - no N+1 queries
     return conversations.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+  },
+});
+
+/**
+ * Get all archived sessions (with their messages) for a customer+tenant pair.
+ * Used by the chat UI "Load older sessions" button—lazy, only fires when user requests it.
+ * Returns sessions oldest-first so they appear at the top of the timeline.
+ */
+export const getArchivedSessionsWithMessages = query({
+  args: {
+    customerPhone: v.string(),
+    tenantId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // by_customer_phone index: [customerPhone, status]
+    const archivedConvs = await ctx.db
+      .query("conversations")
+      .withIndex("by_customer_phone", (q) =>
+        q.eq("customerPhone", args.customerPhone).eq("status", "archived")
+      )
+      .filter((q) => q.eq(q.field("tenantId"), args.tenantId))
+      .collect();
+
+    if (archivedConvs.length === 0) return [];
+
+    // Sequential awaits — Convex queries do NOT support Promise.all with ctx.db
+    const sessions: { conversationId: string; createdAt: number; messages: any[] }[] = [];
+    archivedConvs.sort((a, b) => a.createdAt - b.createdAt);
+
+    for (const conv of archivedConvs) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+        .order("asc")
+        .collect();
+      sessions.push({
+        conversationId: conv._id as string,
+        createdAt: conv.createdAt,
+        messages,
+      });
+    }
+
+    return sessions;
   },
 });
 
@@ -202,20 +245,14 @@ export const create = mutation({
   },
 });
 
-/** DEPRECATED: Use bindToTenantAndCreateNew instead - Bind an unbound conversation to a tenant */
-export const bindToTenant = mutation({
-  args: {
-    id: v.id("conversations"),
-    tenantId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // DEPRECATED - this violates immutability. Use bindToTenantAndCreateNew instead.
-    // Kept for backward compatibility only.
-    await ctx.db.patch(args.id, { tenantId: args.tenantId });
-  },
-});
+/** 
+ * REMOVED: bindToTenant was deprecated — it patched tenantId in-place, causing
+ * context leakage (old messages, rolling summary, cache stayed). All callers
+ * now use bindToTenantAndCreateNew which archives the old conversation and
+ * creates a clean tenant-scoped one. 
+ */
 
-/** NEW: Bind unbound conversation to tenant by archiving lobby and creating new tenant-scoped conversation */
+/** Bind unbound conversation to tenant by archiving lobby and creating new tenant-scoped conversation */
 export const bindToTenantAndCreateNew = mutation({
   args: {
     oldConversationId: v.id("conversations"),

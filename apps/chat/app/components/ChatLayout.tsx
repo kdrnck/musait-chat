@@ -84,43 +84,29 @@ export default function ChatLayout({
                 />
             </main>
 
-            {/* ── Right: Customer Detail Panel ──
-                Desktop (xl+): always visible as a side column.
-                Below xl: overlay slide-in on demand.
-            ── */}
-            <aside
-                className={`
-                    flex flex-col z-40
-                    bg-[var(--color-surface-pure)] border-l border-[var(--color-border)]
-                    fixed inset-y-0 right-0 w-[85%] sm:w-[320px]
-                    xl:relative xl:w-[320px] xl:flex-shrink-0
-                    transition-transform duration-300 ease-in-out
-                    shadow-xl xl:shadow-none
-                    ${(showCustomerPanel || true) && selectedConversationId
-                        ? 'xl:translate-x-0'
-                        : 'xl:translate-x-0 xl:hidden'
-                    }
-                    ${showCustomerPanel && selectedConversationId
-                        ? 'translate-x-0'
-                        : 'translate-x-full xl:translate-x-0'
-                    }
-                    ${!selectedConversationId ? 'xl:hidden' : ''}
-                `}
-            >
-                {selectedConversationId && (
-                    <CustomerPanel
-                        conversationId={selectedConversationId}
-                        onClose={() => setShowCustomerPanel(false)}
-                    />
-                )}
-            </aside>
-
-            {/* Mobile Backdrop for Customer Panel */}
+            {/* ── Right: Customer Detail Drawer (overlay on all sizes) ── */}
             {showCustomerPanel && selectedConversationId && (
-                <div
-                    className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[35] xl:hidden animate-fade-in"
-                    onClick={() => setShowCustomerPanel(false)}
-                />
+                <>
+                    {/* Backdrop */}
+                    <div
+                        className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[45] animate-fade-in"
+                        onClick={() => setShowCustomerPanel(false)}
+                    />
+                    {/* Drawer */}
+                    <aside
+                        className="
+                            fixed inset-y-0 right-0 z-50
+                            w-[85%] sm:w-[380px]
+                            bg-[var(--color-surface-pure)] border-l border-[var(--color-border)]
+                            shadow-2xl animate-slide-in-right
+                        "
+                    >
+                        <CustomerPanel
+                            conversationId={selectedConversationId}
+                            onClose={() => setShowCustomerPanel(false)}
+                        />
+                    </aside>
+                </>
             )}
         </div>
     );

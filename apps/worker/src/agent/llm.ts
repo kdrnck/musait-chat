@@ -9,6 +9,8 @@ import {
 import { ADMIN_MODE } from "./prompts/admin-mode.js";
 import { askHuman } from "./tools/ask-human.js";
 import { listServices, listStaff, getBusinessInfo } from "./tools/list-business-data.js";
+import { listCustomerAppointments } from "./tools/list-customer-appointments.js";
+import { SUPABASE_CONFIG } from "../config.js";
 import type { PerfTimer } from "../lib/perf-timer.js";
 
 // New modular imports
@@ -29,15 +31,17 @@ export { getCurrentDateInfo, resolvePlaceholders } from "./prompt-resolver.js";
 export { detectBookingSuccessHallucination } from "./hallucination-guard.js";
 
 // ===== CONVERSATION-LEVEL CONTEXT CACHE =====
-// Caches services/staff/businessInfo per conversation for 5 minutes.
-// Reduces redundant Supabase calls within a conversation.
+// Caches services/staff/businessInfo per conversation for 10 minutes.
+// Only fields that were actually fetched (lazy placeholder check) are populated.
 interface ContextCacheEntry {
   services: string;
   staff: string;
   businessInfo: string;
+  /** Which fields were actually fetched — others may be "" due to lazy skip */
+  fetchedFields: { services: boolean; staff: boolean; businessInfo: boolean };
   builtAt: number;
 }
-const CONTEXT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CONTEXT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 const contextCache = new Map<string, ContextCacheEntry>();
 
 function getCachedContext(conversationId: string): ContextCacheEntry | null {
@@ -125,7 +129,7 @@ export async function runAgentLoop(
   timer?.end("contextBuild");
 
   const messages = context.messages;
-  const tenantAiSettings = context.tenantAiSettings;
+  let tenantAiSettings = context.tenantAiSettings;
   const MAX_ITERATIONS = tenantAiSettings.maxIterations || 5;
 
   if (context.promptMissingForBoundTenant && conversation.tenantId && !conversation.adminMode) {
@@ -146,11 +150,11 @@ export async function runAgentLoop(
   }
 
   // Context-aware tool filtering: unbound conversations only need routing tools
-  const toolDefs = !conversation.tenantId && !conversation.adminMode
+  let toolDefs = !conversation.tenantId && !conversation.adminMode
     ? getToolDefinitions().filter((t) => {
-        const name = t.function.name;
-        return name === "list_businesses" || name === "bind_tenant" || name === "ask_human";
-      })
+      const name = t.function.name;
+      return name === "list_businesses" || name === "bind_tenant" || name === "ask_human";
+    })
     : getToolDefinitions();
 
   const loopStartTime = Date.now();
@@ -196,13 +200,13 @@ export async function runAgentLoop(
     const fallbackMessages: LLMMessage[] = includeTools
       ? messages
       : [
-          ...messages,
-          {
-            role: "system",
-            content:
-              "[FALLBACK MODE] Tool çağırmadan tek mesajda Türkçe net yanıt ver. Gerekirse kullanıcıdan tek bir kısa adım iste.",
-          },
-        ];
+        ...messages,
+        {
+          role: "system",
+          content:
+            "[FALLBACK MODE] Tool çağırmadan tek mesajda Türkçe net yanıt ver. Gerekirse kullanıcıdan tek bir kısa adım iste.",
+        },
+      ];
 
     return await callOpenRouter(fallbackMessages, {
       useReasoning: false,
@@ -284,13 +288,14 @@ export async function runAgentLoop(
             conversationId: conversation._id,
             customerPhone: job.customerPhone,
             customerName: job.customerName,
+            inboundPhoneNumberId: conversation.inboundPhoneNumberId || job.phoneNumberId,
           });
           return { toolCall, result };
         })
       );
       timer?.end("toolExecution");
 
-      // Propagate bind_tenant side-effect
+      // Propagate bind_tenant side-effect: full context isolation
       for (const { toolCall, result } of toolResults) {
         if (
           toolCall.name === "bind_tenant" &&
@@ -298,8 +303,43 @@ export async function runAgentLoop(
           (result.result as any)?.success === true &&
           typeof (toolCall.arguments as any)?.tenant_id === "string"
         ) {
+          const oldConvId = String(conversation._id);
+          const newConvId = (result.result as any).newConversationId;
+
+          // 1. Update in-memory conversation state
           conversation.tenantId = (toolCall.arguments as any).tenant_id as string;
-          console.log(`🔗 bind_tenant: in-memory tenantId refreshed to ${conversation.tenantId}`);
+          if (newConvId) {
+            conversation._id = newConvId;
+          }
+          conversation.rollingSummary = "";
+
+          // 2. Invalidate context cache for the old conversation
+          contextCache.delete(oldConvId);
+
+          // 3. Rebuild messages array with new tenant context (clean slate)
+          //    The new conversation has no messages, no rolling summary.
+          //    This eliminates old tenant data from the LLM context entirely.
+          const newContext = await buildContext(convex, job, conversation);
+          messages.length = 0;
+          messages.push(...newContext.messages);
+
+          // Update tenantAiSettings for the new tenant
+          tenantAiSettings = newContext.tenantAiSettings;
+
+          // 4. Re-add the assistant tool_call message so tool results can follow
+          //    (OpenAI format requires assistant message before tool results)
+          messages.push({
+            role: "assistant",
+            content: response.content,
+            tool_calls: response.tool_calls,
+          });
+
+          // 5. Unlock all tools now that we have a tenant
+          toolDefs = getToolDefinitions();
+
+          console.log(
+            `🔗 bind_tenant: full context rebuild — old=${oldConvId} new=${newConvId || oldConvId} tenant=${conversation.tenantId}`
+          );
         }
       }
 
@@ -461,44 +501,69 @@ async function buildContext(
     dashboardPrompt = tenantAiSettings.systemPromptText;
   }
 
-  // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT (with conversation-level cache) ==========
+  // ========== STEP 1.5: FETCH EMBEDDED DATA FOR TENANT (lazy, conversation-level cache) ==========
+  // Only fetches fields that the prompt actually uses via placeholder check.
   let servicesListText = "";
   let staffListText = "";
   let businessInfoText = "";
 
-  if (conversation.tenantId) {
+  if (conversation.tenantId && !conversation.adminMode) {
+    const rawPromptForCheck = dashboardPrompt || globalPrompt || "";
+    const needsServices = rawPromptForCheck.includes("{{services_list}}");
+    const needsStaff = rawPromptForCheck.includes("{{staff_list}}");
+    const needsBusinessInfo = rawPromptForCheck.includes("{{business_info}}");
+
+    if (!(needsServices || needsStaff || needsBusinessInfo)) {
+      console.log(`⚡ Skipping context fetch — no data placeholders in prompt`);
+    } else {
     try {
-      // Check conversation-level cache first (5-minute TTL)
       const cached = getCachedContext(conversation._id);
-      
-      if (cached) {
-        servicesListText = cached.services;
-        staffListText = cached.staff;
-        businessInfoText = cached.businessInfo;
+
+      // Cache hit: check every needed field was actually fetched
+      const cacheCoversNeeds = cached &&
+        (!needsServices || cached.fetchedFields.services) &&
+        (!needsStaff || cached.fetchedFields.staff) &&
+        (!needsBusinessInfo || cached.fetchedFields.businessInfo);
+
+      if (cacheCoversNeeds && cached) {
+        if (needsServices) servicesListText = cached.services;
+        if (needsStaff) staffListText = cached.staff;
+        if (needsBusinessInfo) businessInfoText = cached.businessInfo;
         console.log(`📦 Using cached context for conversation ${conversation._id}`);
       } else {
-        // Cache miss — fetch from Supabase (parallelized)
+        // Fetch only fields that are needed AND not already cached
+        const fetchServices = needsServices && (!cached || !cached.fetchedFields.services);
+        const fetchStaff = needsStaff && (!cached || !cached.fetchedFields.staff);
+        const fetchBiz = needsBusinessInfo && (!cached || !cached.fetchedFields.businessInfo);
+
+        // Carry over already-cached fields
+        if (cached) {
+          if (needsServices && !fetchServices) servicesListText = cached.services;
+          if (needsStaff && !fetchStaff) staffListText = cached.staff;
+          if (needsBusinessInfo && !fetchBiz) businessInfoText = cached.businessInfo;
+        }
+
+        // Cache miss — fetch from Supabase (parallelized, only missing fields)
         const [servicesResult, staffResult, businessResult] = await Promise.all([
-          listServices({}, { tenantId: conversation.tenantId }),
-          listStaff({}, { tenantId: conversation.tenantId }),
-          getBusinessInfo({}, { tenantId: conversation.tenantId }),
+          fetchServices ? listServices(SUPABASE_CONFIG, {}, { tenantId: conversation.tenantId }) : Promise.resolve(null),
+          fetchStaff ? listStaff(SUPABASE_CONFIG, {}, { tenantId: conversation.tenantId }) : Promise.resolve(null),
+          fetchBiz ? getBusinessInfo(SUPABASE_CONFIG, {}, { tenantId: conversation.tenantId }) : Promise.resolve(null),
         ]);
 
         if (servicesResult && !(servicesResult as Record<string, unknown>).error) {
           const services = (servicesResult as any).services || [];
           servicesListText = services
-            .map((svc: any) => {
-              const staffNames = svc.staff?.map((s: any) => s.name).join(", ") || "Yok";
-              return `- ${svc.name} (${svc.duration_minutes} dk${svc.price ? `, ${svc.price} TL` : ""})\n  ID: ${svc.id}\n  Çalışanlar: ${staffNames}`;
-            })
-            .join("\n\n");
+            .map((svc: any) =>
+              `- ${svc.name} (${svc.duration_minutes} dk${svc.price ? `, ${svc.price} TL` : ""})\n  ID: ${svc.id}`
+            )
+            .join("\n");
         }
 
         if (staffResult && !(staffResult as Record<string, unknown>).error) {
           const staff = (staffResult as any).staff || [];
           staffListText = staff
-          .map((s: any) => `- ${s.name}${s.title ? ` (${s.title})` : ""}\n  ID: ${s.id}`)
-          .join("\n");
+            .map((s: any) => `- ${s.name}${s.title ? ` (${s.title})` : ""}\n  ID: ${s.id}`)
+            .join("\n");
         }
 
         if (businessResult && !(businessResult as Record<string, unknown>).error) {
@@ -512,22 +577,28 @@ async function buildContext(
           if (tenant.maps_link) infoParts.push(`Maps Link: ${tenant.maps_link}`);
           if (tenant.working_days) infoParts.push(`Working Days: ${tenant.working_days}`);
           if (tenant.working_hours) infoParts.push(`Working Hours: ${tenant.working_hours}`);
-          if (tenant.description) infoParts.push(`Description: ${tenant.description}`);
           businessInfoText = infoParts.join("\n");
         }
 
-        // Store in conversation-level cache for future messages in this conversation
+        // Merge with existing cache entry and store updated fields
+        const prevFetched = cached?.fetchedFields ?? { services: false, staff: false, businessInfo: false };
         setCachedContext(conversation._id, {
-          services: servicesListText,
-          staff: staffListText,
-          businessInfo: businessInfoText,
+          services: fetchServices ? servicesListText : (cached?.services ?? ""),
+          staff: fetchStaff ? staffListText : (cached?.staff ?? ""),
+          businessInfo: fetchBiz ? businessInfoText : (cached?.businessInfo ?? ""),
+          fetchedFields: {
+            services: prevFetched.services || fetchServices,
+            staff: prevFetched.staff || fetchStaff,
+            businessInfo: prevFetched.businessInfo || fetchBiz,
+          },
           builtAt: Date.now(),
         });
-        console.log(`💾 Cached context for conversation ${conversation._id}`);
+        console.log(`💾 Cached context for conversation ${conversation._id} (svc=${fetchServices}, staff=${fetchStaff}, biz=${fetchBiz})`);
       }
     } catch (err) {
       console.warn(`⚠️ Failed to fetch embedded data:`, err);
     }
+    } // end placeholder check
   }
 
   // ========== STEP 2: SYSTEM PROMPT ==========
@@ -573,8 +644,6 @@ async function buildContext(
         if (profile) {
           const profileParts: string[] = [];
           if (profile.personNotes?.trim()) profileParts.push(`AI Notes: ${profile.personNotes.trim()}`);
-          if (profile.lastStaff?.length > 0) profileParts.push(`Preferred Staff: ${profile.lastStaff.join(", ")}`);
-          if (profile.lastServices?.length > 0) profileParts.push(`Recent Services: ${profile.lastServices.join(", ")}`);
           const name = profile.preferences?.customerName;
           if (name && typeof name === "string") {
             customerName = name;
@@ -586,6 +655,45 @@ async function buildContext(
         console.warn(`⚠️ Failed to fetch customer profile for placeholder:`, err);
       }
 
+      // Fetch recent appointments from Supabase (tenant-isolated, last 3)
+      try {
+        if (conversation.tenantId) {
+          const result = await listCustomerAppointments(
+            SUPABASE_CONFIG,
+            { only_future: false, include_cancelled: false, limit: 3 },
+            { tenantId: conversation.tenantId, customerPhone: job.customerPhone }
+          ) as { appointments?: Array<{ start_time: string; status: string; service?: { name?: string } | null; staff?: { name?: string } | null }>; total?: number };
+
+          if (result.appointments && result.appointments.length > 0) {
+            const lines = result.appointments.map((a) => {
+              const date = new Date(a.start_time).toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" });
+              const time = new Date(a.start_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+              const svc = a.service?.name || "N/A";
+              const staff = a.staff?.name || "";
+              return `- ${date} ${time} | ${svc}${staff ? ` | ${staff}` : ""} | ${a.status}`;
+            });
+            let appointmentBlock = `Recent Appointments:\n${lines.join("\n")}`;
+
+            // Derive recent services from appointments
+            const svcNames = Array.from(new Set(
+              result.appointments
+                .map((a) => a.service?.name)
+                .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
+            ));
+            if (svcNames.length > 0) {
+              appointmentBlock += `\nRecent Services: ${svcNames.join(", ")}`;
+            }
+
+            customerProfileText = customerProfileText
+              ? customerProfileText + "\n" + appointmentBlock
+              : appointmentBlock;
+          }
+          console.log(`📅 Appointments injected: ${result.appointments?.length ?? 0} (total: ${result.total ?? 0})`);
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to fetch appointments for prompt:`, err);
+      }
+
       const placeholders: Record<string, string> = {
         current_date: dateInfo.date,
         current_day_name: dateInfo.dayName,
@@ -593,12 +701,14 @@ async function buildContext(
         tenant_name: tenantContext?.name || "İşletme",
         tenant_id: conversation.tenantId || "",
         business_name: tenantContext?.name || "İşletme",
-        business_info: businessInfoText || "İşletme bilgisi mevcut değil.",
-        services_list: servicesListText || "Hizmet bilgisi mevcut değil.",
-        staff_list: staffListText || "Personel bilgisi mevcut değil.",
+        // Use empty string when data is unavailable — avoids sending misleading
+        // "bulunamadı" strings that can confuse the LLM and cause hallucinations.
+        business_info: businessInfoText || "",
+        services_list: servicesListText || "",
+        staff_list: staffListText || "",
         customer_first_name: customerName.split(" ")[0] || customerName,
         customer_name: customerName,
-        customer_profile: customerProfileText || "Müşteri profili mevcut değil.",
+        customer_profile: customerProfileText || "",
       };
 
       systemPromptContent = resolvePlaceholders(rawPrompt, placeholders);
@@ -641,6 +751,12 @@ async function buildContext(
       if (msg.role === "customer") {
         messages.push({ role: "user", content: msg.content });
       } else if (msg.role === "agent" || msg.role === "human") {
+        // Filter out booking flow state JSON injections — these are internal state
+        // markers ("__BOOKING_FLOW_STATE__:") saved as human messages and must
+        // never reach the LLM as context.
+        if (typeof msg.content === "string" && msg.content.startsWith("__BOOKING_FLOW_STATE__:")) {
+          continue;
+        }
         messages.push({ role: "assistant", content: msg.content });
       }
     }

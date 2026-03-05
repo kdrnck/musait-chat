@@ -1,6 +1,8 @@
 import type { ConvexHttpClient } from "convex/browser";
 import type { ToolCallRequest, ToolCallResult, AgentToolName } from "@musait/shared";
+import { SUPABASE_CONFIG } from "../../config.js";
 import { viewAvailableSlots } from "./view-slots.js";
+import { checkSpecificSlot } from "./check-specific-slot.js";
 import { createAppointment } from "./create-appointment.js";
 import { createAppointmentsBatch } from "./create-appointments-batch.js";
 import { cancelAppointment } from "./cancel-appointment.js";
@@ -22,6 +24,7 @@ interface ToolContext {
   conversationId: string;
   customerPhone: string;
   customerName?: string;
+  inboundPhoneNumberId?: string;
 }
 
 /**
@@ -82,34 +85,37 @@ async function executeToolCallInner(
 
     switch (toolCall.name) {
       case "list_services":
-        result = await listServices(toolCall.arguments, { tenantId: ctx.tenantId! });
+        result = await listServices(SUPABASE_CONFIG, toolCall.arguments, { tenantId: ctx.tenantId! });
         break;
       case "list_staff":
-        result = await listStaff(toolCall.arguments, { tenantId: ctx.tenantId! });
+        result = await listStaff(SUPABASE_CONFIG, toolCall.arguments, { tenantId: ctx.tenantId! });
         break;
       case "get_business_info":
-        result = await getBusinessInfo(toolCall.arguments, { tenantId: ctx.tenantId! });
+        result = await getBusinessInfo(SUPABASE_CONFIG, toolCall.arguments, { tenantId: ctx.tenantId! });
         break;
       case "list_customer_appointments":
-        result = await listCustomerAppointments(toolCall.arguments, {
+        result = await listCustomerAppointments(SUPABASE_CONFIG, toolCall.arguments, {
           tenantId: ctx.tenantId!,
           customerPhone: ctx.customerPhone,
         });
         break;
       case "view_available_slots":
-        result = await viewAvailableSlots(toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
+        result = await viewAvailableSlots(SUPABASE_CONFIG, toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
+        break;
+      case "check_specific_slot":
+        result = await checkSpecificSlot(SUPABASE_CONFIG, toolCall.arguments, { tenantId: ctx.tenantId! });
         break;
       case "create_appointment":
-        result = await createAppointment(toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
+        result = await createAppointment(SUPABASE_CONFIG, toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
         break;
       case "create_appointments_batch":
-        result = await createAppointmentsBatch(toolCall.arguments, {
+        result = await createAppointmentsBatch(SUPABASE_CONFIG, toolCall.arguments, {
           ...ctx,
           tenantId: ctx.tenantId!,
         });
         break;
       case "cancel_appointment":
-        result = await cancelAppointment(toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
+        result = await cancelAppointment(SUPABASE_CONFIG, toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
         break;
       case "ask_human":
       case "handOff":
@@ -119,7 +125,7 @@ async function executeToolCallInner(
         result = await endSession(convex, toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
         break;
       case "suggest_least_busy_staff":
-        result = await suggestLeastBusyStaff(toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
+        result = await suggestLeastBusyStaff(SUPABASE_CONFIG, toolCall.arguments, { ...ctx, tenantId: ctx.tenantId! });
         break;
       case "list_businesses":
         result = await listBusinesses(convex);
@@ -128,6 +134,7 @@ async function executeToolCallInner(
         result = await bindTenant(convex, toolCall.arguments as { tenant_id: string }, {
           conversationId: ctx.conversationId,
           customerPhone: ctx.customerPhone,
+          inboundPhoneNumberId: ctx.inboundPhoneNumberId,
         });
         break;
       case "take_notes_for_user":
@@ -245,7 +252,9 @@ export function getToolDefinitions() {
       function: {
         name: "view_available_slots",
         description:
-          "Belirtilen tarih için müsait randevu slotlarını gösterir. Varsayılan olarak optimize edilmiş önerilen slotları döner (slots alanı). Müşteri daha fazla saat istediğinde show_all: true geçin.",
+          "Belirtilen tarih için ÖNERİLEN randevu saatlerini gösterir (maks 6). Bu çıktı tüm boş saatler DEĞİL, algoritma tarafından seçilmiş akıllı önerilerdir. " +
+          "Müşteri \"sabah 10\" veya \"14:00\" gibi SPESIFİK bir saat söylediğinde bu tool yerine check_specific_slot kullan. " +
+          "Müşteri \"başka saat var mı\", \"diğer saatler\" istediğinde show_all: true geç.",
         parameters: {
           type: "object",
           properties: {
@@ -267,6 +276,42 @@ export function getToolDefinitions() {
             },
           },
           required: ["date"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "check_specific_slot",
+        description:
+          "Müşteri SPESIFİK bir saat istediğinde kullan (\"11:40'da gelmek istiyorum\", \"çarşamba 5\" gibi). " +
+          "view_available_slots'u çağırmadan önce belirtilen saatin ±tolerance_minutes penceresi içindeki boş slotları kontrol eder. " +
+          "Tam eşleşme varsa direkt onayla. nearest_available varsa müşteriye sor. slot_unavailable ise başka saat öner.",
+        parameters: {
+          type: "object",
+          properties: {
+            date: {
+              type: "string",
+              description: "Tarih (YYYY-MM-DD formatında)",
+            },
+            requested_time: {
+              type: "string",
+              description: "Müşterinin istediği saat (\"11:40\", \"14:00\", \"9\", \"1400\" gibi formatlar desteklenir)",
+            },
+            service_id: {
+              type: "string",
+              description: "Hizmet ID (opsiyonel, süre hesaplaması için)",
+            },
+            staff_id: {
+              type: "string",
+              description: "Personel ID (opsiyonel)",
+            },
+            tolerance_minutes: {
+              type: "number",
+              description: "Arama penceresi ± dakika (varsayılan: 30)",
+            },
+          },
+          required: ["date", "requested_time"],
         },
       },
     },

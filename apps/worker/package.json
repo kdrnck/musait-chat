@@ -14,7 +14,8 @@
     "convex": "^1.21.0",
     "dotenv": "^16.4.0",
     "express": "^5.1.0",
-    "@musait/shared": "workspace:*"
+    "@musait/shared": "workspace:*",
+    "@musait/tools": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

@@ -5,7 +5,6 @@ import { useTestLabStream } from "./useTestLabStream";
 import type { TestConfig } from "./useTestLabStream";
 import TestLabConfigPanel from "./TestLabConfigPanel";
 import TestLabChatPanel from "./TestLabChatPanel";
-import TestLabDebugPanel from "./TestLabDebugPanel";
 
 export default function TestLabPanel() {
     const [config, setConfig] = useState<TestConfig>({
@@ -35,7 +34,7 @@ export default function TestLabPanel() {
             {/* Left – Config (~300px) */}
             <TestLabConfigPanel config={config} onConfigChange={setConfig} onClearChat={handleClear} />
 
-            {/* Center – Chat (flex-1) */}
+            {/* Center – Chat (flex-1) — now includes inline thinking, tool calls, details & WA rendering */}
             <TestLabChatPanel
                 messages={messages}
                 isStreaming={state.isStreaming}
@@ -43,9 +42,6 @@ export default function TestLabPanel() {
                 onInputChange={setInput}
                 onSend={handleSend}
             />
-
-            {/* Right – Debug (~380px) */}
-            <TestLabDebugPanel streamState={state} />
         </div>
     );
 }

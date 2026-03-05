@@ -747,6 +747,18 @@ body {
   border-color: rgba(239, 68, 68, 0.25);
 }
 
+.chip--info {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60A5FA;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.chip--muted {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--color-text-muted);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
 /* ===== COLLAPSIBLE SECTION ===== */
 
 .collapsible-header {

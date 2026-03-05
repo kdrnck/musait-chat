@@ -23,6 +23,13 @@ export interface MetricsData {
     estimatedCost?: number;
 }
 
+/** A single inline event that shows up in the chat stream */
+export type StreamEvent =
+    | { type: "thinking"; content: string; done: boolean }
+    | { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
+    | { type: "tool_result"; id: string; name: string; result: unknown; durationMs: number | null }
+    | { type: "content"; content: string };
+
 export interface StreamState {
     content: string;
     reasoning: string;
@@ -45,6 +52,8 @@ export interface ChatMessage {
     reasoning?: string;
     toolCalls?: ToolCallEvent[];
     metrics?: MetricsData;
+    /** Ordered list of stream events for inline rendering */
+    streamEvents?: StreamEvent[];
 }
 
 const INITIAL_STATE: StreamState = {
@@ -90,7 +99,7 @@ export function useTestLabStream() {
         // Add placeholder assistant message
         setMessages((prev) => [
             ...prev,
-            { id: assistantMessageId, role: "assistant", content: "" },
+            { id: assistantMessageId, role: "assistant", content: "", streamEvents: [] },
         ]);
 
         try {
@@ -98,7 +107,10 @@ export function useTestLabStream() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    messages: [...messages, userMessage].map((m) => ({
+                    // Limit to the last 20 messages to prevent context overflow.
+                    // In long Test Lab sessions, old tool results accumulate and
+                    // increase token cost + hallucination risk.
+                    messages: [...messages, userMessage].slice(-20).map((m) => ({
                         role: m.role,
                         content: m.content,
                     })),
@@ -127,6 +139,59 @@ export function useTestLabStream() {
                 let accReasoning = "";
                 const toolCalls: ToolCallEvent[] = [];
                 let finalMetrics: MetricsData | null = null;
+                const streamEvents: StreamEvent[] = [];
+
+                /** Helper to push a stream event and update the message */
+                const pushEvent = (event: StreamEvent) => {
+                    streamEvents.push(event);
+                    setMessages((prev) =>
+                        prev.map((m) =>
+                            m.id === assistantMessageId
+                                ? { ...m, streamEvents: [...streamEvents] }
+                                : m
+                        )
+                    );
+                };
+
+                /** Update thinking event — merge content into the last thinking event or create new */
+                const appendThinking = (chunk: string) => {
+                    accReasoning += chunk;
+                    // Find or create thinking event
+                    const lastThinking = streamEvents.findLast(
+                        (e) => e.type === "thinking"
+                    );
+                    if (lastThinking && lastThinking.type === "thinking" && !lastThinking.done) {
+                        lastThinking.content = accReasoning;
+                    } else {
+                        streamEvents.push({ type: "thinking", content: accReasoning, done: false });
+                    }
+                    setMessages((prev) =>
+                        prev.map((m) =>
+                            m.id === assistantMessageId
+                                ? { ...m, reasoning: accReasoning, streamEvents: [...streamEvents] }
+                                : m
+                        )
+                    );
+                };
+
+                /** Finalize thinking block */
+                const finalizeThinking = () => {
+                    if (accReasoning) {
+                        const lastThinking = streamEvents.findLast(
+                            (e) => e.type === "thinking"
+                        );
+                        if (lastThinking && lastThinking.type === "thinking") {
+                            lastThinking.done = true;
+                        }
+                        setMessages((prev) =>
+                            prev.map((m) =>
+                                m.id === assistantMessageId
+                                    ? { ...m, streamEvents: [...streamEvents] }
+                                    : m
+                            )
+                        );
+                    }
+                };
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -144,30 +209,37 @@ export function useTestLabStream() {
                             const parsed = JSON.parse(data);
 
                             if (parsed.type === "content" && parsed.content) {
+                                // First content after reasoning → finalize thinking
+                                if (accReasoning && !streamEvents.some(e => e.type === "thinking" && e.type === "thinking" && (e as any).done)) {
+                                    finalizeThinking();
+                                }
                                 accContent += parsed.content;
                                 setState((s) => ({ ...s, content: accContent }));
+
+                                // Find or create the last content event
+                                const lastContent = streamEvents.findLast(e => e.type === "content");
+                                if (lastContent && lastContent.type === "content") {
+                                    lastContent.content = accContent;
+                                } else {
+                                    streamEvents.push({ type: "content", content: accContent });
+                                }
                                 setMessages((prev) =>
                                     prev.map((m) =>
                                         m.id === assistantMessageId
-                                            ? { ...m, content: accContent }
+                                            ? { ...m, content: accContent, streamEvents: [...streamEvents] }
                                             : m
                                     )
                                 );
                             }
 
                             if (parsed.type === "reasoning" && parsed.reasoning) {
-                                accReasoning += parsed.reasoning;
+                                appendThinking(parsed.reasoning);
                                 setState((s) => ({ ...s, reasoning: accReasoning }));
-                                setMessages((prev) =>
-                                    prev.map((m) =>
-                                        m.id === assistantMessageId
-                                            ? { ...m, reasoning: accReasoning }
-                                            : m
-                                    )
-                                );
                             }
 
                             if (parsed.type === "tool_call") {
+                                // Finalize thinking before tool calls
+                                finalizeThinking();
                                 const tc: ToolCallEvent = {
                                     id: parsed.id || `tc-${Date.now()}`,
                                     name: parsed.name,
@@ -178,6 +250,12 @@ export function useTestLabStream() {
                                 };
                                 toolCalls.push(tc);
                                 setState((s) => ({ ...s, toolCalls: [...toolCalls] }));
+                                pushEvent({
+                                    type: "tool_call",
+                                    id: tc.id,
+                                    name: tc.name,
+                                    arguments: tc.arguments,
+                                });
                             }
 
                             if (parsed.type === "tool_result") {
@@ -187,6 +265,13 @@ export function useTestLabStream() {
                                     existing.durationMs = parsed.durationMs || null;
                                     setState((s) => ({ ...s, toolCalls: [...toolCalls] }));
                                 }
+                                pushEvent({
+                                    type: "tool_result",
+                                    id: parsed.tool_call_id || parsed.id,
+                                    name: parsed.name,
+                                    result: parsed.result,
+                                    durationMs: parsed.durationMs || null,
+                                });
                             }
 
                             if (parsed.type === "metrics" && parsed.metrics) {
@@ -205,6 +290,9 @@ export function useTestLabStream() {
                         }
                     }
                 }
+
+                // Finalize thinking if still open
+                finalizeThinking();
 
                 // Store final tool calls on the message
                 if (toolCalls.length > 0) {

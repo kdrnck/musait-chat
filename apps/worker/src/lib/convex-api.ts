@@ -24,8 +24,7 @@ export const api = {
     listByTenant: ref("conversations:listByTenant"),
     listHandoffs: ref("conversations:listHandoffs"),
     create: ref("conversations:create"),
-    bindToTenant: ref("conversations:bindToTenant"), // DEPRECATED: use bindToTenantAndCreateNew
-    bindToTenantAndCreateNew: ref("conversations:bindToTenantAndCreateNew"), // NEW: immutable tenant binding
+    bindToTenantAndCreateNew: ref("conversations:bindToTenantAndCreateNew"), // Immutable tenant binding (archives old, creates new)
     update: ref("conversations:update"),
     updateStatus: ref("conversations:updateStatus"),
     updateSummary: ref("conversations:updateSummary"),

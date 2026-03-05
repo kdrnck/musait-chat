@@ -7,6 +7,7 @@ export type AgentToolName =
   | "get_business_info"
   | "list_customer_appointments"
   | "view_available_slots"
+  | "check_specific_slot"
   | "create_appointment"
   | "create_appointments_batch"
   | "cancel_appointment"

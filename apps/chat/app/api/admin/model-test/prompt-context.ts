@@ -60,20 +60,18 @@ export async function resolveModelTestPromptContext(
   let customerName = "";
   let customerProfileText = "Müşteri profili mevcut değil.";
 
+  // ── Fetch tenant, services, staff in parallel ──────────────────────────
+  // NOTE: Column selection matches Worker's getBusinessInfo / listServices / listStaff exactly.
   const [{ data: tenantRow }, { data: servicesRows }, { data: staffRows }] =
     await Promise.all([
       supabase
         .from("tenants")
-        .select(
-          "id,name,address,phone,maps_link,working_days,working_hours_start,working_hours_end,description"
-        )
+        .select("id,name,slug,phone,address,maps_link,description,working_days,working_hours_start,working_hours_end")
         .eq("id", tenantId)
         .maybeSingle(),
       supabase
         .from("services")
-        .select(
-          "id,name,duration_minutes,price,is_active,service_staff(staff:staff(id,name,is_active))"
-        )
+        .select("id,name,duration_minutes,duration_blocks,price,is_active")
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("name"),
@@ -85,48 +83,68 @@ export async function resolveModelTestPromptContext(
         .order("name"),
     ]);
 
+  // ── Tenant info — matches Worker getBusinessInfo format exactly ──────────
   if (tenantRow) {
     tenantName = tenantRow.name || tenantName;
     const infoParts: string[] = [
-      `Business Name: ${tenantRow.name || "N/A"}`,
-      `Business ID: ${tenantRow.id || tenantId}`,
+      `İşletme Adı: ${tenantRow.name || "N/A"}`,
+      `İşletme ID: ${tenantRow.id || tenantId}`,
     ];
-    if (tenantRow.address) infoParts.push(`Address: ${tenantRow.address}`);
-    if (tenantRow.phone) infoParts.push(`Phone: ${tenantRow.phone}`);
-    if (tenantRow.maps_link) infoParts.push(`Maps Link: ${tenantRow.maps_link}`);
-    if (tenantRow.working_days)
-      infoParts.push(`Working Days: ${tenantRow.working_days}`);
+    if (tenantRow.slug) infoParts.push(`Slug: ${tenantRow.slug}`);
+    if (tenantRow.phone) infoParts.push(`Telefon: ${tenantRow.phone}`);
+    if (tenantRow.address) infoParts.push(`Adres: ${tenantRow.address}`);
+    if (tenantRow.maps_link) infoParts.push(`Harita / Website: ${tenantRow.maps_link}`);
+    if (tenantRow.description) infoParts.push(`Açıklama: ${tenantRow.description}`);
+    if (tenantRow.working_days) infoParts.push(`Çalışma Günleri: ${tenantRow.working_days}`);
     if (tenantRow.working_hours_start && tenantRow.working_hours_end) {
-      infoParts.push(
-        `Working Hours: ${tenantRow.working_hours_start} - ${tenantRow.working_hours_end}`
-      );
+      infoParts.push(`Çalışma Saatleri: ${tenantRow.working_hours_start} - ${tenantRow.working_hours_end}`);
     }
-    if (tenantRow.description) infoParts.push(`Description: ${tenantRow.description}`);
     businessInfoText = infoParts.join("\n");
   }
 
+  // ── Services ───────────────────────────────────────────────────────────
   if (Array.isArray(servicesRows) && servicesRows.length > 0) {
+    // Fetch staff per service via service_staff join table
+    const serviceIds = servicesRows.map((s: any) => s.id);
+    const { data: serviceStaffRows } = await supabase
+      .from("service_staff")
+      .select("service_id, staff_id, staff(id, name, is_active)")
+      .in("service_id", serviceIds);
+
+    // Build map: serviceId → staff names
+    const serviceStaffMap: Record<string, string[]> = {};
+    if (Array.isArray(serviceStaffRows)) {
+      for (const row of serviceStaffRows as any[]) {
+        const staffInfo = row.staff;
+        if (!staffInfo || staffInfo.is_active === false) continue;
+        if (!serviceStaffMap[row.service_id]) serviceStaffMap[row.service_id] = [];
+        serviceStaffMap[row.service_id].push(staffInfo.name);
+      }
+    }
+
     servicesListText = servicesRows
       .map((service: any) => {
-        const staffNames =
-          service.service_staff
-            ?.map((row: any) => row.staff)
-            .filter((staff: any) => staff?.name && staff?.is_active !== false)
-            .map((staff: any) => staff.name)
-            .join(", ") || "Yok";
-        return `- ${service.name} (${service.duration_minutes || 30} dk${
-          service.price ? `, ${service.price} TL` : ""
-        })\n  ID: ${service.id}\n  Çalışanlar: ${staffNames}`;
+        // Use duration_blocks fallback (same as Worker logic)
+        const duration = service.duration_minutes ||
+          (typeof service.duration_blocks === "number" ? service.duration_blocks * 15 : 30);
+        const staffNames = (serviceStaffMap[service.id] || []).join(", ") || "Yok";
+        return `- ${service.name} (${duration} dk${service.price ? `, ${service.price} TL` : ""
+          })\n  ID: ${service.id}\n  Çalışanlar: ${staffNames}`;
       })
       .join("\n\n");
   }
 
+  // ── Staff list ─────────────────────────────────────────────────────────
   if (Array.isArray(staffRows) && staffRows.length > 0) {
     staffListText = staffRows
-      .map((staff: any) => `- ${staff.name}${staff.title ? ` (${staff.title})` : ""}\n  ID: ${staff.id}`)
+      .map((staff: any) => {
+        const titlePart = staff.title ? ` (${staff.title})` : "";
+        return `- ${staff.name}${titlePart}\n  ID: ${staff.id}`;
+      })
       .join("\n");
   }
 
+  // ── Customer lookup ────────────────────────────────────────────────────
   const phoneVariants = normalizePhoneVariants(phone || "+905550000000");
   const { data: customerRow } = await supabase
     .from("customers")
@@ -140,10 +158,9 @@ export async function resolveModelTestPromptContext(
     customerName = customerRow.name || "";
     const { data: appointments } = await supabase
       .from("appointments")
-      .select(
-        "start_time,status,services(name),staff(name)"
-      )
+      .select("start_time,status,services(name),staff(name)")
       .eq("customer_id", customerRow.id)
+      .eq("tenant_id", tenantId)
       .order("start_time", { ascending: false })
       .limit(5);
 
@@ -154,18 +171,20 @@ export async function resolveModelTestPromptContext(
           .filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
       )
     );
-    const preferredStaff = Array.from(
-      new Set(
-        (appointments || [])
-          .map((row: any) => row.staff?.name)
-          .filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
-      )
-    );
+
+    // Build recent appointment lines for prompt
+    const appointmentLines = (appointments || []).map((row: any) => {
+      const date = new Date(row.start_time).toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" });
+      const time = new Date(row.start_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+      const svc = row.services?.name || "N/A";
+      const staff = row.staff?.name || "";
+      return `- ${date} ${time} | ${svc}${staff ? ` | ${staff}` : ""} | ${row.status}`;
+    });
 
     const profileParts: string[] = [];
-    if (preferredStaff.length > 0) profileParts.push(`Preferred Staff: ${preferredStaff.join(", ")}`);
-    if (recentServices.length > 0) profileParts.push(`Recent Services: ${recentServices.join(", ")}`);
-    if (customerRow.name) profileParts.push(`Customer Name: ${customerRow.name}`);
+    if (customerRow.name) profileParts.push(`Müşteri Adı: ${customerRow.name}`);
+    if (recentServices.length > 0) profileParts.push(`Son Aldığı Hizmetler: ${recentServices.join(", ")}`);
+    if (appointmentLines.length > 0) profileParts.push(`Recent Appointments:\n${appointmentLines.join("\n")}`);
     customerProfileText = profileParts.join("\n") || customerProfileText;
   }
 

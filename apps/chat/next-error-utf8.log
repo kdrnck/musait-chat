@@ -1,0 +1,559 @@
+﻿node.exe : ÔÜá Warning:
+ Next.js inferred your 
+workspace root, but it 
+may not be correct.
+At line:1 char:1
++ & "C:\Program Files\n
+odejs/node.exe" "C:\Use
+rs\kado\AppData\Roaming
+\n ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (ÔÜá Warning:    
+ Ne...not be correc    
+t.:String) [], Rem    o
+teException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+ We detected multiple l
+ockfiles and selected t
+he directory of C:\User
+s\kado\package-lock.jso
+n as the root directory
+.
+ To silence this warnin
+g, set `turbopack.root`
+ in your Next.js config
+, or consider removing 
+one of the lockfiles if
+ it's not needed.
+   See https://nextjs.o
+rg/docs/app/api-referen
+ce/config/next-config-j
+s/turbopack#root-direct
+ory for more informatio
+n.
+ Detected additional lo
+ckfiles: 
+   * C:\Users\kado\Desk
+top\code\musait-chat\ap
+ps\chat\pnpm-lock.yaml
+   * C:\Users\kado\Desk
+top\code\musait-chat\pn
+pm-lock.yaml
+
+Ôû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env
+
+ÔÜá The "middleware" fi
+le convention is deprec
+ated. Please use "proxy
+" instead. Learn more: 
+https://nextjs.org/docs
+/messages/middleware-to
+-proxy
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build 
+failed with 4 errors:
+./Desktop/code/musait-c
+hat/packages/tools/src/
+create-appointment.ts:2
+:1
+Module not found: Can't
+ resolve './customers.j
+s'
+[0m [90m 1 |[39m [3
+6mimport[39m type { [
+33mSupabaseConfig[39m 
+} [36mfrom[39m [32m"
+./customers.js"[39m[3
+3m;[39m
+[31m[1m>[22m[39m[9
+0m 2 |[39m [36mimport
+[39m {
+ [90m   |[39m [31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m
+[31m[1m>[22m[39m[9
+0m 3 |[39m     getCust
+omerByPhone[33m,[39m
+ [90m   |[39m [31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m
+[31m[1m>[22m[39m[9
+0m 4 |[39m     createC
+ustomer[33m,[39m
+ [90m   |[39m [31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m
+[31m[1m>[22m[39m[9
+0m 5 |[39m     updateC
+ustomerNameInDb[33m,[
+39m
+ [90m   |[39m [31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m
+[31m[1m>[22m[39m[9
+0m 6 |[39m } [36mfrom
+[39m [32m"./customers
+.js"[39m[33m;[39m
+ [90m   |[39m [31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m
+ [90m 7 |[39m [36mim
+port[39m { validateToo
+lArgs[33m,[39m [33mC
+REATE_APPOINTMENT_FIELD
+S[39m } [36mfrom[39m
+ [32m"./validate.js"[
+39m[33m;[39m
+ [90m 8 |[39m
+ [90m 9 |[39m [36min
+terface[39m [33mToolC
+ontext[39m {[0m
+
+
+
+Import trace:
+  App Route:
+    ./Desktop/code/musa
+it-chat/packages/tools/
+src/create-appointment.
+ts
+    ./Desktop/code/musa
+it-chat/apps/chat/app/a
+pi/admin/model-test/rou
+te.ts
+
+https://nextjs.org/docs
+/messages/module-not-fo
+und
+
+
+./Desktop/code/musait-c
+hat/packages/tools/src/
+list-customer-appointme
+nts.ts:2:1
+Module not found: Can't
+ resolve './customers.j
+s'
+[0m [90m 1 |[39m [3
+6mimport[39m type { [
+33mSupabaseConfig[39m 
+} [36mfrom[39m [32m"
+./customers.js"[39m[3
+3m;[39m
+[31m[1m>[22m[39m[9
+0m 2 |[39m [36mimport
+[39m { getCustomerByPh
+one } [36mfrom[39m [
+32m"./customers.js"[39
+m[33m;[39m
+ [90m   |[39m [31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36min
+terface[39m [33mToolC
+ontext[39m {
+ [90m 5 |[39m     ten
+antId[33m:[39m string
+[33m;[39m[0m
+
+
+
+Import trace:
+  App Route:
+    ./Desktop/code/musa
+it-chat/packages/tools/
+src/list-customer-appoi
+ntments.ts
+    ./Desktop/code/musa
+it-chat/apps/chat/app/a
+pi/admin/model-test/rou
+te.ts
+
+https://nextjs.org/docs
+/messages/module-not-fo
+und
+
+
+./Desktop/code/musait-c
+hat/packages/tools/src/
+create-appointment.ts:7
+:1
+Module not found: Can't
+ resolve './validate.js
+'
+[0m [90m  5 |[39m   
+  updateCustomerNameInD
+b[33m,[39m
+ [90m  6 |[39m } [36
+mfrom[39m [32m"./cust
+omers.js"[39m[33m;[3
+9m
+[31m[1m>[22m[39m[9
+0m  7 |[39m [36mimpor
+t[39m { validateToolAr
+gs[33m,[39m [33mCREA
+TE_APPOINTMENT_FIELDS[
+39m } [36mfrom[39m [
+32m"./validate.js"[39m
+[33m;[39m
+ [90m    |[39m [31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m
+ [90m  8 |[39m
+ [90m  9 |[39m [36mi
+nterface[39m [33mTool
+Context[39m {
+ [90m 10 |[39m     te
+nantId[33m:[39m strin
+g[33m;[39m[0m
+
+
+
+Import trace:
+  App Route:
+    ./Desktop/code/musa
+it-chat/packages/tools/
+src/create-appointment.
+ts
+    ./Desktop/code/musa
+it-chat/apps/chat/app/a
+pi/admin/model-test/rou
+te.ts
+
+https://nextjs.org/docs
+/messages/module-not-fo
+und
+
+
+./Desktop/code/musait-c
+hat/packages/tools/src/
+view-slots.ts:2:1
+Module not found: Can't
+ resolve './validate.js
+'
+[0m [90m 1 |[39m [3
+6mimport[39m type { [
+33mSupabaseConfig[39m 
+} [36mfrom[39m [32m"
+./customers.js"[39m[3
+3m;[39m
+[31m[1m>[22m[39m[9
+0m 2 |[39m [36mimport
+[39m { validateToolArg
+s[33m,[39m [33mVIEW_
+SLOTS_FIELDS[39m } [3
+6mfrom[39m [32m"./val
+idate.js"[39m[33m;[3
+9m
+ [90m   |[39m [31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[
+39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[3
+1m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36min
+terface[39m [33mToolC
+ontext[39m {
+ [90m 5 |[39m     ten
+antId[33m:[39m string
+[33m;[39m[0m
+
+
+
+Import trace:
+  App Route:
+    ./Desktop/code/musa
+it-chat/packages/tools/
+src/view-slots.ts
+    ./Desktop/code/musa
+it-chat/apps/chat/app/a
+pi/admin/model-test/rou
+te.ts
+
+https://nextjs.org/docs
+/messages/module-not-fo
+und
+
+
+    at <unknown> (./Des
+ktop/code/musait-chat/p
+ackages/tools/src/creat
+e-appointment.ts:2:1)
+    at <unknown> (https
+://nextjs.org/docs/mess
+ages/module-not-found)
+    at <unknown> (./Des
+ktop/code/musait-chat/p
+ackages/tools/src/list-
+customer-appointments.t
+s:2:1)
+    at <unknown> (https
+://nextjs.org/docs/mess
+ages/module-not-found)
+    at <unknown> (./Des
+ktop/code/musait-chat/p
+ackages/tools/src/creat
+e-appointment.ts:7:1)
+    at <unknown> (https
+://nextjs.org/docs/mess
+ages/module-not-found)
+    at <unknown> (./Des
+ktop/code/musait-chat/p
+ackages/tools/src/view-
+slots.ts:2:1)
+    at <unknown> (https
+://nextjs.org/docs/mess
+ages/module-not-found)

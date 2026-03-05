@@ -1,0 +1,102 @@
+﻿node.exe : ÔÜá Warning:
+ Next.js inferred your 
+workspace root, but it 
+may not be correct.
+At line:1 char:1
++ & "C:\Program Files\n
+odejs/node.exe" "C:\Use
+rs\kado\AppData\Roaming
+\n ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (ÔÜá Warning:    
+ Ne...not be correc    
+t.:String) [], Rem    o
+teException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+ We detected multiple l
+ockfiles and selected t
+he directory of C:\User
+s\kado\package-lock.jso
+n as the root directory
+.
+ To silence this warnin
+g, set `turbopack.root`
+ in your Next.js config
+, or consider removing 
+one of the lockfiles if
+ it's not needed.
+   See https://nextjs.o
+rg/docs/app/api-referen
+ce/config/next-config-j
+s/turbopack#root-direct
+ory for more informatio
+n.
+ Detected additional lo
+ckfiles: 
+   * C:\Users\kado\Desk
+top\code\musait-chat\ap
+ps\chat\pnpm-lock.yaml
+   * C:\Users\kado\Desk
+top\code\musait-chat\pn
+pm-lock.yaml
+
+Ôû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env
+
+ÔÜá The "middleware" fi
+le convention is deprec
+ated. Please use "proxy
+" instead. Learn more: 
+https://nextjs.org/docs
+/messages/middleware-to
+-proxy
+  Creating an optimized production build ...
+Ô£ô Compiled successfully in 7.2s
+  Running TypeScript ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/24) ...
+  Generating static pages using 11 workers (6/24) 
+  Generating static pages using 11 workers (12/24) 
+  Generating static pages using 11 workers (18/24) 
+Ô£ô Generating static pages using 11 workers (24/24) in 338.9ms
+  Finalizing page optimization ...
+
+Route (app)
+Ôöî ãÆ /
+Ôö£ Ôùï /_not-found
+Ôö£ ãÆ /admin
+Ôö£ ãÆ /admin/login
+Ôö£ ãÆ /api/admin/global-settings
+Ôö£ ãÆ /api/admin/model-test
+Ôö£ ãÆ /api/admin/model-test/resolve-context
+Ôö£ ãÆ /api/admin/model-tiers
+Ôö£ ãÆ /api/admin/models
+Ôö£ ãÆ /api/admin/prompt-templates
+Ôö£ ãÆ /api/admin/prompt-templates/[id]
+Ôö£ ãÆ /api/admin/router-agent-prompt
+Ôö£ ãÆ /api/admin/tenant-system-prompt
+Ôö£ ãÆ /api/admin/tenant-tier
+Ôö£ ãÆ /api/admin/tenants
+Ôö£ ãÆ /api/admin/test-identities
+Ôö£ ãÆ /api/admin/test-sessions
+Ôö£ ãÆ /api/customer-names
+Ôö£ ãÆ /api/customer-profile
+Ôö£ ãÆ /api/models
+Ôö£ ãÆ /api/tenant-ai-settings
+Ôö£ Ôùï /design-showcase
+Ôöö ãÆ /login
+
+
+ãÆ Proxy (Middleware)
+
+Ôùï  (Static)   prerendered as static content
+ãÆ  (Dynamic)  server-rendered on demand
+

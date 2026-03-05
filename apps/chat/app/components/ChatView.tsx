@@ -6,7 +6,13 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { useRef, useEffect, useState, useCallback } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatInput, { OptimisticMessage } from "./ChatInput";
-import { ChevronLeft, Info, Calendar, User, Link2, ChevronDown, Bot, Clock } from "lucide-react";
+import { ChevronLeft, Info, Calendar, User, Link2, ChevronDown, Bot, Clock, History, Archive } from "lucide-react";
+
+function formatSessionDate(ts: number): string {
+    return new Date(ts).toLocaleDateString("tr-TR", {
+        day: "numeric", month: "long", year: "numeric",
+    });
+}
 
 export default function ChatView({
     conversationId,
@@ -26,9 +32,13 @@ export default function ChatView({
     allTenants?: { id: string; name: string; logo_url: string | null }[];
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
+    const activeSectionRef = useRef<HTMLDivElement>(null);
     const [showReassign, setShowReassign] = useState(false);
     const [optimisticMessages, setOptimisticMessages] = useState<OptimisticMessage[]>([]);
-    const bindToTenant = useMutation(api.conversations.bindToTenant);
+    const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(null);
+    const [olderSessionsEnabled, setOlderSessionsEnabled] = useState(false);
+    const updateConversation = useMutation(api.conversations.update);
+    const prevMessagesLengthRef = useRef(0);
 
     // Query data first before using in effects
     const conversation = useQuery(
@@ -41,8 +51,36 @@ export default function ChatView({
         conversationId ? { conversationId, isAdmin: isAdmin ?? false } : "skip"
     );
 
-    // Handle optimistic message sending
-    const handleOptimisticSend = useCallback((message: OptimisticMessage, clearCallback: () => void) => {
+    // Lazy: only fires after user clicks "Load older sessions"
+    const olderSessions = useQuery(
+        api.conversations.getArchivedSessionsWithMessages,
+        olderSessionsEnabled && conversation?.tenantId && conversation?.customerPhone
+            ? { customerPhone: conversation.customerPhone, tenantId: conversation.tenantId }
+            : "skip"
+    );
+
+    // Reset per-conversation state when switching conversations
+    useEffect(() => {
+        setOlderSessionsEnabled(false);
+        setCustomerDisplayName(null);
+        prevMessagesLengthRef.current = 0;
+    }, [conversationId]);
+
+    // Fetch Supabase customer name
+    useEffect(() => {
+        if (!conversation?.customerPhone) return;
+        fetch("/api/customer-names", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phones: [conversation.customerPhone] }),
+        })
+            .then(res => res.json())
+            .then(data => {
+                const name = data.names?.[conversation.customerPhone];
+                if (name) setCustomerDisplayName(name);
+            })
+            .catch(() => { });
+    }, [conversation?.customerPhone, conversation?.tenantId]);    const handleOptimisticSend = useCallback((message: OptimisticMessage, clearCallback: () => void) => {
         setOptimisticMessages(prev => [...prev, message]);
         // Auto-clear after 5 seconds (real message should arrive before then via Convex)
         setTimeout(() => {
@@ -71,15 +109,27 @@ export default function ChatView({
 
     const handleReassign = async (tenantId: string) => {
         if (!conversationId) return;
-        await bindToTenant({ id: conversationId, tenantId });
+        await updateConversation({ id: conversationId, tenantId });
         setShowReassign(false);
     };
 
+    // Scroll to bottom ONLY when new messages arrive (not when older sessions load)
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        if (!messages) return;
+        const newLen = messages.length;
+        if (newLen > prevMessagesLengthRef.current) {
+            scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
         }
+        prevMessagesLengthRef.current = newLen;
     }, [messages]);
+
+    // When older sessions finish loading, scroll the active-session divider into view
+    const olderSessionsLoaded = olderSessions !== undefined && olderSessionsEnabled;
+    useEffect(() => {
+        if (olderSessionsLoaded && activeSectionRef.current) {
+            activeSectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, [olderSessionsLoaded]);
 
     if (!conversationId) {
         return (
@@ -177,7 +227,7 @@ export default function ChatView({
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-2">
                             <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)] leading-none">
-                                {conversation.customerPhone}
+                                {customerDisplayName || conversation.customerPhone}
                             </h2>
                             {isHandoff && <span className="badge badge--handoff">İnsan Devraldı</span>}
                             {hasAttention && <span className="badge badge--attention">Hata</span>}
@@ -253,6 +303,73 @@ export default function ChatView({
                 style={{ scrollBehavior: "smooth" }}
             >
                 <div className="h-2" />
+
+                {/* Load older sessions button — shown at very top, hidden once loaded */}
+                {!olderSessionsEnabled && conversation.tenantId && (
+                    <div className="flex justify-center mb-2">
+                        <button
+                            onClick={() => setOlderSessionsEnabled(true)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] hover:border-[var(--color-brand-dim)] hover:text-[var(--color-text-secondary)] transition-all"
+                        >
+                            <History size={13} />
+                            Eski sohbetleri yükle
+                        </button>
+                    </div>
+                )}
+
+                {/* Older sessions loading spinner */}
+                {olderSessionsEnabled && olderSessions === undefined && (
+                    <div className="flex justify-center py-6">
+                        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin border-[var(--color-brand-dim)]" />
+                    </div>
+                )}
+
+                {/* Older sessions — rendered oldest first above the active session */}
+                {olderSessionsEnabled && olderSessions && olderSessions.length === 0 && (
+                    <div className="flex items-center justify-center gap-2 py-4 text-[12px] text-[var(--color-text-muted)]">
+                        <Archive size={13} />
+                        <span>Bu işletme için daha eski sohbet yok.</span>
+                    </div>
+                )}
+
+                {olderSessionsEnabled && olderSessions && olderSessions.length > 0 && (
+                    <>
+                        {olderSessions.map((session) => (
+                            <div key={session.conversationId}>
+                                {/* Session date divider */}
+                                <div className="flex items-center gap-3 py-3">
+                                    <div className="flex-1 h-px bg-[var(--color-border)]" />
+                                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[11px] font-medium text-[var(--color-text-muted)]">
+                                        <Archive size={11} />
+                                        {formatSessionDate(session.createdAt)}
+                                    </div>
+                                    <div className="flex-1 h-px bg-[var(--color-border)]" />
+                                </div>
+                                {/* Messages from this archived session */}
+                                <div className="space-y-1.5">
+                                    {session.messages.map((m: any, i: number) => (
+                                        <MessageBubble
+                                            key={m._id}
+                                            message={m}
+                                            debugMode={debugMode}
+                                            prevRole={i > 0 ? session.messages[i - 1].role : null}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+
+                        {/* Active session divider */}
+                        <div ref={activeSectionRef} className="flex items-center gap-3 py-3 my-2">
+                            <div className="flex-1 h-px bg-[var(--color-brand-dim)]" />
+                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--color-brand-light)] border border-[var(--color-brand-dim)] text-[11px] font-semibold text-[var(--color-brand)]">
+                                <Bot size={11} />
+                                Aktif Oturum
+                            </div>
+                            <div className="flex-1 h-px bg-[var(--color-brand-dim)]" />
+                        </div>
+                    </>
+                )}
 
                 {!messages ? (
                     <div className="flex justify-center py-20">
