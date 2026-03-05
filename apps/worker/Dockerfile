@@ -12,6 +12,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 # 2) Copy shared package manifest
 COPY packages/shared/package.json ./packages/shared/
 
+# 2b) Copy tools package manifest
+COPY packages/tools/package.json ./packages/tools/
+
 # 3) Copy worker manifest
 COPY apps/worker/package.json ./apps/worker/
 
@@ -21,6 +24,9 @@ RUN pnpm install --no-frozen-lockfile
 # 5) Copy shared package source & build
 COPY packages/shared/ ./packages/shared/
 RUN pnpm --filter @musait/shared build
+
+# 5b) Copy tools package source
+COPY packages/tools/ ./packages/tools/
 
 # 6) Copy worker source & build
 COPY apps/worker/ ./apps/worker/
@@ -40,6 +46,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 
 # Copy built shared package
 COPY --from=builder /app/packages/shared/ ./packages/shared/
+
+# Copy tools package
+COPY --from=builder /app/packages/tools/ ./packages/tools/
 
 # Copy built worker
 COPY --from=builder /app/apps/worker/package.json ./apps/worker/
