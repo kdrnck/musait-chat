@@ -25,8 +25,9 @@ RUN pnpm install --no-frozen-lockfile
 COPY packages/shared/ ./packages/shared/
 RUN pnpm --filter @musait/shared build
 
-# 5b) Copy tools package source
+# 5b) Copy tools package source & build
 COPY packages/tools/ ./packages/tools/
+RUN pnpm --filter @musait/tools build
 
 # 6) Copy worker source & build
 COPY apps/worker/ ./apps/worker/
