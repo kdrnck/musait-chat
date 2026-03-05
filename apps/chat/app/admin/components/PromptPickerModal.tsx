@@ -24,9 +24,11 @@ interface PromptPickerModalProps {
     onSelect: (promptText: string) => void;
     onClose: () => void;
     category?: string;
+    /** Override the API endpoint used to fetch templates. Defaults to /api/admin/prompt-templates */
+    apiBase?: string;
 }
 
-export default function PromptPickerModal({ onSelect, onClose, category }: PromptPickerModalProps) {
+export default function PromptPickerModal({ onSelect, onClose, category, apiBase = "/api/admin/prompt-templates" }: PromptPickerModalProps) {
     const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -37,8 +39,8 @@ export default function PromptPickerModal({ onSelect, onClose, category }: Promp
         const load = async () => {
             try {
                 const url = category
-                    ? `/api/admin/prompt-templates?category=${category}`
-                    : "/api/admin/prompt-templates";
+                    ? `${apiBase}?category=${category}`
+                    : apiBase;
                 const res = await fetch(url, { cache: "no-store" });
                 if (res.ok) {
                     setPrompts(await res.json());
@@ -50,7 +52,7 @@ export default function PromptPickerModal({ onSelect, onClose, category }: Promp
             }
         };
         void load();
-    }, [category]);
+    }, [category, apiBase]);
 
     const filtered = useMemo(() => {
         return prompts.filter((p) => {

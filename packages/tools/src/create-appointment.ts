@@ -13,6 +13,30 @@ interface ToolContext {
     customerName?: string;
 }
 
+async function resolveProfileIdByPhone(
+    config: SupabaseConfig,
+    customerPhone: string
+): Promise<string | null> {
+    const url = new URL(`${config.url}/rest/v1/profiles`);
+    url.searchParams.set("phone_e164", `eq.${customerPhone}`);
+    url.searchParams.set("select", "id");
+    url.searchParams.set("limit", "1");
+
+    const response = await fetch(url.toString(), {
+        headers: {
+            apikey: config.serviceKey,
+            Authorization: `Bearer ${config.serviceKey}`,
+        },
+    });
+
+    if (!response.ok) {
+        return null;
+    }
+
+    const rows = (await response.json()) as Array<{ id?: string }>;
+    return rows[0]?.id ?? null;
+}
+
 /**
  * create_appointment - Creates a new appointment via Supabase REST API.
  *
@@ -116,21 +140,30 @@ export async function createAppointment(
     const startDate = new Date(startTime);
     const endDate = new Date(startDate.getTime() + duration * 60 * 1000);
 
+    const profileId = await resolveProfileIdByPhone(config, ctx.customerPhone);
+
+    const appointmentPayload: Record<string, unknown> = {
+        tenant_id: ctx.tenantId,
+        service_id: serviceId,
+        staff_id: staffId,
+        customer_id: customerId,
+        start_time: startDate.toISOString(),
+        end_time: endDate.toISOString(),
+        status: "booked",
+        source: "whatsapp",
+        notes: `WhatsApp Ã¼zerinden oluÅŸturuldu (${ctx.customerPhone})`,
+    };
+
+    // Keep ownership linkage for profile history screens that rely on created_by.
+    if (profileId) {
+        appointmentPayload.created_by = profileId;
+    }
+
     // 3. Create appointment
     const apptRes = await fetch(`${config.url}/rest/v1/appointments`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-            tenant_id: ctx.tenantId,
-            service_id: serviceId,
-            staff_id: staffId,
-            customer_id: customerId,
-            start_time: startDate.toISOString(),
-            end_time: endDate.toISOString(),
-            status: "booked",
-            source: "whatsapp",
-            notes: `WhatsApp Ã¼zerinden oluÅŸturuldu (${ctx.customerPhone})`,
-        }),
+        body: JSON.stringify(appointmentPayload),
     });
 
     if (!apptRes.ok) {

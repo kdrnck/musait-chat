@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
+    "dev:turbo": "next dev --turbopack",
+    "clean:cache": "node -e \"const fs=require('node:fs'); for (const p of ['.next','tsconfig.tsbuildinfo']) fs.rmSync(p,{recursive:true,force:true});\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

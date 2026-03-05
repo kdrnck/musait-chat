@@ -10,7 +10,7 @@ export const getActiveByPhone = query({
     inboundPhoneNumberId: v.string(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const byInbound = await ctx.db
       .query("conversations")
       .withIndex("by_customer_phone_inbound", (q) =>
         q
@@ -19,6 +19,19 @@ export const getActiveByPhone = query({
           .eq("status", "active")
       )
       .first();
+
+    if (byInbound) return byInbound;
+
+    // Backward-compat fallback: if exactly one active conversation exists for this
+    // customer, use it even when inboundPhoneNumberId was missing in old records.
+    const activeByCustomer = await ctx.db
+      .query("conversations")
+      .withIndex("by_customer_phone", (q) =>
+        q.eq("customerPhone", args.customerPhone).eq("status", "active")
+      )
+      .collect();
+
+    return activeByCustomer.length === 1 ? activeByCustomer[0] : null;
   },
 });
 
@@ -261,6 +274,16 @@ export const bindToTenantAndCreateNew = mutation({
     inboundPhoneNumberId: v.string(),
   },
   handler: async (ctx, args) => {
+    const oldConversation = await ctx.db.get(args.oldConversationId);
+    if (!oldConversation) {
+      throw new Error("Old conversation not found");
+    }
+
+    // Keep inbound routing stable across tenant switches.
+    // Some legacy flows may pass empty inboundPhoneNumberId.
+    const inboundPhoneNumberId =
+      args.inboundPhoneNumberId || oldConversation.inboundPhoneNumberId || "";
+
     // 1. Archive the old lobby conversation
     await ctx.db.patch(args.oldConversationId, { status: "archived" });
 
@@ -269,7 +292,7 @@ export const bindToTenantAndCreateNew = mutation({
     return await ctx.db.insert("conversations", {
       tenantId: args.tenantId,
       customerPhone: args.customerPhone,
-      inboundPhoneNumberId: args.inboundPhoneNumberId,
+      inboundPhoneNumberId,
       status: "active",
       lastMessageAt: now,
       lastMessageContent: undefined,

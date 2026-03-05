@@ -84,7 +84,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
         });
 
         await convex.mutation(api.messages.create, {
-          conversationId: job.conversationId as any,
+          conversationId: conversation._id,
           role: "agent",
           content: SESSION_PROMPTS.ended,
           status: "done",
@@ -209,7 +209,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
             const updateReply = `Üzgünüm, kaydınızı *${requestedName}* olarak güncelledim.`;
 
             await convex.mutation(api.messages.create, {
-              conversationId: job.conversationId as any,
+              conversationId: conversation._id,
               role: "agent",
               content: updateReply,
               status: "done",
@@ -239,7 +239,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
 
       // 🔓 ADMIN MODE ACTIVATION
       if (agentResponse === "__ADMIN_MODE_ACTIVATE__") {
-        console.log(`[${correlationId}] 🔓 Admin mode activated for conversation ${job.conversationId}`);
+        console.log(`[${correlationId}] 🔓 Admin mode activated for conversation ${conversation._id}`);
 
         // Update conversation with admin mode flag
         await convex.mutation(api.conversations.update, {
@@ -250,7 +250,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
         const activationMessage = ADMIN_MODE.activationMessage;
 
         await convex.mutation(api.messages.create, {
-          conversationId: job.conversationId as any,
+          conversationId: conversation._id,
           role: "agent",
           content: activationMessage,
           status: "done",
@@ -282,7 +282,7 @@ export function createJobHandler(convex: ConvexHttpClient) {
       };
 
       const savePromise = convex.mutation(api.messages.create, {
-        conversationId: job.conversationId as any,
+        conversationId: conversation._id,
         role: "agent",
         content: storageContent,
         status: "done",

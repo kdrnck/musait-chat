@@ -54,7 +54,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
 
     const loadPromptTemplates = useCallback(async () => {
         try {
-            const res = await fetch("/api/admin/prompt-templates?category=system", { cache: "no-store" });
+            const res = await fetch("/api/prompt-templates", { cache: "no-store" });
             if (res.ok) setPromptTemplates(await res.json());
         } catch { /* ignore */ }
     }, []);
@@ -297,7 +297,7 @@ export default function AiControlPanel({ tenantId }: { tenantId: string | null }
             {/* Prompt Picker Modal */}
             {showPromptPicker && (
                 <PromptPickerModal
-                    category="system"
+                    apiBase="/api/prompt-templates"
                     onSelect={(promptText) => {
                         if (settings) setSettings({ ...settings, promptText });
                         setShowPromptPicker(false);

@@ -310,8 +310,11 @@ export async function runAgentLoop(
 
           // 1. Update in-memory conversation state
           conversation.tenantId = (toolCall.arguments as any).tenant_id as string;
+          // Keep job payload in sync so downstream saves use the new conversation
+          (job as any).tenantId = conversation.tenantId;
           if (newConvId) {
             conversation._id = newConvId;
+            (job as any).conversationId = newConvId;
           }
           conversation.rollingSummary = "";
 
@@ -375,7 +378,7 @@ export async function runAgentLoop(
           const enriched = {
             ...(result.result as any),
             tenantName: tenantSwitchName,
-            instruction: `Müşteriyi "${tenantSwitchName}" işletmesine başarıyla bağladın. Müşteriye "${tenantSwitchName}" işletmesine bağlandığını kısa ve samimi bir şekilde bildir. Geçmiş konuşma kaydının temizlendiğini söyle ve ne istediğini tekrar sor.`,
+            instruction: `Müşteriyi "${tenantSwitchName}" işletmesine başarıyla bağladın. Müşteriye "${tenantSwitchName}" işletmesine bağlandığını kısa ve samimi bir şekilde bildir. Geçmiş konuşma kaydı temizlendi bu yüzden ne istediğini tekrar sor.`,
           };
           enrichedResultStr = JSON.stringify(enriched);
         }
